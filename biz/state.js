@@ -10,12 +10,12 @@ export const appState = {
   has_vvip_file: false,
   // has_lts_file: false, // 移除 LTS 文件上传状态
   has_analysis_file: false,
-  has_t2_analysis_file: false, // T-2 分析文件上传状态
+  has_t2_analysis_file: false, // T-4 分析文件上传状态
   has_lunch_file: false, // 午餐文件上传状态
   lunch_places: [], // 午餐地点列表
   custom_rules: null, // 存储自定义规则 (通用分析)
-  t2_custom_rules: null, // 存储 T-2 自定义规则
-  t2_default_rules: null, // 存储 T-2 默认规则
+  t2_custom_rules: null, // 存储 T-4 自定义规则
+  t2_default_rules: null, // 存储 T-4 默认规则
   readme_loaded: false,
   lts_summary_loaded: false,
   order_numbers: [],

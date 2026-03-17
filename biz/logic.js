@@ -23,19 +23,19 @@ export function initLunch() {
   updateLunchUIState();
 }
 
-// 加载默认 T-2 规则
+// 加载默认 T-4 规则
 async function loadDefaultT2Rules() {
   try {
     const response = await fetch(chrome.runtime.getURL('rules/t2_rules_default.json'));
     if (response.ok) {
       const rules = await response.json();
       appState.t2_default_rules = rules;
-      console.log('默认 T-2 规则加载成功:', rules);
+      console.log('默认 T-4 规则加载成功:', rules);
     } else {
-      console.error('加载默认 T-2 规则失败:', response.statusText);
+      console.error('加载默认 T-4 规则失败:', response.statusText);
     }
   } catch (error) {
-    console.error('加载默认 T-2 规则出错:', error);
+    console.error('加载默认 T-4 规则出错:', error);
   }
 }
 
@@ -260,13 +260,13 @@ export async function getReportData() {
 
 export async function getT2Data() {
   try {
-    console.log("开始获取T-2数据");
+    console.log("开始获取T-4数据");
 
     // 获取用户输入的天数
     const daysInput = document.getElementById("t2-days-input");
     const customDays = daysInput ? daysInput.value : null;
 
-    // 使用sfConn对象获取T-2数据
+    // 使用sfConn对象获取T-4数据
     const result = await sfConn.getT2Data(customDays);
     
     if (result.success) {
@@ -304,12 +304,12 @@ export async function getT2Data() {
         // 更新统计数据
         updateStats();
         // 不再强制跳转到步骤5，保持在当前步骤
-        showNotification(`T-2数据获取成功，共 ${appState.stats.t2Records} 条记录`);
-        console.log("T-2数据获取成功");
+        showNotification(`T-4数据获取成功，共 ${appState.stats.t2Records} 条记录`);
+        console.log("T-4数据获取成功");
     }
   } catch (error) {
-    console.error("获取T-2数据失败:", error);
-    showNotification("获取T-2数据失败，请稍后重试", "error");
+    console.error("获取T-4数据失败:", error);
+    showNotification("获取T-4数据失败，请稍后重试", "error");
 
     // 隐藏loading mask
     const loadingMask = document.getElementById("loading-mask");
@@ -317,7 +317,7 @@ export async function getT2Data() {
       loadingMask.style.display = "none";
       loadingMask.querySelector("h3").textContent = "正在从Salesforce获取数据...";
     }
-    console.log("获取T-2数据失败，已显示错误通知");
+    console.log("获取T-4数据失败，已显示错误通知");
   }
 }
 
@@ -591,9 +591,9 @@ export function exportReportData() {
   exportToExcel(appState.report_data, "报表数据", "报表数据");
 }
 
-// 导出T-2数据
+// 导出T-4数据
 export function exportT2Data() {
-  exportToExcel(appState.t2_data, "T-2数据", "T-2数据");
+  exportToExcel(appState.t2_data, "T-4数据", "T-4数据");
 }
 
 // 导出最新数据
@@ -611,9 +611,9 @@ export function exportAnalysisData() {
   exportToExcel(appState.analysis_data, "数据分析结果", "数据分析");
 }
 
-// 导出T-2分析数据
+// 导出T-4分析数据
 export function exportT2AnalysisData() {
-  exportToExcel(appState.t2_analysis_data, "T-2分析结果", "T-2分析");
+  exportToExcel(appState.t2_analysis_data, "T-4分析结果", "T-4分析");
 }
 
 // 处理Excel文件
@@ -903,7 +903,7 @@ export function analyzeData() {
     }, 100);
 }
 
-// 处理 T-2 分析 Excel 文件
+// 处理 T-4 分析 Excel 文件
 export function processT2AnalysisExcelFile(file) {
   if (!file) return;
   
@@ -916,7 +916,7 @@ export function processT2AnalysisExcelFile(file) {
 
   if (loadingMask && recordCountSpan) {
     loadingMask.style.display = "flex";
-    loadingMask.querySelector("h3").textContent = "正在读取 T-2 分析文件...";
+    loadingMask.querySelector("h3").textContent = "正在读取 T-4 分析文件...";
     recordCountSpan.textContent = "0";
   }
 
@@ -949,12 +949,12 @@ export function processT2AnalysisExcelFile(file) {
       if (loadingMask) {
         loadingMask.style.display = "none";
       }
-      console.error("处理 T-2 分析 Excel 文件失败:", error);
+      console.error("处理 T-4 分析 Excel 文件失败:", error);
       showNotification("处理文件失败: " + error, "error");
     });
 }
 
-// 处理 T-2 Sheet 选择
+// 处理 T-4 Sheet 选择
 function handleT2SheetSelection(sheetName) {
   if (!appState.t2_workbook) return;
 
@@ -983,7 +983,7 @@ function handleT2SheetSelection(sheetName) {
   renderT2AnalysisData(data);
 }
 
-// 处理 T-2 规则 JSON 文件
+// 处理 T-4 规则 JSON 文件
 export function processT2RulesFile(file) {
   if (!file) return;
   
@@ -1015,7 +1015,7 @@ export function processT2RulesFile(file) {
 }
 
 export function analyzeT2Data() {
-    // 检查是否有T-2数据 (来自文件或Salesforce)
+    // 检查是否有T-4数据 (来自文件或Salesforce)
     let dataToAnalyze = null;
     
     if (appState.has_t2_analysis_file && appState.t2_analysis_data && appState.t2_analysis_data.length > 0) {
@@ -1027,7 +1027,7 @@ export function analyzeT2Data() {
     }
 
     if (!dataToAnalyze) {
-        showNotification("请先上传 Excel 文件或获取 T-2 Outstanding 数据", "warning");
+        showNotification("请先上传 Excel 文件或获取 T-4 Outstanding 数据", "warning");
         return;
     }
 
@@ -1037,7 +1037,7 @@ export function analyzeT2Data() {
 
     if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
-        loadingMask.querySelector("h3").textContent = "正在分析 T-2 数据...";
+        loadingMask.querySelector("h3").textContent = "正在分析 T-4 数据...";
         recordCountSpan.textContent = dataToAnalyze.length;
     }
 
@@ -1045,7 +1045,7 @@ export function analyzeT2Data() {
     setTimeout(async () => {
         try {
             // 执行分析
-            // 使用硬编码的 T-2 规则 (applyT2Rules)
+            // 使用硬编码的 T-4 规则 (applyT2Rules)
             console.log("使用 applyT2Rules 进行分析...");
             const analyzedData = applyT2Rules(dataToAnalyze);
             
@@ -1058,10 +1058,10 @@ export function analyzeT2Data() {
             // 更新UI状态 (显示导出按钮等)
             updateUIState();
             
-            showNotification("T-2 数据分析完成", "success");
+            showNotification("T-4 数据分析完成", "success");
         } catch (error) {
-            console.error("T-2 数据分析失败:", error);
-            showNotification("T-2 数据分析失败: " + error.message, "error");
+            console.error("T-4 数据分析失败:", error);
+            showNotification("T-4 数据分析失败: " + error.message, "error");
         } finally {
             // 隐藏 loading mask
             if (loadingMask) {
