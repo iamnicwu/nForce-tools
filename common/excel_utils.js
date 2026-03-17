@@ -481,7 +481,7 @@ export function analyzeData(data, customRules) {
 }
 
 /**
- * 分析 T-2 数据
+ * 分析 T-4 数据
  * @param {Array} data - 要分析的数据
  * @param {Array} rules - 规则列表
  * @returns {Array} - 分析后的数据
@@ -491,7 +491,7 @@ export function analyzeT2Data(data, rules) {
   if (!rules || rules.length === 0) return data;
 
   const jsonData = [...data]; // 浅拷贝
-  console.log("开始分析 T-2 数据...");
+  console.log("开始分析 T-4 数据...");
   console.log(jsonData);
   return applyRules(jsonData, rules);
 }

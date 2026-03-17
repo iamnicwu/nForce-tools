@@ -248,7 +248,7 @@ function bindEvents() {
       getReportData();
     });
 
-  // 获取T-2数据表单提交
+  // 获取T-4数据表单提交
   document
     .getElementById("t2-data-form")
     .addEventListener("submit", function (e) {
@@ -260,11 +260,11 @@ function bindEvents() {
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
-        loadingMask.querySelector("h3").textContent = "正在获取T-2数据...";
+        loadingMask.querySelector("h3").textContent = "正在获取T-4数据...";
         recordCountSpan.textContent = "0";
       }
 
-      // 获取T-2数据
+      // 获取T-4数据
       getT2Data();
     });
 
@@ -304,7 +304,7 @@ function bindEvents() {
       processAnalysisExcelFile(file);
     });
 
-  // T-2 分析文件上传表单提交
+  // T-4 分析文件上传表单提交
   document
     .getElementById("t2-analysis-file-upload-form")
     .addEventListener("submit", function (e) {
@@ -312,7 +312,7 @@ function bindEvents() {
       const fileInput = document.getElementById("t2-analysis-file");
       const file = fileInput.files[0];
 
-      console.log("T-2 分析文件上传表单提交事件触发，选择的文件:", file);
+      console.log("T-4 分析文件上传表单提交事件触发，选择的文件:", file);
       processT2AnalysisExcelFile(file);
     });
 
@@ -389,7 +389,7 @@ function bindEvents() {
     exportReportDataBtn.addEventListener("click", exportReportData);
   }
 
-  // 导出T-2数据按钮点击事件
+  // 导出T-4数据按钮点击事件
   const exportT2DataBtn = document.getElementById("export-t2-data");
   if (exportT2DataBtn) {
     exportT2DataBtn.addEventListener("click", exportT2Data);
@@ -458,13 +458,13 @@ function bindEvents() {
     analyzeDataBtn.addEventListener("click", analyzeData);
   }
 
-  // "T-2 开始分析"按钮点击事件
+  // "T-4 开始分析"按钮点击事件
   const analyzeT2DataBtn = document.getElementById("analyze-t2-data-btn");
   if (analyzeT2DataBtn) {
     analyzeT2DataBtn.addEventListener("click", analyzeT2Data);
   }
 
-  // 导出T-2分析数据按钮点击事件
+  // 导出T-4分析数据按钮点击事件
   const exportT2AnalysisDataBtn = document.getElementById("export-t2-analysis-data");
   if (exportT2AnalysisDataBtn) {
     exportT2AnalysisDataBtn.addEventListener("click", exportT2AnalysisData);
@@ -695,7 +695,7 @@ function bindEvents() {
     }
   }
 
-  // T-2 分析文件拖拽事件处理
+  // T-4 分析文件拖拽事件处理
   const t2AnalysisFileUpload = document.querySelector("#t2-analysis-file-upload-form .file-upload");
   if (t2AnalysisFileUpload) {
     // 拖拽进入
@@ -804,7 +804,7 @@ function bindEvents() {
     });
   }
 
-  // T-2 规则文件上传处理
+  // T-4 规则文件上传处理
   const t2RulesFileInput = document.getElementById("t2-rules-file");
   if (t2RulesFileInput) {
     t2RulesFileInput.addEventListener("change", function(e) {

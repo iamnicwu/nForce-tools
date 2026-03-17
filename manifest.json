@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "nForce Tools",
-  "version": "1.7",
+  "version": "1.8",
   "description": "NForce Tools：支持订单查询、报表获取、批量数据处理及智能数据分析",
   "action": {
     "default_icon": {

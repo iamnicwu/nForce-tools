@@ -18,7 +18,7 @@
   - **批量查询**：上传包含订单号的Excel文件，批量从Salesforce获取最新状态和详细信息。
   - **VVIP查询**：上传包含 Account ID 的Excel文件，批量查询 PCD 和 LTS 订单状态。
   - **LTS查询**：上传包含 Account ID 的Excel文件，批量查询 LTS 订单状态。
-  - **T-2 Outstanding**：获取 LTS T-2 报表数据，筛选符合条件的记录。
+  - **T-4 Outstanding**：获取 LTS T-4 报表数据，筛选符合条件的记录。
   - **数据分析**：上传Excel文件，根据预定义或自定义规则自动分析数据并更新状态。
 
 - **数据导出**
@@ -81,23 +81,29 @@
 ## 文件结构
 
 ```
-plugins/
+nForce-tools/
 ├── manifest.json      # 插件配置清单
 ├── index.html         # 应用主界面
 ├── app.js             # 主应用逻辑
 ├── background.js      # 后台服务脚本
 ├── popup.html         # 插件弹出层
 ├── biz/               # 业务逻辑模块
-│   └── sf_service.js  # Salesforce 服务逻辑
+│   ├── logic.js       # 核心业务逻辑
+│   ├── sf_service.js  # Salesforce 服务逻辑
+│   ├── state.js       # 状态管理
+│   └── ui.js          # UI 交互逻辑
 ├── common/            # 通用工具模块
 │   ├── excel_utils.js # Excel 处理工具
 │   ├── table_utils.js # 表格处理工具
 │   ├── utils.js       # 通用工具函数
-│   └── icons.js       # 图标相关
+│   ├── icons.js       # 图标相关
+│   └── t2rules.js     # T2 规则逻辑
 ├── lib/               # 第三方库
 │   ├── css/           # 样式库 (AntD, Handsontable 等)
 │   └── js/            # JS 库 (JSForce, SheetJS, Day.js 等)
 ├── icons/             # 图标资源
+├── rules/             # 规则配置
+├── docs/              # 文档
 └── README.md          # 说明文档
 ```
 
@@ -117,6 +123,11 @@ plugins/
 
 ## 更新日志
 
+### v1.8 (2026-03-17)
+- 优化 T-4 规则逻辑 (t2rules.js)
+- 更新项目文件结构文档
+- 修复已知 Bug
+
 ### v1.7 (2026-03-16)
 - 新增 PCD 模块“获取当日PCD数据”功能
 - 支持自定义日期范围查询 PCD 数据
@@ -124,7 +135,7 @@ plugins/
 
 ### v1.6 (2026-02-11)
 - 优化 Excel 文件处理逻辑，修复年份硬编码问题
-- 优化 T-2 规则匹配逻辑
+- 优化 T-4 规则匹配逻辑
 - 修复已知 Bug
 
 ### v1.5
@@ -133,9 +144,9 @@ plugins/
 - 修复已知 Bug
 
 ### v1.4
-- 新增 T-2 Outstanding 模块，支持获取 LTS T-2 报表数据
+- 新增 T-4 Outstanding 模块，支持获取 LTS T-4 报表数据
 - 优化数据分析功能
-- 修复已知 Bug 
+- 修复已知 Bug
 
 ### v1.3
 - 新增数据分析模块，支持自定义规则分析 Excel 数据

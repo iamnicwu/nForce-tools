@@ -91,7 +91,6 @@ function extractContext(row, log) {
   const apptId = getValue(row, "Appointment ID", "AppointmentId", "Appointment__c", "AppointmentId__c");
   const lob = getValue(row, "LOB", "LOB__c", "Order.LOB__c");
   const orderType = lob === "FixedLine" ? "COM(LTS)" : "COM(PCD)";
-  const details = getValue(row,"FulfillmentDetail__c");
   
 
   return { row, status, fulfillStatus, fulfillRemark, fulfilldetail, fulfillId, orderName, orderNature, createdBy, apptId, lob, orderType, log };
@@ -102,7 +101,7 @@ function extractContext(row, log) {
 // ==========================================
 
 function evaluateStatusRules(ctx, BANDKeywords) {
-  const { status,details, fulfillStatus, fulfilldetail, fulfillRemark, fulfillId, apptId, createdBy, orderType, log } = ctx;
+  const { status,  fulfillStatus, fulfilldetail, fulfillRemark, fulfillId, apptId, createdBy, orderType, orderNature, lob, log } = ctx;
 
   if (status === "Ready To Submit") {
     
@@ -225,7 +224,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
   if (status === "In Progress") {
 
     if(orderNature == 'Resumption'){
-      if(lob === 'FixedLine' && !details.includes("fallout")){
+      if(lob === 'FixedLine' && !fulfilldetail.includes("fallout")){
         log(`[Status Rule 3.0.0] In Progress + Resumption -> N/A`);
         return "N/A";
       }
@@ -259,7 +258,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       return orderType;
     } 
 
-    // 逻辑有问题
+    // 逻辑有问题, 后面再睇
     if (!fulfillStatus || fulfillStatus === "In Progress - Fulfillment Data Issue" || !fulfillRemark) {
       log(`[Status Rule 3.1] In Progress + Missing Fulfill/Remark or Data Issue -> ${orderType}`);
       return orderType;

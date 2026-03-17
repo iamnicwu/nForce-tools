@@ -320,7 +320,7 @@ export function updateUIState() {
     }
   }
 
-  // 更新T-2数据状态
+  // 更新T-4数据状态
   if (appState.has_t2_data && appState.is_connected) {
     const t2DataBadge = document.getElementById("t2-data-badge");
     if (t2DataBadge) {
@@ -345,7 +345,7 @@ export function updateUIState() {
     }
   }
 
-  // 更新T-2分析状态
+  // 更新T-4分析状态
   if (appState.t2_analysis_data && appState.is_connected) {
     const t2AnalysisBadge = document.getElementById("t2-analysis-badge");
     if (t2AnalysisBadge) {
@@ -370,7 +370,7 @@ export function updateUIState() {
     }
   }
 
-  // 更新T-2分析文件上传状态
+  // 更新T-4分析文件上传状态
   if (appState.has_t2_analysis_file && appState.is_connected) {
     const t2AnalysisFileUploadBadge = document.getElementById("t2-analysis-file-upload-badge");
     if (t2AnalysisFileUploadBadge) {
@@ -454,7 +454,7 @@ export function updateUIState() {
     }
   }
 
-  // 更新T-2分析文件上传状态
+  // 更新T-4分析文件上传状态
   if (appState.has_t2_analysis_file && appState.is_connected) {
     const t2AnalysisFileUploadBadge = document.getElementById("t2-analysis-file-upload-badge");
     if (t2AnalysisFileUploadBadge) {
@@ -649,7 +649,7 @@ export function updateUserInfo() {
     reportRecordsEl.textContent = appState.stats.reportRecords || 0;
   }
 
-  // 更新T-2记录数
+  // 更新T-4记录数
   const t2RecordsEl = document.getElementById("user-t2-records");
   if (t2RecordsEl) {
     t2RecordsEl.textContent = appState.stats.t2Records || 0;
@@ -677,12 +677,12 @@ export function renderReportData(data) {
   reportDataHot = renderTable("report-data-container", "report-data-table", data, reportDataHot);
 }
 
-// 渲染T-2数据
+// 渲染T-4数据
 export function renderT2Data(data) {
   t2DataHot = renderTable("t2-data-container", "t2-data-table", data, t2DataHot);
 }
 
-// 渲染T-2分析数据
+// 渲染T-4分析数据
 export function renderT2AnalysisData(data) {
   const container = document.getElementById("t2-analysis-data-container");
   const table = document.getElementById("t2-analysis-data-table");
@@ -737,7 +737,7 @@ export function renderT2AnalysisData(data) {
   renderT2AnalysisCharts(data);
 }
 
-// 渲染T-2分析图表
+// 渲染T-4分析图表
 export function renderT2AnalysisCharts(data) {
   const container = document.getElementById("t2-analysis-charts-container");
   const statusChartDom = document.getElementById("t2-analysis-chart-status");
@@ -1354,7 +1354,7 @@ export function updateVVIPFileUploadUI(file) {
   fileUpload.classList.add("has-file");
 }
 
-// 更新T-2分析文件上传UI
+// 更新T-4分析文件上传UI
 export function updateT2AnalysisFileUploadUI(file) {
   const fileUpload = document.querySelector("#t2-analysis-file-upload-form .file-upload");
   if (!fileUpload) return;
@@ -1384,7 +1384,7 @@ export function updateT2AnalysisFileUploadUI(file) {
   fileUpload.classList.add("has-file");
 }
 
-// 更新T-2规则文件上传UI
+// 更新T-4规则文件上传UI
 export function updateT2RulesFileUploadUI(file) {
   const fileUpload = document.querySelector("#t2-rules-file-upload-form .file-upload");
   if (!fileUpload) return;
@@ -1413,7 +1413,7 @@ export function updateT2RulesFileUploadUI(file) {
   fileUpload.classList.add("has-file");
 }
 
-// 渲染 T-2 Sheet 选择器
+// 渲染 T-4 Sheet 选择器
 export function renderT2SheetSelector(sheetNames, onSelect) {
   const container = document.getElementById("t2-sheet-selector-container");
   const selector = document.getElementById("t2-sheet-selector");
@@ -1454,7 +1454,7 @@ export function renderT2SheetSelector(sheetNames, onSelect) {
   }
 }
 
-// 渲染T-2规则列表
+// 渲染T-4规则列表
 export function renderT2RulesList(rules) {
   const container = document.getElementById("t2-rules-list-container");
   const list = document.getElementById("t2-rules-list");
@@ -1479,7 +1479,7 @@ export function renderT2RulesList(rules) {
     li.className = "rule-item";
     li.draggable = true; // 启用拖拽
     li.dataset.index = index; // 存储索引
-    li.dataset.type = 't2'; // 标记为T-2规则
+    li.dataset.type = 't2'; // 标记为T-4规则
     
     // 拖拽事件
     li.addEventListener('dragstart', handleDragStart);
@@ -1716,7 +1716,7 @@ export function moveRule(index, direction) {
   renderRulesList(appState.custom_rules);
 }
 
-// 移动T-2规则到指定位置
+// 移动T-4规则到指定位置
 export function moveT2RuleTo(fromIndex, toIndex) {
   if (!appState.t2_custom_rules) return;
   
@@ -1729,7 +1729,7 @@ export function moveT2RuleTo(fromIndex, toIndex) {
   renderT2RulesList(appState.t2_custom_rules);
 }
 
-// 移动T-2规则
+// 移动T-4规则
 export function moveT2Rule(index, direction) {
   if (!appState.t2_custom_rules) return;
   
