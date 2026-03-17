@@ -83,18 +83,18 @@ function extractContext(row, log) {
   const status = getValue(row, "Order Status", "Custom_OrderStatus", "Custom_OrderStatus__c", "Order.Custom_OrderStatus__c");
   const fulfillStatus = getValue(row, "Fulfillment Status", "Custom_FulfilmentStatus", "Custom_FulfilmentStatus__c", "Order.Custom_FulfilmentStatus__c");
   const fulfillRemark = getValue(row, "Fulfillment Remark", "FulfillmentRemark", "FulfillmentRemark__c");
+  const fulfilldetail = getValue(row, "FulfillmentDetail", "FulfillmentDetail__c");
   const fulfillId = getValue(row, "FulfillmentId__c");
   const orderName = getValue(row, "Order Name", "OrderNumber", "Name", "Order.Name");
   const orderNature = getValue(row, "Order Nature", "OrderNature", "OrderNature__c", "Order.Order_Nature__c");
   const createdBy = getValue(row, "Created By", "CreatedBy", "CreatedById", "Order.CreatedBy.Name");
   const apptId = getValue(row, "Appointment ID", "AppointmentId", "Appointment__c", "AppointmentId__c");
   const lob = getValue(row, "LOB", "LOB__c", "Order.LOB__c");
-  const nature = getValue(row, "Nature", "Nature", "Order.Order_Nature__c", "Order.Nature__c");
   const orderType = lob === "FixedLine" ? "COM(LTS)" : "COM(PCD)";
   const details = getValue(row,"FulfillmentDetail__c");
   
 
-  return { row, status, fulfillStatus, fulfillRemark, fulfillId, orderName, orderNature, createdBy, apptId, lob, orderType, log };
+  return { row, status, fulfillStatus, fulfillRemark, fulfilldetail, fulfillId, orderName, orderNature, createdBy, apptId, lob, orderType, log };
 }
 
 // ==========================================
@@ -102,18 +102,18 @@ function extractContext(row, log) {
 // ==========================================
 
 function evaluateStatusRules(ctx, BANDKeywords) {
-  const { status,details, nature, fulfillStatus, fulfillRemark, fulfillId, apptId, createdBy, orderType, log } = ctx;
+  const { status,details, fulfillStatus, fulfilldetail, fulfillRemark, fulfillId, apptId, createdBy, orderType, log } = ctx;
 
   if (status === "Ready To Submit") {
     
-    if(nature === 'Resumption'){
+    if(orderNature === 'Resumption'){
       if(lob === 'FixedLine'){
         log(`[Status Rule 1.1.0] Ready To Submit + Resumption -> N/A`);
         return "N/A";
       }
     }
 
-    if(nature === 'Change VAS'){
+    if(orderNature === 'Change VAS'){
       if(apptId && !fulfillStatus){
         log(`[Status Rule 1.1.0.2] Ready To Submit + Change VAS + ApptId -> ${orderType}`);
         return orderType;
@@ -123,6 +123,11 @@ function evaluateStatusRules(ctx, BANDKeywords) {
     if(fulfillStatus === "Insufficient Cutover Date"){
       log(`[Status Rule 1.1.0.1] Ready To Submit + Insufficient Cutover Date -> Sales`);
       return "Sales";
+    }
+
+    if(fulfillStatus === "Address Rejected"){
+      log(`[Status Rule 1.1.0.2] Ready To Submit + Address Rejected -> ${orderType}`);
+      return orderType;
     }
 
     if (fulfillStatus === "In Progress" || fulfillStatus === "In Progress-Distributed") {
@@ -210,27 +215,41 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 2.3] Amend Requested + '${fulfillStatus}' -> ${orderType}`);
       return orderType;
     }
+
+    if(!fulfillStatus){
+      log(`[Status Rule 2.4] Amend Requested + '${fulfillStatus}' -> ${orderType}`);
+      return orderType;
+    }
   } 
   
   if (status === "In Progress") {
 
-    if(nature == 'Resumption'){
+    if(orderNature == 'Resumption'){
       if(lob === 'FixedLine' && !details.includes("fallout")){
         log(`[Status Rule 3.0.0] In Progress + Resumption -> N/A`);
         return "N/A";
       }
     }
 
-    if(nature == 'Termination'){
+    if(orderNature === 'Termination'){
       if(fulfillStatus === 'In Progress'){
         log(`[Status Rule 3.0.1] In Progress + In Progress -> N/A`);
         return "N/A";
       }
     }
 
-    if(nature == 'TOO'){
+    if(orderNature === 'TOO'){
       if(fulfillStatus === 'In Progress'){
         log(`[Status Rule 3.0.2] In Progress + In Progress -> N/A`);
+        return "N/A";
+      }
+    }
+
+    if(orderNature === 'Change Owner' || 
+      orderNature === 'Change VAS' || 
+      orderNature === 'Change TV Campaign only'){
+      if(!fulfilldetail){
+        log(`[Status Rule 3.0.3] In Progress + emtpy fulfilldetail -> N/A`);
         return "N/A";
       }
     }
@@ -239,10 +258,13 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 3.0] In Progress + Empty Fulfillment & FulfillId -> ${orderType}`);
       return orderType;
     } 
+
+    // 逻辑有问题
     if (!fulfillStatus || fulfillStatus === "In Progress - Fulfillment Data Issue" || !fulfillRemark) {
       log(`[Status Rule 3.1] In Progress + Missing Fulfill/Remark or Data Issue -> ${orderType}`);
       return orderType;
     } 
+
     if (fulfillStatus === "Appointment Changed (M2)") {
       log(`[Status Rule 3.2.1] In Progress + Appointment Changed (M2) -> N/A`);
       return "N/A";
@@ -271,11 +293,15 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 3.6] In Progress + Leased-In Failed -> Sales`);
       return "Sales";
     } 
-    if (fulfillStatus === "Waiting For Inventory") {
+    if (fulfillStatus === "Waiting For Inventory" || fulfillStatus === "Inventory Fallout") {
       if (fulfillRemark.includes("UIM")) {
         if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
           log(`[Remark Rule 3.7.3] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
           return "BAND";
+        }
+        else if(fulfillRemark.includes("SALES FOLLOW-UP)")){
+          log(`[Remark Rule 3.7.4] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
+          return "Sales";
         }
         log(`[Status Rule 3.7.1] In Progress + Waiting For Inventory + Remark(UIM) -> UIM`);
         return "UIM";
