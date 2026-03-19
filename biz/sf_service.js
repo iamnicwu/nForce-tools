@@ -331,7 +331,7 @@ export let sfConn = {
           LOB__c ='FixedLine' AND
           order.Custom_OrderStatus__c NOT IN (
               'Ready To Submit', 'Superseded', 'Activated',
-              'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded') AND
+              'Cancel Requested', 'Cancelled', 'Discarded') AND
           ${dateCondition}`;
       
       // 优化：直接获取查询结果，避免流式回调带来的额外开销
@@ -638,23 +638,34 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
           order.OrderNumber,
           order.Order_Nature__c,
           order.Service_Request_Date__c,
-          order.Attention__c,
-          FulfillmentRemark__c,
-          order.id,
-          order.Custom_OrderStatus__c,
-          order.Custom_FulfilmentStatus__c,
+          order.Salesman_Staff_ID__c,
+          order.Original_Salesman__r.Name,
+          order.Channel_Name__c,
+          order.LOB__c,
           FulfillmentId__c,
           AppointmentId__c,
+          order.Attention__c,
+          FulfillmentRemark__c,
+          order.Custom_OrderStatus__c,
+          order.Custom_FulfilmentStatus__c,
+          FulfillmentDetail__c,
+          order.Is_Voluntary__c,
           vlocity_cmt__FulfilmentStatus__c,
+          Brm_Feedback_Code__c,
+          BRM_Feedback_Error_Log__c,
           BRM_Request_Id__c,
-          order.LOB__c
+          order.CreatedBy.name,
+          OSS_Service_Number__c,
+          order.ServiceNumber__c,
+          order.Self_Return__c,
+          order.PreInstallation__c,
+          order.KeepExistAddrSubscriptionLOB__c
       FROM OrderItem
       WHERE
           MainProduct__c = true AND
-          LOB__c != 'FixedLine' AND
           LOB__c != '' AND
           order.Custom_OrderStatus__c NOT IN (
-              'Ready To Submit', 'Superseded', 'Activated', 'Cancelled', 'Rejected', 'Discarded') AND
+              'Ready To Submit', 'Superseded', 'Activated', 'Cancelled', 'Discarded') AND
           ${dateCondition}`;
       
       const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 4000 });
