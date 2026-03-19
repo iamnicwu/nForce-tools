@@ -114,8 +114,14 @@ function evaluateStatusRules(ctx, BANDKeywords) {
 
     if(orderNature === 'Change VAS'){
       if(apptId && !fulfillStatus){
-        log(`[Status Rule 1.1.0.2] Ready To Submit + Change VAS + ApptId -> ${orderType}`);
-        return orderType;
+        if(createdBy === "integration.user"){
+          log(`[Status Rule 1.1.0.2] Ready To Submit + Change VAS + ApptId -> ${orderType}`);
+          return orderType;
+        }
+        else{
+          log(`[Status Rule 1.1.0.3] Ready To Submit + Change VAS + ApptId -> N/A`);
+          return "N/A";
+        }
       }
     }
 
@@ -304,6 +310,10 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         }
         log(`[Status Rule 3.7.1] In Progress + Waiting For Inventory + Remark(UIM) -> UIM`);
         return "UIM";
+      }
+      else if (fulfillRemark.includes("504 Gateway Time-out")) {
+        log(`[Remark Rule 3.7.5] 504 Gateway Time-out -> NORA`);
+        return "NORA";
       }
       log(`[Status Rule 3.7.2] In Progress + Waiting For Inventory -> OPS`);
       return "OPS";
