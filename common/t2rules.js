@@ -10,7 +10,8 @@ export function applyT2Rules(data) {
   const BANDKeywords = [
     "MANUAL ASSIGNMENT REQUIRED",
     "NOT ALLOW AUTO ASSIGN FOR THIS SB",
-    "NO AVAILABLE DP"
+    "NO AVAILABLE DP",
+    "Speical Handle Order"
   ];
 
   const jsonData = [...data];
@@ -171,6 +172,18 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       return "F&S";
     } 
     if (fulfillStatus === "Inventory Fallout") {
+      if (fulfillRemark.includes("UIM")) {
+        if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
+          log(`[Remark Rule 1.5.1] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
+          return "BAND";
+        }
+        else if(fulfillRemark.includes("SALES FOLLOW-UP)")){
+          log(`[Remark Rule 1.5.2] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
+          return "Sales";
+        }
+        log(`[Status Rule 1.5.3] In Progress + Waiting For Inventory + Remark(UIM) -> UIM`);
+        return "UIM";
+      }
       log(`[Status Rule 1.5] Ready To Submit + Inventory Fallout -> NORA`);
       return "NORA";
     } 
@@ -205,6 +218,20 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 1.10] In Progress + Number Investigation -> F&S`);
       return "F&S";
     }
+
+    if(fulfillStatus === "Inventory ReAppointment"){
+      if (createdBy != "integration.user") {
+        log(`[Status Rule 1.11.0] Ready To Submit + '${fulfillStatus}' -> N/A`);
+        return "N/A";
+      }
+      log(`[Status Rule 1.11.1] Ready To Submit + '${fulfillStatus}' -> ${orderType}}`);
+      return orderType;
+    }
+
+    if(fulfillStatus === "DN Inventory Ready"){
+      log(`[Status Rule 1.12] Ready To Submit + '${fulfillStatus}' -> N/A`);
+      return "N/A";
+    }
   } 
   
   if (status === "Amend Requested") {
@@ -238,6 +265,10 @@ function evaluateStatusRules(ctx, BANDKeywords) {
 
     if(orderNature === 'Termination'){
       if(fulfillStatus === 'In Progress'){
+        if (fulfillRemark.includes("ORDER ABORT")) {
+          log(`[Remark Rule 3.0.0] NORA updated "ORDER ABORT" -> NORA`);
+          return "NORA";
+        }
         log(`[Status Rule 3.0.1] In Progress + In Progress -> N/A`);
         return "N/A";
       }
@@ -315,6 +346,11 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         log(`[Remark Rule 3.7.5] 504 Gateway Time-out -> NORA`);
         return "NORA";
       }
+      else if (fulfillRemark.includes("OPG updated \"CANCELLED\"")) {
+        log(`[Remark Rule 3.7.6] OPG updated \"CANCELLED\" -> ${orderType}`);
+        return orderType;
+      }
+
       log(`[Status Rule 3.7.2] In Progress + Waiting For Inventory -> OPS`);
       return "OPS";
     }
@@ -325,11 +361,19 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       }
     }
     if(fulfillStatus === "In Progress" || fulfillStatus === "In Progress-Distributed" ){
-       log(`[Status Rule 3.9] In Progress + In Progress -> Sales`);
-       return "Sales";
+      if (fulfillRemark.includes("ORDER ABORT")) {
+        log(`[Remark Rule 3.9.0] NORA updated "ORDER ABORT" -> NORA`);
+        return "NORA";
+      }
+      log(`[Status Rule 3.9] In Progress + In Progress -> Sales`);
+      return "Sales";
     }
     if(fulfillStatus === "Cancelled"){
       log(`[Status Rule 3.10] In Progress + In Progress -> ${orderType}`);
+      return orderType;
+    }
+    if(fulfillStatus === "Decomposed"){
+      log(`[Status Rule 3.12] In Progress + Decomposed -> ${orderType}`);
       return orderType;
     }
     
