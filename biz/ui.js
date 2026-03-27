@@ -1960,7 +1960,7 @@ async function loadReadme() {
   if (!readmeContainer) return;
 
   try {
-    const response = await fetch('docs/README.md');
+    const response = await fetch('README.md');
     if (response.ok) {
       const text = await response.text();
       renderMarkdownContent(readmeContainer, text);
