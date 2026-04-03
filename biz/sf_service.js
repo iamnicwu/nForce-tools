@@ -243,7 +243,7 @@ export let sfConn = {
               'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
       
       // 优化：直接获取查询结果，避免流式回调带来的额外开销
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 4000 });
+      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 9999 });
       const records = result.records || [];
       
       if (records.length > 0) {
