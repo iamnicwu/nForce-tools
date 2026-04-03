@@ -207,7 +207,7 @@ export function updateUIState() {
     updateStats();
 
     // 连接成功后，启用所有功能section
-    for (let i = 2; i <= 13; i++) {
+    for (let i = 2; i <= 15; i++) {
       const section = document.getElementById(`section-${i}`);
       if (section) {
         section.style.opacity = "1";
@@ -229,7 +229,7 @@ export function updateUIState() {
     }
     
     // 未连接时，禁用所有功能section
-    for (let i = 2; i <= 13; i++) {
+    for (let i = 2; i <= 15; i++) {
       const section = document.getElementById(`section-${i}`);
       if (section) {
         section.style.opacity = "0.5";

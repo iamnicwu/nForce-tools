@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "nForce Tools",
-  "version": "1.9",
-  "description": "NForce Tools：支持订单查询、报表获取、批量数据处理及智能数据分析",
+  "version": "2.0",
+  "description": "NForce Tools：支持订单查询、报表获取、批量数据处理、智能数据分析及 Bulk API 2.0 操作",
   "action": {
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -50,6 +50,7 @@
         "css/main.css",
         "lib/css/*",
         "lib/js/*",
+        "lib/js/jszip.min.js",
         "README.md",
         "LTS_Fallout_Summary.md",
         "rules/t2_rules_default.json"
