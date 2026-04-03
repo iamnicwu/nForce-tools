@@ -37,7 +37,10 @@ import {
   processT2RulesFile,
   processLunchFile,
   shakeLunch,
-  initLunch
+  initLunch,
+  handleCreateBulkJob,
+  handleCheckBulkJob,
+  handleDownloadBulkResult
 } from "./biz/logic.js";
 
 // 初始化应用
@@ -874,6 +877,27 @@ function bindEvents() {
   const shakeBtn = document.getElementById("shake-lunch-btn");
   if (shakeBtn) {
       shakeBtn.addEventListener("click", shakeLunch);
+  }
+
+  // Bulk 操作按钮事件
+  const createBulkJobBtn = document.getElementById("create-bulk-job-btn");
+  if (createBulkJobBtn) {
+    createBulkJobBtn.addEventListener("click", handleCreateBulkJob);
+  }
+
+  const checkBulkJobBtn = document.getElementById("check-bulk-job-btn");
+  if (checkBulkJobBtn) {
+    checkBulkJobBtn.addEventListener("click", handleCheckBulkJob);
+  }
+
+  const downloadBulkCsvBtn = document.getElementById("download-bulk-csv-btn");
+  if (downloadBulkCsvBtn) {
+    downloadBulkCsvBtn.addEventListener("click", () => handleDownloadBulkResult('csv'));
+  }
+
+  const downloadBulkZipBtn = document.getElementById("download-bulk-zip-btn");
+  if (downloadBulkZipBtn) {
+    downloadBulkZipBtn.addEventListener("click", () => handleDownloadBulkResult('zip'));
   }
 
   // 绑定重新初始化事件

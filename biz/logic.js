@@ -1104,6 +1104,166 @@ export function processLunchFile(file) {
   reader.readAsText(file);
 }
 
+// 创建 Bulk Job
+export async function handleCreateBulkJob() {
+  const soqlInput = document.getElementById("bulk-soql-input");
+  const soql = soqlInput ? soqlInput.value.trim() : "";
+  
+  if (!soql) {
+    showNotification("请输入 SOQL 查询语句", "warning");
+    return;
+  }
+
+  const loadingMask = document.getElementById("loading-mask");
+  if (loadingMask) {
+    loadingMask.style.display = "flex";
+    loadingMask.querySelector("h3").textContent = "正在创建 Bulk 任务...";
+  }
+
+  try {
+    const result = await sfConn.createBulkQueryJob(soql);
+    if (result.success) {
+      showNotification("Bulk 任务创建成功", "success");
+      const jobIdInput = document.getElementById("bulk-job-id-input");
+      if (jobIdInput && result.jobInfo && result.jobInfo.id) {
+        jobIdInput.value = result.jobInfo.id;
+      }
+      
+      const statusContainer = document.getElementById("bulk-job-status-container");
+      const statusContent = document.getElementById("bulk-job-status-content");
+      if (statusContainer && statusContent) {
+        statusContainer.style.display = "block";
+        statusContent.textContent = JSON.stringify(result.jobInfo, null, 2);
+      }
+    } else {
+      showNotification(`创建 Bulk 任务失败: ${result.error}`, "error");
+    }
+  } catch (error) {
+    console.error("创建 Bulk 任务出错:", error);
+    showNotification("创建 Bulk 任务出错", "error");
+  } finally {
+    if (loadingMask) {
+      loadingMask.style.display = "none";
+    }
+  }
+}
+
+// 查询 Bulk Job 状态
+export async function handleCheckBulkJob() {
+  const jobIdInput = document.getElementById("bulk-job-id-input");
+  const jobId = jobIdInput ? jobIdInput.value.trim() : "";
+  
+  if (!jobId) {
+    showNotification("请输入 Job ID", "warning");
+    return;
+  }
+
+  const loadingMask = document.getElementById("loading-mask");
+  if (loadingMask) {
+    loadingMask.style.display = "flex";
+    loadingMask.querySelector("h3").textContent = "正在查询任务状态...";
+  }
+
+  try {
+    const result = await sfConn.checkBulkJobStatus(jobId);
+    if (result.success) {
+      showNotification("查询状态成功", "success");
+      
+      const statusContainer = document.getElementById("bulk-job-status-container");
+      const statusContent = document.getElementById("bulk-job-status-content");
+      if (statusContainer && statusContent) {
+        statusContainer.style.display = "block";
+        statusContent.textContent = JSON.stringify(result.jobInfo, null, 2);
+      }
+
+      const downloadActions = document.getElementById("download-bulk-actions");
+      if (downloadActions) {
+        if (result.jobInfo && result.jobInfo.state === "JobComplete") {
+          downloadActions.style.display = "flex";
+        } else {
+          downloadActions.style.display = "none";
+        }
+      }
+    } else {
+      showNotification(`查询状态失败: ${result.error}`, "error");
+    }
+  } catch (error) {
+    console.error("查询状态出错:", error);
+    showNotification("查询状态出错", "error");
+  } finally {
+    if (loadingMask) {
+      loadingMask.style.display = "none";
+    }
+  }
+}
+
+// 下载 Bulk Job 结果 (CSV 或 ZIP)
+export async function handleDownloadBulkResult(format = 'csv') {
+  const jobIdInput = document.getElementById("bulk-job-id-input");
+  const jobId = jobIdInput ? jobIdInput.value.trim() : "";
+  
+  if (!jobId) {
+    showNotification("请输入 Job ID", "warning");
+    return;
+  }
+
+  const loadingMask = document.getElementById("loading-mask");
+  if (loadingMask) {
+    loadingMask.style.display = "flex";
+    loadingMask.querySelector("h3").textContent = `正在下载并处理结果 (${format.toUpperCase()})...`;
+  }
+
+  try {
+    const result = await sfConn.getBulkJobResults(jobId);
+    if (result.success) {
+      showNotification("获取数据成功，正在生成文件...", "success");
+      
+      if (format === 'zip') {
+        // 使用 JSZip 压缩数据
+        const zip = new JSZip();
+        zip.file(`bulk_result_${jobId}.csv`, result.csvData);
+        
+        const content = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+        
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(content);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `bulk_result_${jobId}.zip`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showNotification("ZIP 文件下载成功", "success");
+      } else {
+        // 直接下载 CSV
+        const blob = new Blob([result.csvData], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `bulk_result_${jobId}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showNotification("CSV 文件下载成功", "success");
+      }
+    } else {
+      showNotification(`下载结果失败: ${result.error}`, "error");
+    }
+  } catch (error) {
+    console.error("下载结果出错:", error);
+    showNotification("下载结果出错", "error");
+  } finally {
+    if (loadingMask) {
+      loadingMask.style.display = "none";
+    }
+  }
+}
+
 // 摇一摇选择午餐
 export function shakeLunch() {
     // 确保有数据

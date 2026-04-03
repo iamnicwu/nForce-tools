@@ -13,6 +13,8 @@
     <script src="lib/js/dayjs.min.js"></script>
     <!-- 引入 ECharts 库 -->
     <script src="lib/js/echarts.min.js"></script>
+    <!-- 引入 JSZip 库 -->
+    <script src="lib/js/jszip.min.js"></script>
     <!-- 引入 Ant Design CSS -->
     <link rel="stylesheet" href="lib/css/antd.min.css">
     <!-- 引入 Mermaid -->
@@ -122,6 +124,12 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a href="#" class="nav-link step-link" data-step="15">
+                            <i class="fas fa-database nav-icon"></i>
+                            <span class="nav-text">Bulk 操作</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a href="#" class="nav-link step-link" data-step="14">
                             <i class="fas fa-network-wired nav-icon"></i>
                             <span class="nav-text">中午食乜</span>
@@ -136,7 +144,7 @@
         </div>
 
         <div class="sidebar-footer">
-            <p class="sidebar-copyright">nForce Tools v1.7 © 2026</p>
+            <p class="sidebar-copyright">nForce Tools v2.0 © 2026</p>
         </div>
     </aside>
     
@@ -782,6 +790,62 @@
                         <i class="fas fa-network-wired" style="font-size: 3rem; margin-bottom: 1rem; color: #1890ff;"></i>
                         <h3>CVP7 功能模块</h3>
                         <p>此模块正在开发中...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bulk 操作 模块卡片 -->
+            <div id="section-15" class="ant-card ant-card-bordered step-section" style="display: none; opacity: 0.7; pointer-events: none;">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Bulk 操作</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div style="padding: 2rem 0;">
+                        <div style="margin-bottom: 2rem; text-align: center;">
+                            <div style="width: 80px; height: 80px; background: #f0f5ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                                <i class="fas fa-database" style="font-size: 32px; color: #2f54eb;"></i>
+                            </div>
+                            <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">Bulk 2.0 查询</h3>
+                            <p style="color: var(--text-secondary);">输入 SOQL 语句创建 Bulk 查询任务，或输入 Job ID 查看进度和结果。</p>
+                        </div>
+
+                        <div style="max-width: 800px; margin: 0 auto;">
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label for="bulk-soql-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">SOQL 查询语句</label>
+                                <textarea id="bulk-soql-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10000"></textarea>
+                            </div>
+                            <div class="form-group" style="text-align: right; margin-bottom: 2rem;">
+                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary" style="background-color: #2f54eb; border-color: #2f54eb;">
+                                    <i class="fas fa-play"></i> 创建 Bulk 任务
+                                </button>
+                            </div>
+
+                            <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                <span class="ant-divider-inner-text">任务状态查询</span>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 1.5rem; display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="bulk-job-id-input" class="ant-input" placeholder="输入 Job ID (例如: 750xx0000000001AAA)" style="flex: 1;">
+                                <button type="button" id="check-bulk-job-btn" class="ant-btn ant-btn-default">
+                                    <i class="fas fa-sync-alt"></i> 查询状态
+                                </button>
+                                <div id="download-bulk-actions" style="display: none; gap: 10px;">
+                                    <button type="button" id="download-bulk-csv-btn" class="ant-btn ant-btn-primary">
+                                        <i class="fas fa-file-csv"></i> 下载 CSV
+                                    </button>
+                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-primary" style="background-color: #52c41a; border-color: #52c41a;">
+                                        <i class="fas fa-file-archive"></i> 下载 ZIP
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="bulk-job-status-container" style="display: none; background: #fafafa; padding: 1rem; border-radius: 4px; border: 1px solid #d9d9d9;">
+                                <h4 style="margin-top: 0; margin-bottom: 1rem;">任务状态</h4>
+                                <div id="bulk-job-status-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

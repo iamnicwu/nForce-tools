@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import { flattenRecords, remove_duplicates } from "../common/utils.js";
-import { applyT2Rules } from "../common/t2rules.js";
+import { applyExpiryRules, applyT2Rules } from "../common/t2rules.js";
 
 export let defaultApiVersion = "55.0";
 export let globalConn = null;
@@ -254,9 +254,24 @@ export let sfConn = {
         const removedDupeList = remove_duplicates(processedRecords);
         console.log(`报表数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
         
+        // 增加额外的列，并确保它们在最前面
+        const addFields = removedDupeList.map(record => {
+          return {
+            ...record,
+            'Issue Status': '',
+            'Latest Action By': '',
+            'Action': '',
+            'Remark': '',
+            'Root Cause Category': ''
+          };
+        });
+
+        // 应用 T2 规则
+        const finalRecords = applyExpiryRules(addFields);
+
         return {
           success: true,
-          data: removedDupeList,
+          data: finalRecords,
         };
       } else {
         return {
@@ -335,7 +350,7 @@ export let sfConn = {
           ${dateCondition}`;
       
       // 优化：直接获取查询结果，避免流式回调带来的额外开销
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 4000 });
+      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 9999 });
       const records = result.records || [];
       
       if (records.length > 0) {
@@ -346,6 +361,8 @@ export let sfConn = {
         const removedDupeList = remove_duplicates(processedRecords);
         console.log(`当日数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
         
+        
+
         return {
           success: true,
           data: removedDupeList,
@@ -830,6 +847,98 @@ order.Service_Request_Date__c < TODAY`;
       }
     } catch (error) {
       console.error("获取 LTS expiry 当日数据失败:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async createBulkQueryJob(soql) {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+      const response = await this.connection.request({
+        method: 'POST',
+        url: `/services/data/v${defaultApiVersion}/jobs/query`,
+        body: JSON.stringify({
+          operation: 'query',
+          query: soql
+        }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      return { success: true, jobInfo: response };
+    } catch (error) {
+      console.error("Create Bulk Job Error:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async checkBulkJobStatus(jobId) {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+      const response = await this.connection.request({
+        method: 'GET',
+        url: `/services/data/v${defaultApiVersion}/jobs/query/${jobId}`
+      });
+      return { success: true, jobInfo: response };
+    } catch (error) {
+      console.error("Check Bulk Job Status Error:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async getBulkJobResults(jobId) {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+      
+      let allCsvData = "";
+      let locator = null;
+      let isFirstPage = true;
+      
+      // 使用原生 fetch 以便获取 response headers 中的 Sforce-Locator
+      do {
+        let fetchUrl = `${this.connection.instanceUrl}/services/data/v${defaultApiVersion}/jobs/query/${jobId}/results`;
+        if (locator && locator !== "null") {
+          fetchUrl += `?locator=${locator}`;
+        }
+
+        const response = await fetch(fetchUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${this.connection.accessToken}`,
+            'Accept': 'text/csv'
+          }
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+
+        let csvText = await response.text();
+        locator = response.headers.get('Sforce-Locator');
+
+        // 对于分页数据，除了第一页，后续页面的第一行也是表头，需要去除以避免重复
+        if (!isFirstPage && csvText) {
+          const firstNewlineIdx = csvText.indexOf('\n');
+          if (firstNewlineIdx !== -1) {
+            csvText = csvText.substring(firstNewlineIdx + 1);
+          }
+        }
+
+        allCsvData += csvText;
+        isFirstPage = false;
+
+      } while (locator && locator !== "null");
+
+      return { success: true, csvData: allCsvData };
+    } catch (error) {
+      console.error("Get Bulk Job Results Error:", error);
       return { success: false, error: error.message };
     }
   },

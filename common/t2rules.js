@@ -1,3 +1,70 @@
+export function applyExpiryRules(data) {
+  if (!data || data.length === 0) return data;
+
+  const m1Criteria = [
+    "DRC: [31]", "DRC: [50]", "DRC: [28]", "DRC: [38]",
+    "DRC: [34]", "DRC: [40]", "DRC: [57]", "DRC: [58]",
+    "DRC: [65]", "DRC: [69]", "DRC: [77]", "DRC: [79]",
+  ];
+
+  const BANDKeywords = [
+    "MANUAL ASSIGNMENT REQUIRED",
+    "NOT ALLOW AUTO ASSIGN FOR THIS SB",
+    "NO AVAILABLE DP",
+    "Speical Handle Order"
+  ];
+
+
+  const jsonData = [...data];
+
+  jsonData.forEach((row) => {
+    const debugInfo = [];
+    const log = (msg) => debugInfo.push(msg);
+
+    // 1. 提取上下文信息
+    const ctx = extractContext(row, log);
+    
+    log(`[Init] Status='${ctx.status}', Fulfilment='${ctx.fulfillStatus}', RemarkLen=${ctx.fulfillRemark ? ctx.fulfillRemark.length : 0}`);
+
+    // 2. 根据状态评估规则
+    let action = evaluateStatusRules(ctx, BANDKeywords);
+
+    // 3. 如果状态规则未匹配，则根据备注评估规则
+    if (!action) {
+      action = evaluateRemarkRules(ctx, m1Criteria);
+    }
+
+    if (!action) {
+      log(`[Info] No Main Rule matched for Status='${ctx.status}', Fulfilment='${ctx.fulfillStatus}'`);
+    }
+
+    // 4. 应用 Sales 覆盖规则 (例如 CS 订单、DRC 检测)
+    action = applySalesOverride(action, ctx, m1Criteria);
+
+    // 5. 分配issue status
+    let issueStatus =  '';
+    if (action === "COM" || action === "COM(LTS)" || action === "COM(PCD)" || action === "NORA" || action === "FS" || action === "RBS" || action === "N/A") {
+      issueStatus = "In Progress";
+    } 
+    else if (action === "Vicki" || action === "OPS" || action === "Sales") {
+      issueStatus = "Waiting for user";
+    }
+    else{
+      issueStatus = "Pending";
+    }
+
+
+    // 6. 应用结果到行
+    if (action) {
+      setValue(row, "Latest Action By", action);
+      setValue(row, "Issue Status", issueStatus);
+    }
+    setValue(row, "Debug_Log", debugInfo.join(" | "));
+  });
+
+  return jsonData;
+}
+
 export function applyT2Rules(data) {
   if (!data || data.length === 0) return data;
 
@@ -356,7 +423,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
     }
     if(fulfillStatus === "Remake Appointment (M1)"){
       if(createdBy === "integration.user"){
-        log(`[Status Rule 3.8.1] In Progress + Remake Appt (M1) + CreatedBy(=== integration.user) -> N/A`);
+        log(`[Status Rule 3.8.1] In Progress + Remake Appt (M1) + CreatedBy(=== integration.user) -> Sales`);
         return "Sales";
       }
     }
@@ -375,6 +442,15 @@ function evaluateStatusRules(ctx, BANDKeywords) {
     if(fulfillStatus === "Decomposed"){
       log(`[Status Rule 3.12] In Progress + Decomposed -> ${orderType}`);
       return orderType;
+    }
+
+    if(fulfillStatus === "Inventory ReAppointment"){
+      if(createdBy === "integration.user"){
+        log(`[Status Rule 3.13.1] In Progress + Inventory ReAppointment + CreatedBy(=== integration.user) -> Sales`);
+        return "Sales";
+      }
+      log(`[Status Rule 3.13.2] In Progress + Inventory ReAppointment + CreatedBy(!= integration.user) -> N/A`);
+      return "N/A";
     }
     
   } 
