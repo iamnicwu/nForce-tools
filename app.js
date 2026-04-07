@@ -9,7 +9,10 @@ import {
   moveRule,
   moveRuleTo,
   renderMarkdownContent,
-  showBulkJobsLoading
+  showBulkJobsLoading,
+  updateHorizontalTabs,
+  initHorizontalTabsEvents,
+  submenuConfig
 } from "./biz/ui.js";
 import { 
   autoDetectSession, 
@@ -51,6 +54,9 @@ function initApp() {
 
   // 初始化午餐功能
   initLunch();
+  
+  // 初始化横向菜单栏点击事件
+  initHorizontalTabsEvents();
 
   // 尝试自动检测Session
   autoDetectSession();
@@ -322,7 +328,7 @@ function bindEvents() {
 
 
 
-  // 侧边栏导航点击事件
+  // 设置和版本信息等普通菜单项点击事件
   const stepLinks = document.querySelectorAll(".step-link");
   stepLinks.forEach((link) => {
     link.addEventListener("click", function (e) {
@@ -350,7 +356,19 @@ function bindEvents() {
     });
   });
 
-  // 子菜单切换事件
+  // 主菜单点击事件 - 点击侧边栏主菜单时更新横向菜单栏
+  const navItems = document.querySelectorAll(".sidebar > .sidebar-nav > .nav-section > .nav-list > .nav-item[data-module]");
+  navItems.forEach((item) => {
+    item.addEventListener("click", function (e) {
+      const module = this.getAttribute("data-module");
+      if (module && submenuConfig[module]) {
+        // 更新横向菜单栏
+        updateHorizontalTabs(module);
+      }
+    });
+  });
+
+  // 子菜单切换事件 - 处理 Tools 等可展开的子菜单
   const submenuToggles = document.querySelectorAll(".submenu-toggle");
   submenuToggles.forEach((toggle) => {
     toggle.addEventListener("click", function (e) {
@@ -358,6 +376,12 @@ function bindEvents() {
       const parentItem = this.closest(".nav-item");
       if (parentItem) {
         parentItem.classList.toggle("open");
+        
+        // 如果是子菜单展开，也更新横向菜单栏
+        const module = parentItem.getAttribute("data-module");
+        if (module && parentItem.classList.contains("open") && submenuConfig[module]) {
+          updateHorizontalTabs(module);
+        }
       }
     });
   });

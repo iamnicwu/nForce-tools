@@ -26,7 +26,7 @@ export let sfConn = {
 
       // Get user identity info
       userInfo = await conn.identity();
-
+      console.log("User info:", userInfo);
       // 保存连接对象
       this.connection = conn;
       globalConn = conn;

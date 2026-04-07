@@ -118,6 +118,9 @@ export function showSection(sectionNumber) {
   
   // 更新侧边栏激活链接
   updateActiveSidebarLink(sectionNumber);
+  
+  // 更新横向菜单栏
+  updateHorizontalTabsFromSection(sectionNumber);
 }
 
 // 更新侧边栏激活链接
@@ -2146,4 +2149,157 @@ export function showBulkJobsLoading() {
     if (loadingEl) loadingEl.style.display = "block";
     if (container) container.style.display = "none";
     if (emptyEl) emptyEl.style.display = "none";
+}
+
+// 子菜单配置
+export const submenuConfig = {
+    'lts': {
+        title: 'LTS',
+        icon: 'fas fa-cubes',
+        items: [
+            { step: 5, text: '概览', icon: 'fas fa-home' },
+            { step: 2, text: '获取当日数据', icon: 'fas fa-calendar-day' },
+            { step: 3, text: '获取报表数据', icon: 'fas fa-chart-bar' },
+            { step: 4, text: '获取文件数据', icon: 'fas fa-file-upload' },
+            { step: 10, text: '数据分析', icon: 'fas fa-chart-pie' },
+            { step: 9, text: 'VVIP', icon: 'fas fa-star' },
+            { step: 12, text: 'T-4 Outstanding', icon: 'fas fa-file-alt' },
+            { step: 13, text: 'T-4 Outstanding分析', icon: 'fas fa-chart-line' }
+        ]
+    },
+    'ott': {
+        title: 'OTT',
+        icon: 'fas fa-tv',
+        items: [
+            { step: 7, text: 'OTT', icon: 'fas fa-tv' }
+        ]
+    },
+    'pcd': {
+        title: 'PCD',
+        icon: 'fas fa-laptop-code',
+        items: [
+            { step: 8, text: 'PCD', icon: 'fas fa-laptop-code' }
+        ]
+    },
+    'cvp7': {
+        title: 'CVP7',
+        icon: 'fas fa-network-wired',
+        items: [
+            { step: 11, text: 'CVP7', icon: 'fas fa-network-wired' }
+        ]
+    },
+    'tools': {
+        title: 'Tools',
+        icon: 'fas fa-tools',
+        items: [
+            { step: 15, text: 'Bulk 操作', icon: 'fas fa-database' },
+            { step: 14, text: '中午食乜', icon: 'fas fa-utensils' }
+        ]
+    }
+};
+
+// 更新横向菜单栏
+export function updateHorizontalTabs(activeModule) {
+    const tabsContainer = document.getElementById("horizontal-tabs");
+    const tabsContent = document.getElementById("horizontal-tabs-content");
+    
+    if (!tabsContainer || !tabsContent) return;
+    
+    // 如果没有传入活跃模块，检查当前显示的section
+    if (!activeModule) {
+        const visibleSection = document.querySelector('.step-section[style*="display: block"]');
+        if (visibleSection) {
+            const sectionId = visibleSection.id;
+            // 根据sectionId判断当前模块
+            const sectionToModule = {
+                'section-5': 'lts', 'section-2': 'lts', 'section-3': 'lts',
+                'section-4': 'lts', 'section-10': 'lts', 'section-9': 'lts',
+                'section-12': 'lts', 'section-13': 'lts',
+                'section-7': 'ott',
+                'section-8': 'pcd',
+                'section-11': 'cvp7',
+                'section-15': 'tools',
+                'section-14': 'tools'
+            };
+            activeModule = sectionToModule[sectionId];
+        }
+    }
+    
+    // 清空内容
+    tabsContent.innerHTML = '';
+    
+    // 如果没有活跃模块，隐藏横向菜单栏
+    if (!activeModule || !submenuConfig[activeModule]) {
+        tabsContainer.style.display = 'none';
+        return;
+    }
+    
+    // 显示横向菜单栏
+    tabsContainer.style.display = 'block';
+    
+    const config = submenuConfig[activeModule];
+    
+    // 添加模块标题
+    const moduleTitle = document.createElement("div");
+    moduleTitle.className = 'horizontal-tab-module-title';
+    moduleTitle.innerHTML = `<i class="${config.icon}"></i> ${config.title}`;
+    tabsContent.appendChild(moduleTitle);
+    
+    // 添加子菜单项
+    config.items.forEach(item => {
+        const tabItem = document.createElement("a");
+        tabItem.href = "#";
+        tabItem.className = 'horizontal-tab-item';
+        tabItem.dataset.step = item.step;
+        tabItem.innerHTML = `<i class="${item.icon}"></i> ${item.text}`;
+        
+        // 检查是否为当前激活的section
+        const currentSection = document.getElementById(`section-${item.step}`);
+        if (currentSection && currentSection.style.display === 'block') {
+            tabItem.classList.add('active');
+        }
+        
+        tabsContent.appendChild(tabItem);
+    });
+}
+
+// 根据section number更新横向菜单栏
+function updateHorizontalTabsFromSection(sectionNumber) {
+    // 根据sectionNumber确定模块
+    const sectionToModule = {
+        1: null,    // 连接设置 - 不显示横向菜单
+        2: 'lts',   // 获取当日数据
+        3: 'lts',   // 获取报表数据
+        4: 'lts',   // 获取文件数据
+        5: 'lts',   // LTS 概览
+        6: null,    // 版本信息 - 不显示横向菜单
+        7: 'ott',   // OTT
+        8: 'pcd',   // PCD
+        9: 'lts',   // VVIP
+        10: 'lts',  // 数据分析
+        11: 'cvp7', // CVP7
+        12: 'lts',  // T-4 Outstanding
+        13: 'lts',  // T-4 Outstanding分析
+        14: 'tools',// 中午食乜
+        15: 'tools'  // Bulk 操作
+    };
+    
+    const activeModule = sectionToModule[sectionNumber];
+    updateHorizontalTabs(activeModule);
+}
+
+// 初始化横向菜单栏点击事件
+export function initHorizontalTabsEvents() {
+    const tabsContent = document.getElementById("horizontal-tabs-content");
+    if (!tabsContent) return;
+    
+    tabsContent.addEventListener("click", (e) => {
+        const tabItem = e.target.closest(".horizontal-tab-item");
+        if (tabItem) {
+            const step = parseInt(tabItem.dataset.step);
+            if (step && typeof showSection === 'function') {
+                showSection(step);
+            }
+        }
+    });
 }
