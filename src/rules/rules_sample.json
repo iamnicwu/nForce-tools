@@ -1,0 +1,91 @@
+[
+  {
+    "name": "Rule 1: issue fixed",
+    "conditions": [
+      {
+        "field": "Order Status",
+        "operator": "in",
+        "value": ["Activated", "Superseded", "Cancelled"]
+      }
+    ],
+    "actions": [
+      {
+        "field": "Issue Status",
+        "value": "Fixed"
+      }
+    ]
+  },
+  {
+    "name": "Rule 2: RBS issues",
+    "conditions": [
+      {
+        "field": "Order Status",
+        "operator": "equals",
+        "value": "In Progress-Fulfilment Completed"
+      }
+    ],
+    "actions": [
+      {
+        "field": "Issue Status",
+        "value": "In progress"
+      },
+      {
+        "field": "Latest Action By",
+        "value": "RBS"
+      },
+      {
+        "field": "Action",
+        "value": "RBS"
+      }
+    ]
+  },
+  {
+    "name": "Rule 3: Waiting for user",
+    "conditions": [
+      {
+        "field": "Order Status",
+        "operator": "equals",
+        "value": "In Progress"
+      },
+      {
+        "field": "Fulfilment Status",
+        "operator": "equals",
+        "value": "Remake Appointment (M1)"
+      }
+    ],
+    "actions": [
+      {
+        "field": "Issue Status",
+        "value": "Waiting for user"
+      },
+      {
+        "field": "Latest Action By",
+        "value": "Vicki"
+      },
+      {
+        "field": "Action",
+        "value": "Vicki"
+      }
+    ]
+  },
+  {
+    "name": "Rule 4: Waiting for user F&S",
+    "conditions": [
+      {
+        "field": "Fulfilment Status",
+        "operator": "equals",
+        "value": "F&S Followed"
+      }
+    ],
+    "actions": [
+      {
+        "field": "Issue Status",
+        "value": "Waiting for user"
+      },
+      {
+        "field": "Latest Action By",
+        "value": "F&S"
+      }
+    ]
+  }
+]
