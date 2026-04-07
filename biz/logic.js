@@ -1284,3 +1284,42 @@ export function shakeLunch() {
         showLunchResult(selectedPlace);
     }, 800);
 }
+
+// 获取所有 Bulk Query Jobs
+export async function fetchBulkJobs() {
+    try {
+        console.log("开始获取 Bulk Jobs...");
+        
+        const result = await sfConn.getAllBulkQueryJobs();
+        
+        if (result.success) {
+            const jobs = result.jobs || [];
+            console.log(`获取到 ${jobs.length} 个 Bulk Job`);
+            
+            // 渲染表格
+            renderBulkJobsTable(jobs);
+            
+            if (jobs.length > 0) {
+                showNotification(`共 ${jobs.length} 个 Bulk Job`, "success");
+            }
+        } else {
+            console.error("获取 Bulk Jobs 失败:", result.error);
+            showNotification(`获取 Bulk Jobs 失败: ${result.error}`, "error");
+            
+            // 显示空状态
+            const emptyEl = document.getElementById("bulk-jobs-empty");
+            const loadingEl = document.getElementById("bulk-jobs-loading");
+            const container = document.getElementById("bulk-jobs-container");
+            
+            if (loadingEl) loadingEl.style.display = "none";
+            if (container) container.style.display = "none";
+            if (emptyEl) {
+                emptyEl.style.display = "block";
+                emptyEl.innerHTML = `<i class="fas fa-exclamation-circle" style="font-size: 24px; color: #ff4d4f; margin-bottom: 0.5rem;"></i><p>获取失败: ${result.error}</p>`;
+            }
+        }
+    } catch (error) {
+        console.error("获取 Bulk Jobs 出错:", error);
+        showNotification("获取 Bulk Jobs 出错", "error");
+    }
+}

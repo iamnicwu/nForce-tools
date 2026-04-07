@@ -2,13 +2,14 @@ import { sfConn } from "./biz/sf_service.js";
 import { showNotification } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
 import { appState } from "./biz/state.js";
-import { 
-  showSection, 
-  updateUIState, 
-  renderRulesList, 
+import {
+  showSection,
+  updateUIState,
+  renderRulesList,
   moveRule,
   moveRuleTo,
-  renderMarkdownContent
+  renderMarkdownContent,
+  showBulkJobsLoading
 } from "./biz/ui.js";
 import { 
   autoDetectSession, 
