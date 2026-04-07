@@ -233,6 +233,27 @@ body {
     transition: opacity 0.3s cubic-bezier(0.645, 0.045, 0.355, 1), width 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
 }
 
+/* 菜单徽章样式 */
+.nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    background-color: #ff4d4f;
+    border-radius: 10px;
+    margin-left: auto;
+}
+
+/* 折叠状态隐藏徽章 */
+.sidebar.collapsed .nav-badge {
+    display: none;
+}
+
 /* 子菜单样式 */
 .nav-submenu {
     display: none;
@@ -1279,4 +1300,122 @@ body {
     box-shadow: var(--shadow-sm);
     overflow-x: auto;
     border: 1px solid var(--border-color);
+}
+
+/* 横向菜单栏样式 - 与侧边栏风格一致 */
+.horizontal-tabs {
+    display: none;
+    background: linear-gradient(180deg, #001529 0%, #002140 100%);
+    border-bottom: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    padding: 0 24px;
+    overflow-x: auto;
+    min-height: 56px;
+}
+
+.horizontal-tabs::-webkit-scrollbar {
+    height: 4px;
+}
+
+.horizontal-tabs::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.horizontal-tabs::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+}
+
+.horizontal-tabs-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 56px;
+    padding: 10px 0;
+}
+
+.horizontal-tab-module-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    font-weight: 600;
+    color: #fff;
+    font-size: 13px;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    margin-right: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.horizontal-tab-module-title i {
+    color: #1890ff;
+    font-size: 14px;
+}
+
+.horizontal-tab-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    color: rgba(255, 255, 255, 0.65);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    border-radius: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+    background: transparent;
+}
+
+.horizontal-tab-item:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.horizontal-tab-item.active {
+    color: #fff;
+    background: #1890ff;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.3);
+}
+
+.horizontal-tab-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+}
+
+.horizontal-tab-item i {
+    font-size: 13px;
+    color: inherit;
+}
+
+/* 调整主内容区域和页面内容的样式 */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.page-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    background-color: var(--bg-secondary);
+}
+
+/* 当横向菜单栏显示时，调整页面内容区域的padding-top */
+.horizontal-tabs:not([style*="display: none"]) + .page-content {
+    padding-top: 16px;
 }

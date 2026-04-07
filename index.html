@@ -56,83 +56,34 @@
             <div class="nav-section">
                 <h3 class="nav-section-title">模块</h3>
                 <ul class="nav-list">
-                    <li class="nav-item has-submenu">
-                        <a href="#" class="nav-link submenu-toggle">
+                    <li class="nav-item" data-module="lts">
+                        <a href="#" class="nav-link step-link" data-step="5">
                             <i class="fas fa-cubes nav-icon"></i>
                             <span class="nav-text">LTS</span>
-                            <i class="fas fa-chevron-right submenu-arrow"></i>
                         </a>
-                        <ul class="nav-submenu">
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="5">
-                                    <span class="nav-text">概览</span>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="2">
-                                    <span class="nav-text">获取当日数据</span>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="3">
-                                    <span class="nav-text">获取报表数据</span>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="4">
-                                    <span class="nav-text">获取文件数据</span>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="10">
-                                    <span class="nav-text">数据分析</span>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="9">
-                                    <span class="nav-text">VVIP</span>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="12">
-                                    <span class="nav-text">T-4 Outstanding</span>
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a href="#" class="nav-link step-link" data-step="13">
-                                    <span class="nav-text">T-4 Outstanding分析</span>
-                                </a>
-                            </li>
-                        </ul>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item" data-module="ott">
                         <a href="#" class="nav-link step-link" data-step="7">
                             <i class="fas fa-tv nav-icon"></i>
                             <span class="nav-text">OTT</span>
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item" data-module="pcd">
                         <a href="#" class="nav-link step-link" data-step="8">
                             <i class="fas fa-laptop-code nav-icon"></i>
                             <span class="nav-text">PCD</span>
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item" data-module="cvp7">
                         <a href="#" class="nav-link step-link" data-step="11">
                             <i class="fas fa-network-wired nav-icon"></i>
                             <span class="nav-text">CVP7</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a href="#" class="nav-link step-link" data-step="15">
-                            <i class="fas fa-database nav-icon"></i>
-                            <span class="nav-text">Bulk 操作</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="#" class="nav-link step-link" data-step="14">
-                            <i class="fas fa-network-wired nav-icon"></i>
-                            <span class="nav-text">中午食乜</span>
+                    <li class="nav-item" data-module="tools">
+                        <a href="#" class="nav-link">
+                            <i class="fas fa-tools nav-icon"></i>
+                            <span class="nav-text">Tools</span>
                         </a>
                     </li>
                 </ul>
@@ -144,7 +95,7 @@
         </div>
 
         <div class="sidebar-footer">
-            <p class="sidebar-copyright">nForce Tools v2.0 © 2026</p>
+            <p class="sidebar-copyright">nForce Tools v2.1 © 2026</p>
         </div>
     </aside>
     
@@ -189,12 +140,19 @@
                                 <span class="label">用户名:</span>
                                 <span class="value" id="user-username">-</span>
                             </div>
-                            
+                             
                         </div>
                     </div>
                 </div>
             </div>
         </header>
+        
+        <!-- 横向菜单栏 -->
+        <div class="horizontal-tabs" id="horizontal-tabs">
+            <div class="horizontal-tabs-content" id="horizontal-tabs-content">
+                <!-- 动态生成子菜单项 -->
+            </div>
+        </div>
         
         <!-- 页面内容 -->
         <main class="page-content">
