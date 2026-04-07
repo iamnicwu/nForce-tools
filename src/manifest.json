@@ -1,0 +1,80 @@
+{
+  "manifest_version": 3,
+  "name": "nForce Tools",
+  "version": "2.2",
+  "description": "NForce Tools：支持订单查询、报表获取、批量数据处理、智能数据分析及 Bulk API 2.0 操作，包含 Tools 工具模块（中午食乜抽签、批量操作）",
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.salesforce-setup.com/*",
+    "https://*.force.com/*",
+    "https://*.cloudforce.com/*",
+    "https://*.visualforce.com/*",
+    "https://*.sfcrmapps.cn/*",
+    "https://*.sfcrmproducts.cn/*",
+    "https://*.salesforce.mil/*",
+    "https://*.force.mil/*",
+    "https://*.cloudforce.mil/*",
+    "https://*.visualforce.mil/*",
+    "https://*.crmforce.mil/*",
+    "https://*.force.com.mcas.ms/*",
+    "https://*.builder.salesforce-experience.com/*"
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "js": ["app.js"],
+      "matches": ["<all_urls>"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "index.html",
+        "display_data.html",
+        "lib/css/*",
+        "lib/js/*",
+        "lib/js/dayjs.min.js",
+        "lib/js/echarts.min.js",
+        "lib/js/handsontable.full.min.js",
+        "lib/js/jsforce.min.js",
+        "lib/js/jszip.min.js",
+        "lib/js/marked.min.js",
+        "lib/js/mermaid.min.js",
+        "lib/js/xlsx.full.min.js",
+        "lib/css/antd.min.css",
+        "lib/css/handsontable.full.min.css",
+        "lib/css/main.css",
+        "icons/*",
+        "README.md",
+        "LTS_Fallout_Summary.md",
+        "rules/t2_rules_default.json"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

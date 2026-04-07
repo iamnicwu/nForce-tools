@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nForce Tools</title>
+    <link rel="stylesheet" href="lib/css/antd.min.css">
+    <style>
+        .svg-icon {
+            width: 1em;
+            height: 1em;
+            fill: currentColor;
+            vertical-align: -0.125em;
+        }
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f9fafb;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+        }
+        body {
+            width: 320px;
+            height: auto;
+            min-height: 200px;
+            margin: 0;
+            padding: 1.5rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            box-sizing: border-box;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background-color: rgba(79, 70, 229, 0.1);
+            border-radius: 16px;
+            margin-bottom: 1rem;
+        }
+        .icon {
+            font-size: 2rem;
+            color: var(--primary-color);
+        }
+        .title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            color: var(--text-primary);
+        }
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .footer {
+            margin-top: 1.5rem;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <div class="icon">
+                <i class="fas fa-cube"></i>
+            </div>
+        </div>
+        <h1 class="title">nForce Tools</h1>
+        <p class="subtitle">Salesforce 数据管理助手</p>
+        <button class="ant-btn ant-btn-primary ant-btn-lg" onclick="openFullApp()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+            <i class="fas fa-external-link-alt"></i>
+            <span>打开完整应用</span>
+        </button>
+        <div class="footer">v1.0</div>
+    </div>
+    <script>
+        function openFullApp() {
+            // 打开完整应用页面
+            chrome.tabs.create({
+                url: chrome.runtime.getURL('index.html'),
+                active: true
+            });
+        }
+    </script>
+    <script type="module">
+        import { Icons } from './common/icons.js';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const iconMap = {
+                'fa-cube': Icons.cube,
+                'fa-external-link-alt': Icons.externalLink
+            };
+
+            for (const [className, svgContent] of Object.entries(iconMap)) {
+                const elements = document.querySelectorAll(`.${className}`);
+                elements.forEach(el => {
+                    el.outerHTML = svgContent;
+                });
+            }
+        });
+    </script>
+</body>
+</html>

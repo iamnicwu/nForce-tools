@@ -1,0 +1,61 @@
+[
+  {
+    "name": "Rule 3 (Amend/Ready Non-Fixedline)",
+    "conditions": [
+      {
+        "field": "Custom_OrderStatus__c",
+        "operator": "in",
+        "value": ["Amend Requested", "Ready To Submit"]
+      },
+      {
+        "field": "Order.LOB__c",
+        "operator": "not_equals",
+        "value": "Fixedline"
+      }
+    ],
+    "actions": [
+      {
+        "field": "Action",
+        "value": "COM(PCD)"
+      }
+    ]
+  },
+  {
+    "name": "Rule 2 (Amend/Ready Fixedline)",
+    "conditions": [
+      {
+        "field": "Order.Custom_OrderStatus__c",
+        "operator": "in",
+        "value": ["Amend Requested", "Ready To Submit"]
+      },
+      {
+        "field": "Order.LOB__c",
+        "operator": "equals",
+        "value": "FixedLine"
+      }
+    ],
+    "actions": [
+      {
+        "field": "Action",
+        "value": "COM(LTS)"
+      }
+    ]
+  },
+  
+  {
+    "name": "Rule 1 (M1 DRC Sales)",
+    "conditions": [
+      {
+        "field": "FulfillmentRemark__c",
+        "operator": "contains_any",
+        "value": ["DRC: [79]", "DRC: [77]", "DRC: [69]", "DRC: [65]", "DRC: [58]", "DRC: [57]", "DRC: [50]", "DRC: [40]", "DRC: [34]", "DRC: [31]", "DRC: [38]", "DRC: [28]"]
+      }
+    ],
+    "actions": [
+      {
+        "field": "Action",
+        "value": "Sales"
+      }
+    ]
+  }
+]
