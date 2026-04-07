@@ -881,7 +881,7 @@ order.Service_Request_Date__c < TODAY`;
       }
       const response = await this.connection.request({
         method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/jobs/query/${jobId}`
+        url: `/services/data/v${defaultApiVersion}/jobs/ingest/${jobId}`
       });
       return { success: true, jobInfo: response };
     } catch (error) {
@@ -1009,5 +1009,30 @@ order.Service_Request_Date__c < TODAY`;
       return { success: false, error: error.message };
     }
   },
+
+  /**
+   * 获取所有正在运行的 Bulk Query Job
+   * 使用 Bulk API 2.0 的 jobs/query 端点来查询所有任务
+   */
+  async getAllBulkQueryJobs() {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+      
+      const response = await this.connection.request({
+        method: 'GET',
+        url: `/services/data/v${defaultApiVersion}/jobs/ingest/`
+      });
+      
+      // 解析响应，可能包含 totalAPiUsage等统计信息
+      const jobs = response.hasOwnProperty('records') ? response.records : (Array.isArray(response) ? response : []);
+      
+      return { success: true, jobs: jobs };
+    } catch (error) {
+      console.error("Get All Bulk Query Jobs Error:", error);
+      return { success: false, error: error.message };
+    }
+  }
 
 };

@@ -2064,3 +2064,86 @@ export function showLunchResult(place) {
         container.style.transform = 'scale(1)';
     }, 50);
 }
+
+// 全局 Handsontable 实例 for Bulk Jobs
+let bulkJobsHot = null;
+
+// 渲染 Bulk Jobs 表格
+export function renderBulkJobsTable(data) {
+    const container = document.getElementById("bulk-jobs-container");
+    const table = document.getElementById("bulk-jobs-table");
+    const loadingEl = document.getElementById("bulk-jobs-loading");
+    const emptyEl = document.getElementById("bulk-jobs-empty");
+    
+    // 隐藏 loading
+    if (loadingEl) {
+        loadingEl.style.display = "none";
+    }
+    
+    // 销毁旧实例
+    if (bulkJobsHot) {
+        bulkJobsHot.destroy();
+        bulkJobsHot = null;
+    }
+    
+    if (!data || data.length === 0) {
+        if (container) container.style.display = "none";
+        if (emptyEl) emptyEl.style.display = "block";
+        return;
+    }
+    
+    // 显示容器，隐藏空状态
+    if (container) container.style.display = "block";
+    if (emptyEl) emptyEl.style.display = "none";
+    
+    // 准备表格列 - 只显示关键字段
+    const displayFields = ['id', 'operation', 'state', 'query', 'createdDate', 'numberOfRecordsProcessed', 'numberOfRecordsFailed', 'totalProcessingTime'];
+    
+    // 过滤存在的字段
+    const availableFields = displayFields.filter(field => data.length > 0 && data[0].hasOwnProperty(field));
+    
+    // 如果没有可用字段，使用所有字段
+    const fieldsToUse = availableFields.length > 0 ? availableFields : Object.keys(data[0]);
+    
+    const tableColumns = fieldsToUse.map(col => ({
+        title: col,
+        data: col
+    }));
+    
+    // 配置 Handsontable
+    const hotConfig = {
+        data: data,
+        columns: tableColumns,
+        colHeaders: true,
+        rowHeaders: true,
+        stretchH: 'all',
+        autoWrapRow: true,
+        autoWrapCol: true,
+        maxRows: 100,
+        width: '100%',
+        height: 'auto',
+        licenseKey: 'non-commercial-and-evaluation',
+        filters: true,
+        dropdownMenu: true,
+        sortIndicator: true,
+        manualColumnResize: true,
+        manualRowResize: true,
+        search: true,
+        contextMenu: true,
+        readOnly: true // 只读
+    };
+    
+    // 创建 Handsontable 实例
+    bulkJobsHot = new Handsontable(table, hotConfig);
+}
+
+// 显示 Bulk Jobs 加载状态
+export function showBulkJobsLoading() {
+    const loadingEl = document.getElementById("bulk-jobs-loading");
+    const container = document.getElementById("bulk-jobs-container");
+    const emptyEl = document.getElementById("bulk-jobs-empty");
+    
+    if (loadingEl) loadingEl.style.display = "block";
+    if (container) container.style.display = "none";
+    if (emptyEl) emptyEl.style.display = "none";
+}

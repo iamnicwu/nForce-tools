@@ -847,6 +847,31 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 正在运行的 Job 表格 -->
+                    <div style="margin-top: 2rem;">
+                        <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                            <span class="ant-divider-inner-text">正在运行的 Bulk Job</span>
+                        </div>
+                        <div id="bulk-jobs-container" style="display: none;">
+                            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+                                <button type="button" id="refresh-bulk-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm">
+                                    <i class="fas fa-sync-alt"></i> 刷新
+                                </button>
+                            </div>
+                            <div class="table-container" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden;">
+                                <div id="bulk-jobs-table" class="data-table"></div>
+                            </div>
+                        </div>
+                        <div id="bulk-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
+                            <i class="fas fa-check-circle" style="font-size: 24px; color: #52c41a; margin-bottom: 0.5rem;"></i>
+                            <p>当前没有正在运行的 Bulk Job</p>
+                        </div>
+                        <div id="bulk-jobs-loading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 24px;"></i>
+                            <p>正在加载 Bulk Job 信息...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
