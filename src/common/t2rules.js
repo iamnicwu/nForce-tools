@@ -39,7 +39,7 @@ export function applyExpiryRules(data) {
     }
 
     // 4. 应用 Sales 覆盖规则 (例如 CS 订单、DRC 检测)
-    action = applySalesOverride(action, ctx, m1Criteria);
+    action = applySalesOverrideForExpiry(action, ctx, m1Criteria);
 
     // 5. 分配issue status
     let issueStatus =  '';
@@ -634,6 +634,57 @@ function evaluateRemarkRules(ctx, m1Criteria) {
   }
 
   return null;
+}
+
+function applySalesOverrideForExpiry(currentAction, ctx, m1Criteria) {
+  const {orderName, createdBy, status, fulfillStatus, fulfillRemark, log } = ctx;
+  let finalAction = currentAction;
+
+  // 特例：当 Action 为 Sales 时，做深度 DRC 检查
+  if (finalAction === "Sales" && 
+    (status === "In Progress" || status === "Ready To Submit") &&
+    (fulfillStatus === "In Progress" || fulfillStatus === "In Progress-Distributed" || 
+      fulfillStatus === "Remake Appointment (M1)" || fulfillStatus === "Appointment Changed (M2)") &&
+      
+    typeof fulfillRemark === "string") {
+
+    log(`[Override Info] Validating Sales action with advanced DRC check`);
+    const paragraphs = extractDRCParagraphsAdvanced(fulfillRemark);
+    
+    if ( paragraphs.length > 0) {
+      const hasM1words = paragraphs.some((r) => m1Criteria.some((k) => r.includes(k)));
+      if (hasM1words) {
+        const firstDRC = paragraphs[0];
+        
+        // 生成正则用来校验 firstDRC 内部是否匹配指定的 DRC
+        const m1Numbers = m1Criteria.map(k => k.match(/\d+/)[0]);
+        const drcRegex = new RegExp(`DRC:\\s*\\[(${m1Numbers.join('|')})\\]`, 'i');
+        const isFirstMatch = drcRegex.test(firstDRC);
+
+        log(`[Override Info] First DRC Paragraph Match: ${isFirstMatch}`);
+
+        if (!isFirstMatch) {
+          finalAction = "N/A";
+          log(`[Override Rule 9.0] contains M1 DRC but not the first DRC -> Sales -> N/A`);
+        }
+      }
+      else{
+        finalAction = "N/A";
+        log(`[Override Rule 9.2] contains M1 DRC but not the first DRC -> Sales -> N/A`);
+      }
+    }else{
+      finalAction = "N/A";
+      log(`[Override Rule 9.3] does not contain M1 DRC -> N/A`);
+    }
+  }
+
+  // 特例：当 Action 为 Sales 且 OrderName 以 CS 开头时，重载为 CS
+  if (finalAction === "Sales" && orderName && String(orderName).startsWith("CS")) {
+    log(`[Override Rule 8] Special Case CS Order -> CS`);
+    finalAction = "CS";
+  }
+
+  return finalAction;
 }
 
 function applySalesOverride(currentAction, ctx, m1Criteria) {
