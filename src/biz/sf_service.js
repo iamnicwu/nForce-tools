@@ -237,7 +237,7 @@ export let sfConn = {
           MainProduct__c = true AND
           LOB__c ='FixedLine' AND
           order.Service_Request_Date__c <= TODAY AND
-          order.Service_Request_Date__c != null AND
+          order.Service_Request_Date__c > 2026-01-01 AND
           order.Custom_OrderStatus__c NOT IN (
               'Ready To Submit', 'Superseded', 'Activated',
               'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
@@ -881,7 +881,7 @@ order.Service_Request_Date__c < TODAY`;
       }
       const response = await this.connection.request({
         method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/jobs/ingest/${jobId}`
+        url: `/services/data/v${defaultApiVersion}/jobs/query/${jobId}`
       });
       return { success: true, jobInfo: response };
     } catch (error) {
