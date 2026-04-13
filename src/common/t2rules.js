@@ -46,7 +46,7 @@ export function applyExpiryRules(data) {
     if (action === "COM" || action === "COM(LTS)" || action === "COM(PCD)" || action === "NORA" || action === "FS" || action === "RBS" || action === "N/A") {
       issueStatus = "In Progress";
     } 
-    else if (action === "Vicki" || action === "OPS" || action === "Sales") {
+    else if (action === "Vicki" || action === "OPS" || action === "Sales" || action === "CS") {
       issueStatus = "Waiting for user";
     }
     else{
@@ -417,6 +417,10 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         log(`[Remark Rule 3.7.6] OPG updated \"CANCELLED\" -> ${orderType}`);
         return orderType;
       }
+      else if (lob != 'Fixedline' && fulfillStatus === "Inventory Fallout"){
+        log(`[Remark Rule 3.7.7] PCD order + fulfillment status = Inventory Fallout`);
+        return "BAND";
+      }
 
       log(`[Status Rule 3.7.2] In Progress + Waiting For Inventory -> OPS`);
       return "OPS";
@@ -717,6 +721,9 @@ function applySalesOverride(currentAction, ctx, m1Criteria) {
         if (!isFirstMatch) {
           finalAction = "N/A";
           log(`[Override Rule 9.0] contains M1 DRC but not the first DRC -> Sales -> N/A`);
+        }
+        else{
+          
         }
 
         if(createdBy != "integration.user"){
