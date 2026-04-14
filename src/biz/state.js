@@ -4,6 +4,8 @@ export const appState = {
   is_connected: false,
   has_daily_data: false,
   has_pcd_daily_data: false,
+  has_pcd_pid_fallout_data: false,
+  has_pcd_qc_issue_data: false,
   has_report_data: false,
   has_t2_data: false,
   has_file: false,
@@ -32,6 +34,8 @@ export const appState = {
   stats: {
     dailyOrders: 0,
     pcdDailyOrders: 0,
+    pcdPidFalloutOrders: 0,
+    pcdQCIssueOrders: 0,
     reportRecords: 0,
     t2Records: 0,
     uploadedOrders: 0,
@@ -48,6 +52,8 @@ export const appState = {
   // 数据存储
   daily_data: null,
   pcd_daily_data: null,
+  pcd_pid_fallout_data: null,
+  pcd_qc_issue_data: null,
   report_data: null,
   t2_data: null,
   t2_analysis_data: null,

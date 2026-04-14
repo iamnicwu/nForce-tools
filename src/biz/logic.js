@@ -2,7 +2,7 @@ import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
 import { showNotification } from "../common/utils.js";
 import { processExcelFile as processExcelFileUtil, processVVIPExcelFile as processVVIPExcelFileUtil, processAnalysisExcelFile as processAnalysisExcelFileUtil, analyzeData as analyzeDataUtil, analyzeT2Data as analyzeT2DataUtil, exportToExcel, getUniqueOrderCount, readExcelFile, parseSheetData } from "../common/excel_utils.js";
-import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState } from "./ui.js";
+import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState } from "./ui.js";
 import {applyT2Rules} from "../common/t2rules.js"
 // 默认午餐地点
 const DEFAULT_LUNCH_PLACES = [
@@ -576,6 +576,144 @@ export async function getPCDDailyData() {
   }
 }
 
+export async function getPCDPIDFalloutData() {
+  try {
+    console.log("开始获取 PCD PID Fallout 数据");
+
+    // 显示loading mask
+    const loadingMask = document.getElementById("loading-mask");
+    if (loadingMask) {
+      loadingMask.style.display = "flex";
+      loadingMask.querySelector("h3").textContent = "正在获取 PCD PID Fallout 数据...";
+    }
+
+    // 使用sfConn对象获取 PCD PID Fallout 数据
+    const result = await sfConn.getPCDPIDFalloutData();
+    console.log("获取 PCD PID Fallout 数据结果:", result);
+
+    if (result.success) {
+        // 更新应用状态
+        appState.has_pcd_pid_fallout_data = true;
+        // 保存数据到应用状态，以便后续导出
+        appState.pcd_pid_fallout_data = result.data;
+        // 更新统计数据
+        appState.stats.pcdPidFalloutOrders = result.data.length;
+        console.log("应用状态已更新");
+
+        // 隐藏loading mask
+        if (loadingMask) {
+          loadingMask.style.display = "none";
+        }
+
+        // 显示数据
+        renderPCDPIDFalloutData(result.data);
+        
+        // 显示导出按钮
+        const exportActions = document.getElementById("pcd-pid-fallout-data-actions");
+        if (exportActions) {
+          exportActions.style.display = "block";
+        }
+        const exportBtn = document.getElementById("export-pcd-pid-fallout-data");
+        if (exportBtn) {
+          exportBtn.style.display = "inline-block";
+        }
+        
+        // 更新UI状态
+        updateUIState();
+        // 更新统计数据
+        updateStats();
+        
+        showNotification(`PCD PID Fallout 数据获取成功，共 ${result.data.length} 条记录`);
+        console.log("PCD PID Fallout 数据获取成功");
+    } else {
+      showNotification(`获取 PCD PID Fallout 数据失败: ${result.error}`, "error");
+      // 隐藏loading mask
+      if (loadingMask) {
+        loadingMask.style.display = "none";
+      }
+    }
+  } catch (error) {
+    console.error("获取 PCD PID Fallout 数据失败:", error);
+    showNotification("获取 PCD PID Fallout 数据失败，请稍后重试", "error");
+
+    // 隐藏loading mask
+    const loadingMask = document.getElementById("loading-mask");
+    if (loadingMask) {
+      loadingMask.style.display = "none";
+    }
+    console.log("获取 PCD PID Fallout 数据失败，已显示错误通知");
+  }
+}
+
+export async function getPCDQCIssueData() {
+  try {
+    console.log("开始获取 PCD QC Issue 数据");
+
+    // 显示loading mask
+    const loadingMask = document.getElementById("loading-mask");
+    if (loadingMask) {
+      loadingMask.style.display = "flex";
+      loadingMask.querySelector("h3").textContent = "正在获取 PCD QC Issue 数据...";
+    }
+
+    // 使用sfConn对象获取 PCD QC Issue 数据
+    const result = await sfConn.getPCDQCIssueData();
+    console.log("获取 PCD QC Issue 数据结果:", result);
+
+    if (result.success) {
+        // 更新应用状态
+        appState.has_pcd_qc_issue_data = true;
+        // 保存数据到应用状态，以便后续导出
+        appState.pcd_qc_issue_data = result.data;
+        // 更新统计数据
+        appState.stats.pcdQCIssueOrders = result.data.length;
+        console.log("应用状态已更新");
+
+        // 隐藏loading mask
+        if (loadingMask) {
+          loadingMask.style.display = "none";
+        }
+
+        // 显示数据
+        renderPCDQCIssueData(result.data);
+        
+        // 显示导出按钮
+        const exportActions = document.getElementById("pcd-qc-issue-data-actions");
+        if (exportActions) {
+          exportActions.style.display = "block";
+        }
+        const exportBtn = document.getElementById("export-pcd-qc-issue-data");
+        if (exportBtn) {
+          exportBtn.style.display = "inline-block";
+        }
+        
+        // 更新UI状态
+        updateUIState();
+        // 更新统计数据
+        updateStats();
+        
+        showNotification(`PCD QC Issue 数据获取成功，共 ${result.data.length} 条记录`);
+        console.log("PCD QC Issue 数据获取成功");
+    } else {
+      showNotification(`获取 PCD QC Issue 数据失败: ${result.error}`, "error");
+      // 隐藏loading mask
+      if (loadingMask) {
+        loadingMask.style.display = "none";
+      }
+    }
+  } catch (error) {
+    console.error("获取 PCD QC Issue 数据失败:", error);
+    showNotification("获取 PCD QC Issue 数据失败，请稍后重试", "error");
+
+    // 隐藏loading mask
+    const loadingMask = document.getElementById("loading-mask");
+    if (loadingMask) {
+      loadingMask.style.display = "none";
+    }
+    console.log("获取 PCD QC Issue 数据失败，已显示错误通知");
+  }
+}
+
 // 导出当日数据
 export function exportDailyData() {
   exportToExcel(appState.daily_data, "当日数据", "当日数据");
@@ -584,6 +722,106 @@ export function exportDailyData() {
 // 导出 PCD 当日数据
 export function exportPCDDailyData() {
   exportToExcel(appState.pcd_daily_data, "PCD当日数据", "PCD当日数据");
+}
+
+// 导出 PCD PID Fallout 数据 (CSV格式)
+export function exportPCDPIDFalloutData() {
+  const data = appState.pcd_pid_fallout_data;
+  if (!data || data.length === 0) {
+    showNotification("没有可导出的数据", "warning");
+    return;
+  }
+
+  // 将数据转换为CSV格式
+  const headers = Object.keys(data[0]);
+  const csvRows = [];
+  
+  // 添加表头
+  csvRows.push(headers.join(','));
+  
+  // 添加数据行
+  for (const row of data) {
+    const values = headers.map(header => {
+      const value = row[header];
+      // 处理值中的特殊字符
+      if (value === null || value === undefined) {
+        return '';
+      }
+      const stringValue = String(value);
+      // 如果值包含逗号、引号或换行符，用引号包裹
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    });
+    csvRows.push(values.join(','));
+  }
+  
+  const csvString = csvRows.join('\n');
+  
+  // 创建Blob并下载
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `PCD_PID_Fallout_${new Date().toISOString().slice(0,10)}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  
+  showNotification("CSV 文件下载成功", "success");
+}
+
+// 导出 PCD QC Issue 数据 (CSV格式)
+export function exportPCDQCIssueData() {
+  const data = appState.pcd_qc_issue_data;
+  if (!data || data.length === 0) {
+    showNotification("没有可导出的数据", "warning");
+    return;
+  }
+
+  // 将数据转换为CSV格式
+  const headers = Object.keys(data[0]);
+  const csvRows = [];
+  
+  // 添加表头
+  csvRows.push(headers.join(','));
+  
+  // 添加数据行
+  for (const row of data) {
+    const values = headers.map(header => {
+      const value = row[header];
+      // 处理值中的特殊字符
+      if (value === null || value === undefined) {
+        return '';
+      }
+      const stringValue = String(value);
+      // 如果值包含逗号、引号或换行符，用引号包裹
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    });
+    csvRows.push(values.join(','));
+  }
+  
+  const csvString = csvRows.join('\n');
+  
+  // 创建Blob并下载
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", `PCD_QC_Issue_${new Date().toISOString().slice(0,10)}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  
+  showNotification("CSV 文件下载成功", "success");
 }
 
 // 导出报表数据

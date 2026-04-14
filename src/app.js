@@ -22,9 +22,13 @@ import {
   getSalesforceData,
   getDailyData,
   getPCDDailyData,
+  getPCDPIDFalloutData,
+  getPCDQCIssueData,
   getT2Data,
   exportDailyData,
   exportPCDDailyData,
+  exportPCDPIDFalloutData,
+  exportPCDQCIssueData,
   exportReportData,
   exportT2Data,
   exportLatestData,
@@ -84,15 +88,11 @@ function bindEvents() {
       e.preventDefault();
       const sessionId = document.getElementById("session_id").value.trim();
 
-      console.log("Session ID表单提交事件触发，输入值:", sessionId);
-
       if (sessionId) {
         appState.session_id = sessionId;
         localStorage.setItem("sf_session_id", sessionId);
-        console.log("Session ID已保存");
         updateUIState();
         showNotification("Session ID已成功保存");
-        console.log("Session ID保存成功");
 
         // 自动触发连接测试
         const testConnectionForm = document.getElementById("test-connection-form");
@@ -100,7 +100,7 @@ function bindEvents() {
           testConnectionForm.dispatchEvent(new Event('submit'));
         }
       } else {
-        console.log("Session ID为空，保存失败");
+        showNotification("请输入Session ID", "error");
       }
     });
 
@@ -121,11 +121,9 @@ function bindEvents() {
       try {
         // 测试Salesforce连接
         const isConnected = await sfConn.testConnection(appState.session_id);
-        console.log("测试Salesforce连接结果:", isConnected);
         if (isConnected) {
           // 连接成功
           appState.is_connected = true;
-          console.log("Salesforce连接成功");
 
           statusElement.innerHTML =
             `${Icons.checkCircle} 连接成功`;
@@ -146,18 +144,13 @@ function bindEvents() {
           
           showSection(5);
           showNotification("Salesforce连接成功");
-          console.log("连接成功处理完成");
         } else {
           // 连接失败
           throw new Error("Connection failed");
         }
       } catch (error) {
         // 连接失败
-        console.error("Salesforce连接失败，conn返回为空");
-        console.error("测试Salesforce连接失败:", error);
-        // 明确设置连接状态为失败
         appState.is_connected = false;
-        console.log("连接失败");
 
         statusElement.innerHTML =
           `${Icons.timesCircle} 连接失败`;
@@ -172,7 +165,6 @@ function bindEvents() {
 
         // 更新UI状态，确保后续步骤被禁用
         updateUIState();
-        console.log("连接失败处理完成，UI状态已更新");
       }
     });
 
@@ -214,6 +206,46 @@ function bindEvents() {
 
       // 获取 PCD 当日数据
       getPCDDailyData();
+    });
+
+  // 获取 PCD PID Fallout 数据表单提交
+  document
+    .getElementById("pcd-pid-fallout-data-form")
+    .addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      // 显示loading mask
+      const loadingMask = document.getElementById("loading-mask");
+      const recordCountSpan = document.getElementById("record-count");
+
+      if (loadingMask && recordCountSpan) {
+        loadingMask.style.display = "flex";
+        loadingMask.querySelector("h3").textContent = "正在获取 PCD PID Fallout 数据...";
+        recordCountSpan.textContent = "0";
+      }
+
+      // 获取 PCD PID Fallout 数据
+      getPCDPIDFalloutData();
+    });
+
+  // 获取 PCD QC Issue 数据表单提交
+  document
+    .getElementById("pcd-qc-issue-data-form")
+    .addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      // 显示loading mask
+      const loadingMask = document.getElementById("loading-mask");
+      const recordCountSpan = document.getElementById("record-count");
+
+      if (loadingMask && recordCountSpan) {
+        loadingMask.style.display = "flex";
+        loadingMask.querySelector("h3").textContent = "正在获取 PCD QC Issue 数据...";
+        recordCountSpan.textContent = "0";
+      }
+
+      // 获取 PCD QC Issue 数据
+      getPCDQCIssueData();
     });
 
   // 自定义日期复选框变化事件
@@ -286,7 +318,6 @@ function bindEvents() {
       const fileInput = document.getElementById("file");
       const file = fileInput.files[0];
 
-      console.log("文件上传表单提交事件触发，选择的文件:", file);
       processExcelFile(file);
     });
 
@@ -298,7 +329,6 @@ function bindEvents() {
       const fileInput = document.getElementById("vvip-file");
       const file = fileInput.files[0];
 
-      console.log("VVIP文件上传表单提交事件触发，选择的文件:", file);
       processVVIPExcelFile(file);
     });
 
@@ -310,7 +340,6 @@ function bindEvents() {
       const fileInput = document.getElementById("analysis-file");
       const file = fileInput.files[0];
 
-      console.log("数据分析文件上传表单提交事件触发，选择的文件:", file);
       processAnalysisExcelFile(file);
     });
 
@@ -322,7 +351,6 @@ function bindEvents() {
       const fileInput = document.getElementById("t2-analysis-file");
       const file = fileInput.files[0];
 
-      console.log("T-4 分析文件上传表单提交事件触发，选择的文件:", file);
       processT2AnalysisExcelFile(file);
     });
 
@@ -334,23 +362,15 @@ function bindEvents() {
     link.addEventListener("click", function (e) {
       e.preventDefault();
       const sectionNumber = parseInt(this.getAttribute("data-step"));
-      console.log(
-        "侧边栏导航点击事件触发，点击的section:",
-        sectionNumber,
-        "连接状态:",
-        appState.is_connected
-      );
       
       // 检查是否允许访问该section
       if (appState.is_connected) {
         // 连接成功后，可以访问所有section
         showSection(sectionNumber);
-        console.log("已跳转到section:", sectionNumber);
       } else {
         // 未连接时，只能访问设置section和版本信息
         if (sectionNumber === 1 || sectionNumber === 6) {
           showSection(sectionNumber);
-          console.log("已跳转到section:", sectionNumber);
         }
       }
     });
@@ -409,6 +429,18 @@ function bindEvents() {
   const exportPCDDailyDataBtn = document.getElementById("export-pcd-daily-data");
   if (exportPCDDailyDataBtn) {
     exportPCDDailyDataBtn.addEventListener("click", exportPCDDailyData);
+  }
+
+  // 导出 PCD PID Fallout 数据按钮点击事件
+  const exportPCDPIDFalloutDataBtn = document.getElementById("export-pcd-pid-fallout-data");
+  if (exportPCDPIDFalloutDataBtn) {
+    exportPCDPIDFalloutDataBtn.addEventListener("click", exportPCDPIDFalloutData);
+  }
+
+  // 导出 PCD QC Issue 数据按钮点击事件
+  const exportPCDQCIssueDataBtn = document.getElementById("export-pcd-qc-issue-data");
+  if (exportPCDQCIssueDataBtn) {
+    exportPCDQCIssueDataBtn.addEventListener("click", exportPCDQCIssueData);
   }
 
   // 导出报表数据按钮点击事件
@@ -814,7 +846,6 @@ function bindEvents() {
             renderRulesList(rules);
             
             showNotification("规则文件加载成功", "success");
-            console.log("规则文件加载成功:", rules);
           } catch (error) {
             console.error("解析规则文件失败:", error);
             showNotification("解析规则文件失败，请检查JSON格式", "error");
