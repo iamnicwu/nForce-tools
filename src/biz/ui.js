@@ -64,6 +64,8 @@ function renderLunchList() {
 // 全局Handsontable实例
 let dailyDataHot = null;
 let pcdDailyDataHot = null;
+let pcdPidFalloutDataHot = null;
+let pcdQCIssueDataHot = null;
 let reportDataHot = null;
 let t2DataHot = null;
 let t2AnalysisDataHot = null;
@@ -210,7 +212,7 @@ export function updateUIState() {
     updateStats();
 
     // 连接成功后，启用所有功能section
-    for (let i = 2; i <= 15; i++) {
+    for (let i = 2; i <= 17; i++) {
       const section = document.getElementById(`section-${i}`);
       if (section) {
         section.style.opacity = "1";
@@ -232,7 +234,7 @@ export function updateUIState() {
     }
     
     // 未连接时，禁用所有功能section
-    for (let i = 2; i <= 15; i++) {
+    for (let i = 2; i <= 17; i++) {
       const section = document.getElementById(`section-${i}`);
       if (section) {
         section.style.opacity = "0.5";
@@ -295,6 +297,56 @@ export function updateUIState() {
     const pcdDailyDataActions = document.getElementById("pcd-daily-data-actions");
     if (pcdDailyDataActions) {
       pcdDailyDataActions.style.display = "none";
+    }
+  }
+
+  // 更新 PCD PID Fallout 数据状态
+  if (appState.has_pcd_pid_fallout_data && appState.is_connected) {
+    const pcdPidFalloutDataBadge = document.getElementById("pcd-pid-fallout-data-badge");
+    if (pcdPidFalloutDataBadge) {
+      pcdPidFalloutDataBadge.style.display = "inline-block";
+      pcdPidFalloutDataBadge.className = "ant-tag ant-tag-success";
+    }
+    
+    // 显示导出按钮区域
+    const pcdPidFalloutDataActions = document.getElementById("pcd-pid-fallout-data-actions");
+    if (pcdPidFalloutDataActions) {
+      pcdPidFalloutDataActions.style.display = "block";
+    }
+  } else if (!appState.is_connected) {
+    const pcdPidFalloutDataBadge = document.getElementById("pcd-pid-fallout-data-badge");
+    if (pcdPidFalloutDataBadge) {
+      pcdPidFalloutDataBadge.style.display = "none";
+    }
+    
+    const pcdPidFalloutDataActions = document.getElementById("pcd-pid-fallout-data-actions");
+    if (pcdPidFalloutDataActions) {
+      pcdPidFalloutDataActions.style.display = "none";
+    }
+  }
+
+  // 更新 PCD QC Issue 数据状态
+  if (appState.has_pcd_qc_issue_data && appState.is_connected) {
+    const pcdQCIssueDataBadge = document.getElementById("pcd-qc-issue-data-badge");
+    if (pcdQCIssueDataBadge) {
+      pcdQCIssueDataBadge.style.display = "inline-block";
+      pcdQCIssueDataBadge.className = "ant-tag ant-tag-success";
+    }
+    
+    // 显示导出按钮区域
+    const pcdQCIssueDataActions = document.getElementById("pcd-qc-issue-data-actions");
+    if (pcdQCIssueDataActions) {
+      pcdQCIssueDataActions.style.display = "block";
+    }
+  } else if (!appState.is_connected) {
+    const pcdQCIssueDataBadge = document.getElementById("pcd-qc-issue-data-badge");
+    if (pcdQCIssueDataBadge) {
+      pcdQCIssueDataBadge.style.display = "none";
+    }
+    
+    const pcdQCIssueDataActions = document.getElementById("pcd-qc-issue-data-actions");
+    if (pcdQCIssueDataActions) {
+      pcdQCIssueDataActions.style.display = "none";
     }
   }
 
@@ -673,6 +725,110 @@ export function renderDailyData(data) {
 // 渲染 PCD 当日数据
 export function renderPCDDailyData(data) {
   pcdDailyDataHot = renderTable("pcd-daily-data-container", "pcd-daily-data-table", data, pcdDailyDataHot);
+}
+
+// 渲染 PCD PID Fallout 数据
+export function renderPCDPIDFalloutData(data) {
+  const container = document.getElementById("pcd-pid-fallout-data-container");
+  const table = document.getElementById("pcd-pid-fallout-data-table");
+  
+  // 销毁旧实例
+  if (pcdPidFalloutDataHot) {
+    pcdPidFalloutDataHot.destroy();
+    pcdPidFalloutDataHot = null;
+  }
+  
+  if (!data || data.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+  
+  // 准备Handsontable需要的数据格式
+  const tableColumns = Object.keys(data[0]).map(col => ({
+      title: col.replace(/__c/g, '').replace(/_/g, ' '),
+      data: col
+  }));
+  
+  // 配置Handsontable
+  const hotConfig = {
+    data: data,
+    columns: tableColumns,
+    colHeaders: true,
+    rowHeaders: true,
+    stretchH: 'all',
+    autoWrapRow: true,
+    autoWrapCol: true,
+    maxRows: 1000,
+    width: '100%',
+    height: '500px',
+    licenseKey: 'non-commercial-and-evaluation',
+    filters: true,
+    dropdownMenu: true,
+    sortIndicator: true,
+    manualColumnResize: true,
+    manualRowResize: true,
+    manualColumnMove: true,
+    search: true,
+    contextMenu: true
+  };
+  
+  // 创建Handsontable实例
+  pcdPidFalloutDataHot = new Handsontable(table, hotConfig);
+  
+  // 显示数据容器
+  container.style.display = "block";
+}
+
+// 渲染 PCD QC Issue 数据
+export function renderPCDQCIssueData(data) {
+  const container = document.getElementById("pcd-qc-issue-data-container");
+  const table = document.getElementById("pcd-qc-issue-data-table");
+  
+  // 销毁旧实例
+  if (pcdQCIssueDataHot) {
+    pcdQCIssueDataHot.destroy();
+    pcdQCIssueDataHot = null;
+  }
+  
+  if (!data || data.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+  
+  // 准备Handsontable需要的数据格式
+  const tableColumns = Object.keys(data[0]).map(col => ({
+      title: col.replace(/__c/g, '').replace(/_/g, ' '),
+      data: col
+  }));
+  
+  // 配置Handsontable
+  const hotConfig = {
+    data: data,
+    columns: tableColumns,
+    colHeaders: true,
+    rowHeaders: true,
+    stretchH: 'all',
+    autoWrapRow: true,
+    autoWrapCol: true,
+    maxRows: 1000,
+    width: '100%',
+    height: '500px',
+    licenseKey: 'non-commercial-and-evaluation',
+    filters: true,
+    dropdownMenu: true,
+    sortIndicator: true,
+    manualColumnResize: true,
+    manualRowResize: true,
+    manualColumnMove: true,
+    search: true,
+    contextMenu: true
+  };
+  
+  // 创建Handsontable实例
+  pcdQCIssueDataHot = new Handsontable(table, hotConfig);
+  
+  // 显示数据容器
+  container.style.display = "block";
 }
 
 // 渲染报表数据
@@ -2179,7 +2335,9 @@ export const submenuConfig = {
         title: 'PCD',
         icon: 'fas fa-laptop-code',
         items: [
-            { step: 8, text: 'PCD', icon: 'fas fa-laptop-code' }
+            { step: 8, text: 'PCD', icon: 'fas fa-laptop-code' },
+            { step: 16, text: 'Data issue - PID fallout', icon: 'fas fa-exclamation-triangle' },
+            { step: 17, text: 'Data issue - QC issue', icon: 'fas fa-search' }
         ]
     },
     'cvp7': {
@@ -2282,7 +2440,9 @@ function updateHorizontalTabsFromSection(sectionNumber) {
         12: 'lts',  // T-4 Outstanding
         13: 'lts',  // T-4 Outstanding分析
         14: 'tools',// 中午食乜
-        15: 'tools'  // Bulk 操作
+        15: 'tools', // Bulk 操作
+        16: 'pcd',  // PCD PID Fallout
+        17: 'pcd'   // PCD QC Issue
     };
     
     const activeModule = sectionToModule[sectionNumber];

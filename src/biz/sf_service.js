@@ -1010,6 +1010,255 @@ order.Service_Request_Date__c < TODAY`;
     }
   },
 
+  async getPCDPIDFalloutData() {
+    try {
+      if (!this.connection) {
+        return {
+          success: false,
+          error: "Salesforce connection not established",
+        };
+      }
+
+      const pidFalloutQuery = `SELECT Id, OrderId, 
+order.name,
+    order.OrderNumber,
+    order.Order_Nature__c,
+    order.Custom_OrderStatus__c,
+    order.Custom_FulfilmentStatus__c,
+    order.Fulfillment_Id_List__c,
+    order.FulfillmentOrderId__c,
+    order.Service_Request_Date__c,
+    order.Is_Voluntary__c,
+    order.LastModifiedDate,
+    order.Last_Submitted_Date__c,
+FulfillmentAction__c, FulfillmentSystemId__c, FulfillmentDetail__c FROM ORDERITEM WHERE 
+FulfillmentId__c != null and 
+OrderId  IN (SELECT ID FROM Order WHERE
+    Custom_FulfilmentStatus__c = 'In Progress - Fulfillment Data Issue'
+    AND Custom_OrderStatus__c NOT IN (
+        'Activated',
+        'Superseded',
+        'Amend Requested',
+        'Submitted',
+        'Ready To Submit'
+    )) AND FulfillmentAction__c like '%FALLOUT%' AND 
+    FulfillmentSystemId__c != 'WFM' AND 
+    Order.Custom_OrderStatus__c != 'Cancelled'`;
+      
+      const result = await this.connection.query(pidFalloutQuery, { autoFetch: true, maxFetch: 99999 });
+      const records = result.records || [];
+      
+      if (records.length > 0) {
+        // 展平 OrderItem 数据
+        const flatternRecords = flattenRecords(records);
+        
+        // 提取 OrderId 列表（去重）
+        const orderIds = [...new Set(flatternRecords.map(record => record.OrderId).filter(id => id))];
+        
+        if (orderIds.length > 0) {
+          console.log(`提取到 ${orderIds.length} 个 Order ID`);
+          
+          // 构建 OrchestrationItem 查询，分批处理以避免 SOQL 长度限制
+          const BATCH_SIZE = 600;
+          let allOrchestrationItems = [];
+          
+          for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
+            const batchIds = orderIds.slice(i, i + BATCH_SIZE);
+            const escapedIds = batchIds.map(id => id.replace(/'/g, "''"));
+            
+            const orchestrationQuery = `SELECT ID, Name, vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c, vlocity_cmt__ExecutionLog__c 
+FROM vlocity_cmt__OrchestrationItem__c 
+WHERE (Name LIKE '%callout-noss%' OR Name LIKE '%callout-opg%') 
+AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedIds.join("','")}')`;
+            
+            try {
+              const orchResult = await this.connection.query(orchestrationQuery, { autoFetch: true, maxFetch: 99999 });
+              if (orchResult.records && orchResult.records.length > 0) {
+                allOrchestrationItems = allOrchestrationItems.concat(orchResult.records);
+              }
+            } catch (orchError) {
+              console.error(`查询 OrchestrationItem 批次 ${Math.floor(i / BATCH_SIZE) + 1} 失败:`, orchError);
+            }
+          }
+          
+          console.log(`获取到 ${allOrchestrationItems.length} 条 OrchestrationItem 记录`);
+          
+          // 展平 OrchestrationItem 数据并按 OrderId 分组
+          const flatOrchItems = flattenRecords(allOrchestrationItems);
+          const orchItemsByOrderId = {};
+          
+          for (const item of flatOrchItems) {
+            const orderId = item['vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c'];
+            if (orderId) {
+              if (!orchItemsByOrderId[orderId]) {
+                orchItemsByOrderId[orderId] = [];
+              }
+              orchItemsByOrderId[orderId].push(item);
+            }
+          }
+          
+          // 将 OrchestrationItem 数据合并到 OrderItem 记录中
+          const mergedRecords = flatternRecords.map(record => {
+            const orderId = record.OrderId || record.Id;
+            const orchItems = orchItemsByOrderId[orderId] || [];
+            
+            return {
+              ...record,
+              OrchestrationItems: orchItems,
+              OrchestrationItemNames: orchItems.map(item => item.Name).join('; '),
+              OrchestrationExecutionLogs: orchItems.map(item => item['vlocity_cmt__ExecutionLog__c']).filter(log => log).join('; ')
+            };
+          });
+          
+          return {
+            success: true,
+            data: mergedRecords,
+          };
+        } else {
+          return {
+            success: true,
+            data: flatternRecords,
+          };
+        }
+      } else {
+        return {
+          success: true,
+          data: [],
+        };
+      }
+    } catch (error) {
+      console.error("获取 PCD PID Fallout 数据失败:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  async getPCDQCIssueData() {
+    try {
+      if (!this.connection) {
+        return {
+          success: false,
+          error: "Salesforce connection not established",
+        };
+      }
+
+      // 第一步：查询 Order 数据
+      const orderQuery = `SELECT
+          ID,
+          Name,
+          OrderNumber,
+          Order_Nature__c,
+          Custom_OrderStatus__c,
+          Custom_FulfilmentStatus__c,
+          Fulfillment_Id_List__c,
+          FulfillmentOrderId__c,
+          Service_Request_Date__c,
+          Is_Voluntary__c,
+          LastModifiedDate,
+          Last_Submitted_Date__c
+      FROM
+          Order
+      WHERE
+          Custom_FulfilmentStatus__c = 'In Progress - Fulfillment Data Issue'
+          AND Custom_OrderStatus__c NOT IN (
+              'Activated',
+              'Superseded',
+              'Amend Requested',
+              'Submitted',
+              'Ready To Submit'
+          )
+          AND Custom_OrderStatus__c != 'Cancelled'
+      ORDER BY
+          Last_Submitted_Date__c ASC`;
+      
+      const orderResult = await this.connection.query(orderQuery, { autoFetch: true, maxFetch: 99999 });
+      const orderRecords = orderResult.records || [];
+      
+      if (orderRecords.length === 0) {
+        return {
+          success: true,
+          data: [],
+        };
+      }
+      
+      console.log(`获取到 ${orderRecords.length} 条 Order 记录`);
+      
+      // 展平 Order 数据
+      const flatOrderRecords = flattenRecords(orderRecords);
+      
+      // 提取 Order ID 列表
+      const orderIds = flatOrderRecords.map(record => record.Id).filter(id => id);
+      
+      if (orderIds.length === 0) {
+        return {
+          success: true,
+          data: flatOrderRecords,
+        };
+      }
+      
+      console.log(`提取到 ${orderIds.length} 个 Order ID`);
+      
+      // 第二步：查询 OrchestrationItem 数据，分批处理
+      const BATCH_SIZE = 600;
+      let allOrchestrationItems = [];
+      
+      for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
+        const batchIds = orderIds.slice(i, i + BATCH_SIZE);
+        const escapedIds = batchIds.map(id => id.replace(/'/g, "''"));
+        
+        const orchestrationQuery = `SELECT ID, Name, vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c, vlocity_cmt__ExecutionLog__c 
+FROM vlocity_cmt__OrchestrationItem__c 
+WHERE (Name LIKE '%callout-noss%' OR Name LIKE '%callout-opg%') 
+AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedIds.join("','")}')`;
+        
+        try {
+          const orchResult = await this.connection.query(orchestrationQuery, { autoFetch: true, maxFetch: 99999 });
+          if (orchResult.records && orchResult.records.length > 0) {
+            allOrchestrationItems = allOrchestrationItems.concat(orchResult.records);
+          }
+        } catch (orchError) {
+          console.error(`查询 OrchestrationItem 批次 ${Math.floor(i / BATCH_SIZE) + 1} 失败:`, orchError);
+        }
+      }
+      
+      console.log(`获取到 ${allOrchestrationItems.length} 条 OrchestrationItem 记录`);
+      
+      // 展平 OrchestrationItem 数据并按 OrderId 分组
+      const flatOrchItems = flattenRecords(allOrchestrationItems);
+      const orchItemsByOrderId = {};
+      
+      for (const item of flatOrchItems) {
+        const orderId = item['vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c'];
+        if (orderId) {
+          if (!orchItemsByOrderId[orderId]) {
+            orchItemsByOrderId[orderId] = [];
+          }
+          orchItemsByOrderId[orderId].push(item);
+        }
+      }
+      
+      // 第三步：将 OrchestrationItem 数据合并到 Order 记录中
+      const mergedRecords = flatOrderRecords.map(record => {
+        const orderId = record.Id;
+        const orchItems = orchItemsByOrderId[orderId] || [];
+        
+        return {
+          ...record,
+          OrchestrationItems: orchItems,
+          OrchestrationItemNames: orchItems.map(item => item.Name).join('; '),
+          OrchestrationExecutionLogs: orchItems.map(item => item['vlocity_cmt__ExecutionLog__c']).filter(log => log).join('; ')
+        };
+      });
+      
+      return {
+        success: true,
+        data: mergedRecords,
+      };
+    } catch (error) {
+      console.error("获取 PCD QC Issue 数据失败:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
   /**
    * 获取所有正在运行的 Bulk Query Job
    * 使用 Bulk API 2.0 的 jobs/query 端点来查询所有任务
