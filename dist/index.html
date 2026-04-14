@@ -37,24 +37,6 @@
         
         <nav class="sidebar-nav">
             <div class="nav-section">
-                <h3 class="nav-section-title">设置</h3>
-                <ul class="nav-list">
-                    <li class="nav-item">
-                        <a href="#" class="nav-link step-link" data-step="1">
-                            <i class="fas fa-key nav-icon"></i>
-                            <span class="nav-text">连接设置</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="#" class="nav-link step-link" data-step="6">
-                            <i class="fas fa-info-circle nav-icon"></i>
-                            <span class="nav-text">版本信息</span>
-                        </a>
-                    </li>
-                </ul>
-            </div>
-
-            <div class="nav-section">
                 <h3 class="nav-section-title">模块</h3>
                 <ul class="nav-list">
                     <li class="nav-item" data-module="lts">
@@ -87,6 +69,12 @@
                             <span class="nav-text">Tools</span>
                         </a>
                     </li>
+                    <li class="nav-item" data-module="settings">
+                        <a href="#" class="nav-link step-link" data-step="6">
+                            <i class="fas fa-cog nav-icon"></i>
+                            <span class="nav-text">设置</span>
+                        </a>
+                    </li>
                 </ul>
             </div>
         </nav>
@@ -96,7 +84,7 @@
         </div>
 
         <div class="sidebar-footer">
-            <p class="sidebar-copyright">nForce Tools v2.1 © 2026</p>
+            <p class="sidebar-copyright">nForce Tools v3.0 © 2026</p>
         </div>
     </aside>
     
@@ -1233,6 +1221,46 @@
                                     <h2 id="lunch-result-name" style="color: #c41d7f; margin-bottom: 0.5rem;">-</h2>
                                     <p id="lunch-result-desc" style="color: var(--text-secondary); margin-bottom: 0;">-</p>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execute Anonymous 模块卡片 -->
+            <div id="section-18" class="ant-card ant-card-bordered step-section" style="display: none; opacity: 0.7; pointer-events: none;">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Execute Anonymous</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div style="padding: 2rem 0;">
+                        <div style="margin-bottom: 2rem; text-align: center;">
+                            <div style="width: 80px; height: 80px; background: #f0f5ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                                <i class="fas fa-code" style="font-size: 32px; color: #2f54eb;"></i>
+                            </div>
+                            <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">Execute Anonymous Apex</h3>
+                            <p style="color: var(--text-secondary);">输入 Apex 代码并在 Salesforce 环境中执行</p>
+                        </div>
+
+                        <div style="max-width: 900px; margin: 0 auto;">
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label for="apex-code-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Apex 代码</label>
+                                <textarea id="apex-code-input" class="ant-input" rows="12" placeholder="// 输入您的 Apex 代码
+System.debug('Hello World');"></textarea>
+                            </div>
+                            <div class="form-group" style="text-align: right; margin-bottom: 2rem;">
+                                <button type="button" id="execute-anonymous-btn" class="ant-btn ant-btn-primary" style="background-color: #2f54eb; border-color: #2f54eb;">
+                                    <i class="fas fa-play"></i> 执行代码
+                                </button>
+                            </div>
+
+                            <div id="anonymous-result-container" style="display: none; margin-top: 2rem;">
+                                <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                    <span class="ant-divider-inner-text">执行结果</span>
+                                </div>
+                                <div id="anonymous-result-content" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;"></div>
                             </div>
                         </div>
                     </div>

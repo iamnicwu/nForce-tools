@@ -221,9 +221,22 @@ async function autoDetectSession() {
             debugWarn('No Salesforce tabs found');
         }
         
+        // Deduplicate sessions by sid + instanceUrl combination
+        const seen = new Set();
+        const deduplicatedSessions = availableSessions.filter(session => {
+            const key = `${session.sid}::${session.instanceUrl}`;
+            if (seen.has(key)) {
+                debugLog(`  Deduplicating duplicate session: ${session.instanceUrl} (${session.userInfo?.username})`);
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+        
         debugLog('========== autoDetectSession END ==========');
-        debugLog('Total available sessions:', availableSessions.length);
-        availableSessions.forEach((s, i) => {
+        debugLog('Total sessions before deduplication:', availableSessions.length);
+        debugLog('Total sessions after deduplication:', deduplicatedSessions.length);
+        deduplicatedSessions.forEach((s, i) => {
             debugLog(`  Session ${i}:`, {
                 instanceUrl: s.instanceUrl,
                 username: s.userInfo?.username,
@@ -231,7 +244,7 @@ async function autoDetectSession() {
             });
         });
         
-        return availableSessions;
+        return deduplicatedSessions;
     } catch (error) {
         debugError('autoDetectSession FAILED:', error);
         return [];

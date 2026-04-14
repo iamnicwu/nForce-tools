@@ -1402,6 +1402,15 @@ body {
     color: inherit;
 }
 
+/* 横向菜单分隔线样式 */
+.horizontal-tab-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.25);
+    margin: 0 8px;
+    flex-shrink: 0;
+}
+
 /* 调整主内容区域和页面内容的样式 */
 .main-content {
     flex: 1;
