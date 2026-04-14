@@ -1,1 +1,1 @@
-console.log("nForce Tools Service Worker Started"),chrome.action.onClicked.addListener(e=>{chrome.tabs.create({url:chrome.runtime.getURL("index.html")})});
+console.log("nForce Tools Service Worker Started"),chrome.action.onClicked.addListener(e=>{chrome.tabs.create({url:chrome.runtime.getURL("login.html")})});
