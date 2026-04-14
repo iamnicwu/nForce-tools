@@ -11,8 +11,21 @@ export let sfConn = {
 
   async testConnection(session_id, instanceUrl) {
     try {
-      let finalInstanceUrl =
-        instanceUrl || "https://here2serve.my.salesforce.com";
+      console.log("instanceUrl", instanceUrl);
+      let finalInstanceUrl = instanceUrl;
+      
+      // 如果没有传入 instanceUrl，尝试从 localStorage 获取
+      if (!finalInstanceUrl) {
+        finalInstanceUrl = localStorage.getItem("sf_instance_url");
+      }
+      
+      // 如果仍然没有，使用默认的 here2serve 实例
+      if (!finalInstanceUrl) {
+        finalInstanceUrl = "https://here2serve.my.salesforce.com";
+        console.log("No instanceUrl provided or found in storage, using default:", finalInstanceUrl);
+      } else {
+        console.log("Using instanceUrl from session:", finalInstanceUrl);
+      }
 
       if (finalInstanceUrl === "https://here2serve.lightning.force.com") {
         finalInstanceUrl = "https://here2serve.my.salesforce.com";
@@ -26,6 +39,7 @@ export let sfConn = {
 
       // Get user identity info
       userInfo = await conn.identity();
+      console.log("abc: ", conn);
       console.log("User info:", userInfo);
       // 保存连接对象
       this.connection = conn;
@@ -1280,6 +1294,24 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
       return { success: true, jobs: jobs };
     } catch (error) {
       console.error("Get All Bulk Query Jobs Error:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 执行 Anonymous Apex 代码
+   * 使用 Tooling API 的 executeAnonymous 端点
+   */
+  async executeAnonymous(apexCode) {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+      
+      const response = await this.connection.tooling.executeAnonymous(apexCode);
+      return { success: true, result: response };
+    } catch (error) {
+      console.error("Execute Anonymous Error:", error);
       return { success: false, error: error.message };
     }
   }

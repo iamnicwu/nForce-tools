@@ -157,6 +157,33 @@
         
         <!-- 页面内容 -->
         <main class="page-content">
+            <!-- 多 Session 选择页面 -->
+            <div id="section-0" class="ant-card ant-card-bordered step-section" style="display: none;">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">选择登录环境</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div style="max-width: 700px; margin: 0 auto;">
+                        <div style="text-align: center; margin-bottom: 2rem;">
+                            <div style="width: 80px; height: 80px; background: #e6f7ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                                <i class="fas fa-users" style="font-size: 32px; color: #1890ff;"></i>
+                            </div>
+                            <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">检测到多个 Salesforce 环境</h3>
+                            <div style="color: var(--text-secondary);">
+                                <p>您在浏览器中打开了多个 Salesforce 环境，请选择要登录的环境：</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Session 列表容器 -->
+                        <div id="multi-session-list" style="margin-top: 1.5rem;">
+                            <!-- 动态生成 session 卡片 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- 显示通知消息 -->
             <div id="notification-container"></div>
             

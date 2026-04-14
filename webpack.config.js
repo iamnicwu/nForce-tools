@@ -3,7 +3,8 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: {
-    app: './src/app.js'
+    app: './src/app.js',
+    login_app: './src/login_app.js'
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -36,6 +37,10 @@ module.exports = {
         {
           from: 'src/index.html',
           to: 'index.html'
+        },
+        {
+          from: 'src/login.html',
+          to: 'login.html'
         },
         {
           from: 'src/popup.html',

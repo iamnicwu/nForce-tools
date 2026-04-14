@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nForce Tools - 登录</title>
+    <!-- 引入 jsforce 库 (本地) -->
+    <script src="lib/js/jsforce.min.js"></script>
+    <!-- 引入 Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #001529 0%, #1890ff 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 480px;
+            overflow: hidden;
+        }
+        
+        .login-header {
+            background: #001529;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .login-header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .login-header h1 i {
+            color: #1890ff;
+        }
+        
+        .login-header p {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.65);
+        }
+        
+        .login-body {
+            padding: 30px;
+        }
+        
+        .session-list {
+            margin-bottom: 20px;
+        }
+        
+        .session-card {
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .session-card:hover {
+            border-color: #1890ff;
+            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .session-card.selected {
+            border-color: #1890ff;
+            background: #e6f7ff;
+        }
+        
+        .session-env {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .session-env.sandbox {
+            background: #fff7e6;
+            color: #fa8c16;
+        }
+        
+        .session-env.production {
+            background: #fff1f0;
+            color: #cf1322;
+        }
+        
+        .session-env.unknown {
+            background: #f5f5f5;
+            color: #666;
+        }
+        
+        .session-domain {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        
+        .session-user {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .session-email {
+            color: #999;
+            font-size: 13px;
+        }
+        
+        .session-tab {
+            color: #999;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        
+        .login-btn {
+            width: 100%;
+            height: 50px;
+            background: #1890ff;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            background: #40a9ff;
+            box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
+        }
+        
+        .login-btn:disabled {
+            background: #d9d9d9;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .loading-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(24, 144, 255, 0.2);
+            border-top-color: #1890ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .no-session {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .no-session i {
+            font-size: 48px;
+            color: #d9d9d9;
+            margin-bottom: 15px;
+        }
+        
+        .no-session h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .no-session p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .manual-login-btn {
+            width: 100%;
+            height: 44px;
+            background: white;
+            border: 2px solid #1890ff;
+            border-radius: 6px;
+            color: #1890ff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .manual-login-btn:hover {
+            background: #1890ff;
+            color: white;
+        }
+        
+        .manual-login-section {
+            border-top: 1px solid #e8e8e8;
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+        
+        .manual-login-section h4 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            height: 40px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            padding: 0 12px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #1890ff;
+            box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+        }
+        
+        .error-msg {
+            color: #ff4d4f;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .error-msg.show {
+            display: block;
+        }
+        
+        .login-footer {
+            padding: 16px 30px;
+            background: #fafafa;
+            border-top: 1px solid #e8e8e8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .copyright {
+            font-size: 12px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .copyright a {
+            color: #1890ff;
+            text-decoration: none;
+        }
+        
+        .copyright a:hover {
+            text-decoration: underline;
+        }
+        
+        .version {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1><i class="fas fa-bolt"></i> nForce Tools</h1>
+            <p>检测到多个 Salesforce 环境，请选择登录</p>
+        </div>
+        
+        <div class="login-body">
+            <!-- Loading State -->
+            <div id="loading-state" class="loading-state">
+                <div class="spinner"></div>
+                <div class="loading-text">正在检测 Salesforce Session...</div>
+            </div>
+            
+            <!-- Session List -->
+            <div id="session-list-container" class="session-list" style="display: none;">
+                <!-- Dynamic session cards will be inserted here -->
+            </div>
+            
+            <!-- Login Button -->
+            <button id="login-btn" class="login-btn" disabled>
+                <i class="fas fa-sign-in-alt"></i>
+                <span>登录</span>
+            </button>
+            
+            <!-- No Session Found -->
+            <div id="no-session" class="no-session" style="display: none;">
+                <i class="fas fa-search"></i>
+                <h3>未检测到 Salesforce Session</h3>
+                <p>请确保已在浏览器中打开 Salesforce 页面并登录</p>
+                <button class="manual-login-btn" id="show-manual-login">
+                    <i class="fas fa-key"></i>
+                    手动输入 Session ID
+                </button>
+            </div>
+            
+            <!-- Manual Login Section -->
+            <div id="manual-login-section" class="manual-login-section" style="display: none;">
+                <h4><i class="fas fa-key"></i> 手动输入 Session ID</h4>
+                <div class="form-group">
+                    <label for="session-id">Session ID</label>
+                    <input type="text" id="session-id" placeholder="请输入 Salesforce Session ID">
+                </div>
+                <button id="manual-login-btn" class="login-btn" style="background: #666;">
+                    <i class="fas fa-check"></i>
+                    <span>验证并登录</span>
+                </button>
+                <div id="error-msg" class="error-msg"></div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="login-footer">
+            <div class="copyright">
+                <i class="fas fa-bolt"></i>
+                <span>nForce Tools v3.0</span>
+            </div>
+            <div class="version">© 2026</div>
+        </div>
+    </div>
+    
+    <!-- Login App Script -->
+    <script src="login_app.js"></script>
+</body>
+</html>

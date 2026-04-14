@@ -1,7 +1,9 @@
 // 全局状态管理
 export const appState = {
   session_id: localStorage.getItem("sf_session_id") || null,
+  instance_url: localStorage.getItem("sf_instance_url") || null,
   is_connected: false,
+  available_sessions: null, // 存储检测到的多个有效 session
   has_daily_data: false,
   has_pcd_daily_data: false,
   has_pcd_pid_fallout_data: false,
@@ -28,7 +30,8 @@ export const appState = {
   userInfo: {
     username: '',
     email: '',
-    fullName: ''
+    fullName: '',
+    thumbnail: ''
   },
   // 统计数据
   stats: {

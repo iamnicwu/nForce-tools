@@ -15,7 +15,6 @@ import {
   submenuConfig
 } from "./biz/ui.js";
 import { 
-  autoDetectSession, 
   fetchUserInfo,
   fetchOrgInfo,
   getReportData,
@@ -48,11 +47,80 @@ import {
   initLunch,
   handleCreateBulkJob,
   handleCheckBulkJob,
-  handleDownloadBulkResult
+  handleDownloadBulkResult,
+  executeAnonymousCode
 } from "./biz/logic.js";
 
+// 验证保存的 session 是否仍然有效
+async function validateStoredSession() {
+  if (!appState.session_id || !appState.instance_url) {
+    return false;
+  }
+  
+  try {
+    const isConnected = await sfConn.testConnection(appState.session_id, appState.instance_url);
+    return isConnected;
+  } catch (e) {
+    console.warn('Session 验证失败:', e);
+    return false;
+  }
+}
+
 // 初始化应用
-function initApp() {
+async function initApp() {
+  // 从 chrome.storage.local 读取登录状态
+  try {
+    const stored = await chrome.storage.local.get([
+      'sf_session_id',
+      'sf_instance_url',
+      'is_connected',
+      'userInfo',
+      'orgInfo'
+    ]);
+    
+    // 如果有保存的登录状态，初始化 appState
+    if (stored.sf_session_id) {
+      appState.session_id = stored.sf_session_id;
+      localStorage.setItem('sf_session_id', stored.sf_session_id);
+    }
+    if (stored.sf_instance_url) {
+      appState.instance_url = stored.sf_instance_url;
+      localStorage.setItem('sf_instance_url', stored.sf_instance_url);
+    }
+    if (stored.is_connected === true) {
+      appState.is_connected = true;
+    }
+    if (stored.userInfo) {
+      appState.userInfo = stored.userInfo;
+    }
+    if (stored.orgInfo) {
+      appState.orgInfo = stored.orgInfo;
+    }
+  } catch (e) {
+    console.warn('从 chrome.storage.local 读取登录状态失败:', e);
+  }
+
+  // 如果之前已连接，验证 session 是否仍然有效
+  if (appState.is_connected && appState.session_id && appState.instance_url) {
+    const isValid = await validateStoredSession();
+    if (!isValid) {
+      console.log('保存的 session 已过期或无效，打开登录页面...');
+      // 清除过期的 session 信息
+      appState.is_connected = false;
+      appState.session_id = null;
+      appState.instance_url = null;
+      localStorage.removeItem('sf_session_id');
+      localStorage.removeItem('sf_instance_url');
+      await chrome.storage.local.remove(['sf_session_id', 'sf_instance_url', 'is_connected', 'userInfo', 'orgInfo']);
+      
+      // 打开 login.html 页面重新登录
+      chrome.tabs.create({
+        url: chrome.runtime.getURL('login.html')
+      });
+      return; // 停止初始化，等待用户重新登录
+    }
+  }
+
   // 替换图标
   replaceIcons();
 
@@ -62,17 +130,19 @@ function initApp() {
   // 初始化横向菜单栏点击事件
   initHorizontalTabsEvents();
 
-  // 尝试自动检测Session
-  autoDetectSession();
-
   // 更新UI状态
   updateUIState();
 
-  // 显示初始section
-  if (appState.is_connected) {
-    showSection(5); // 连接成功后默认显示 LTS 概览
-  } else {
-    showSection(1); // 默认显示连接设置
+  // 显示初始section - autoDetectSession 内部已经处理了多session选择页面的显示
+  // 如果 available_sessions 存在且长度大于1，说明正在显示选择页面，不需要再次调用 showSection
+  // 如果 is_connected 为 true，说明已经自动连接成功
+  // 否则显示默认的连接设置页面
+  if (!appState.available_sessions || appState.available_sessions.length <= 1) {
+    if (appState.is_connected) {
+      showSection(5); // 连接成功后默认显示 LTS 概览
+    } else {
+      showSection(1); // 默认显示连接设置
+    }
   }
 
   // 绑定事件
@@ -120,7 +190,7 @@ function bindEvents() {
 
       try {
         // 测试Salesforce连接
-        const isConnected = await sfConn.testConnection(appState.session_id);
+        const isConnected = await sfConn.testConnection(appState.session_id, appState.instance_url);
         if (isConnected) {
           // 连接成功
           appState.is_connected = true;
@@ -131,7 +201,7 @@ function bindEvents() {
           successElement.style.display = "flex";
           errorElement.style.display = "none";
           infoElement.style.display = "none";
-
+          console.log("获取用户信息");
           // 获取用户信息
           await fetchUserInfo();
           // 获取组织信息
@@ -362,17 +432,8 @@ function bindEvents() {
     link.addEventListener("click", function (e) {
       e.preventDefault();
       const sectionNumber = parseInt(this.getAttribute("data-step"));
-      
-      // 检查是否允许访问该section
-      if (appState.is_connected) {
-        // 连接成功后，可以访问所有section
-        showSection(sectionNumber);
-      } else {
-        // 未连接时，只能访问设置section和版本信息
-        if (sectionNumber === 1 || sectionNumber === 6) {
-          showSection(sectionNumber);
-        }
-      }
+      // showSection 内部已有连接状态检查
+      showSection(sectionNumber);
     });
   });
 
@@ -954,6 +1015,12 @@ function bindEvents() {
   const downloadBulkZipBtn = document.getElementById("download-bulk-zip-btn");
   if (downloadBulkZipBtn) {
     downloadBulkZipBtn.addEventListener("click", () => handleDownloadBulkResult('zip'));
+  }
+
+  // Execute Anonymous 按钮事件
+  const executeAnonymousBtn = document.getElementById("execute-anonymous-btn");
+  if (executeAnonymousBtn) {
+    executeAnonymousBtn.addEventListener("click", executeAnonymousCode);
   }
 
   // 绑定重新初始化事件
