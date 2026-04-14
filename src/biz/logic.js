@@ -172,8 +172,11 @@ export async function fetchUserInfo() {
         appState.userInfo = {
           username: userInfo.username || userInfo.user_id || '',
           email: userInfo.email || '',
-          fullName: userInfo.display_name || userInfo.name || ''
+          fullName: userInfo.display_name || userInfo.name || '',
+          thumbnail: userInfo.photos?.thumbnail || userInfo.photos?.[0]?.thumbnail || userInfo.thumbnail || userInfo.photos?.picture || ''
         };
+
+        console.log(appState.userInfo);
         // 更新UI
         // updateUserInfo(); // updateUIState 会调用
       }
@@ -1559,5 +1562,80 @@ export async function fetchBulkJobs() {
     } catch (error) {
         console.error("获取 Bulk Jobs 出错:", error);
         showNotification("获取 Bulk Jobs 出错", "error");
+    }
+}
+
+// 执行 Anonymous Apex 代码
+export async function executeAnonymousCode() {
+    const apexCodeInput = document.getElementById("apex-code-input");
+    const resultContainer = document.getElementById("anonymous-result-container");
+    const resultContent = document.getElementById("anonymous-result-content");
+    
+    if (!apexCodeInput) {
+        showNotification("找不到 Apex 代码输入框", "error");
+        return;
+    }
+    
+    const apexCode = apexCodeInput.value.trim();
+    
+    if (!apexCode) {
+        showNotification("请输入 Apex 代码", "error");
+        return;
+    }
+    
+    // 显示 loading
+    const executeBtn = document.getElementById("execute-anonymous-btn");
+    if (executeBtn) {
+        executeBtn.disabled = true;
+        executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 执行中...';
+    }
+    
+    try {
+        const result = await sfConn.executeAnonymous(apexCode);
+        
+        if (result.success) {
+            const res = result.result;
+            console.log("Execute Anonymous 结果:", res);
+            
+            // 格式化输出结果
+            let output = "";
+            if (res.compiled === true) {
+                output += "✓ 代码编译成功\n";
+            } else {
+                output += `✗ 编译错误: ${res.line ? `第 ${res.line} 行, ${res.column} 列` : ''}\n`;
+                output += `  ${res.compileProblem || '未知编译错误'}\n`;
+            }
+            
+            if (res.success === true) {
+                output += "✓ 代码执行成功\n";
+            } else {
+                output += "✗ 执行失败\n";
+            }
+            
+            if (res.debugLog) {
+                output += "\n--- Debug Log ---\n";
+                output += res.debugLog;
+            }
+            
+            resultContent.textContent = output;
+            resultContainer.style.display = "block";
+            showNotification("代码执行完成", "success");
+        } else {
+            const errorMsg = result.error || "未知错误";
+            resultContent.textContent = `✗ 执行失败\n\n错误: ${errorMsg}`;
+            resultContainer.style.display = "block";
+            showNotification(`执行失败: ${errorMsg}`, "error");
+        }
+    } catch (error) {
+        console.error("Execute Anonymous 出错:", error);
+        resultContent.textContent = `✗ 执行出错\n\n错误: ${error.message || error}`;
+        resultContainer.style.display = "block";
+        showNotification("执行出错: " + (error.message || error), "error");
+    } finally {
+        // 恢复按钮状态
+        if (executeBtn) {
+            executeBtn.disabled = false;
+            executeBtn.innerHTML = '<i class="fas fa-play"></i> 执行代码';
+        }
     }
 }

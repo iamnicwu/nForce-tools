@@ -79,6 +79,11 @@ let t2AnalysisChartFulfillment = null;
 
 // 显示对应section
 export function showSection(sectionNumber) {
+  // 如果是连接设置 (section 1)，重定向到版本信息 (section 6)
+  if (sectionNumber === 1) {
+    sectionNumber = 6;
+  }
+  
   // 隐藏所有section
   const sections = document.querySelectorAll(".step-section");
   if (sections && sections.length > 0) {
@@ -97,8 +102,8 @@ export function showSection(sectionNumber) {
       console.error(`Section ${sectionNumber} not found`);
     }
   } else {
-    // 未连接时，只能访问设置section和版本信息
-    if (sectionNumber === 1 || sectionNumber === 6) {
+    // 未连接时，只能访问版本信息和多session选择页面
+    if (sectionNumber === 0 || sectionNumber === 6) {
       const targetSection = document.getElementById(`section-${sectionNumber}`);
       if (targetSection) {
         targetSection.style.display = "block";
@@ -212,7 +217,7 @@ export function updateUIState() {
     updateStats();
 
     // 连接成功后，启用所有功能section
-    for (let i = 2; i <= 17; i++) {
+    for (let i = 2; i <= 18; i++) {
       const section = document.getElementById(`section-${i}`);
       if (section) {
         section.style.opacity = "1";
@@ -234,7 +239,7 @@ export function updateUIState() {
     }
     
     // 未连接时，禁用所有功能section
-    for (let i = 2; i <= 17; i++) {
+    for (let i = 2; i <= 18; i++) {
       const section = document.getElementById(`section-${i}`);
       if (section) {
         section.style.opacity = "0.5";
@@ -598,19 +603,49 @@ export function updateStats() {
 
 // 更新用户信息
 export function updateUserInfo() {
-  // 更新头像颜色
+  // 更新头像
   const avatarEl = document.getElementById("user-avatar");
-  if (avatarEl && appState.orgInfo) {
-    if (appState.orgInfo.IsSandbox) {
-      avatarEl.style.backgroundColor = "#f39c12"; // 黄色 - UAT/Sandbox
-      avatarEl.title = "Sandbox Environment";
+  console.log(avatarEl);
+  console.log(appState.userInfo);
+  if (avatarEl) {
+    // 检查是否有缩略图
+    if (appState.userInfo && appState.userInfo.thumbnail) {
+      // 使用缩略图作为背景
+      avatarEl.style.backgroundImage = `url(${appState.userInfo.thumbnail})`;
+      avatarEl.style.backgroundSize = "cover";
+      avatarEl.style.backgroundPosition = "center";
+      avatarEl.style.backgroundRepeat = "no-repeat";
+      // 隐藏默认的用户图标
+      const iconEl = avatarEl.querySelector("i");
+      if (iconEl) {
+        iconEl.style.display = "none";
+      }
     } else {
-      avatarEl.style.backgroundColor = "#e74c3c"; // 红色 - Production
-      avatarEl.title = "Production Environment";
+      // 恢复默认样式
+      avatarEl.style.backgroundImage = "";
+      avatarEl.style.backgroundSize = "";
+      avatarEl.style.backgroundPosition = "";
+      avatarEl.style.backgroundRepeat = "";
+      // 显示默认的用户图标
+      const iconEl = avatarEl.querySelector("i");
+      if (iconEl) {
+        iconEl.style.display = "";
+      }
     }
-  } else if (avatarEl) {
-    avatarEl.style.backgroundColor = ""; // 默认颜色
-    avatarEl.title = "";
+    
+    // 更新头像颜色/环境标识
+    if (appState.orgInfo) {
+      if (appState.orgInfo.IsSandbox) {
+        avatarEl.style.backgroundColor = "#f39c12"; // 黄色 - UAT/Sandbox
+        avatarEl.title = "Sandbox Environment";
+      } else {
+        avatarEl.style.backgroundColor = "#e74c3c"; // 红色 - Production
+        avatarEl.title = "Production Environment";
+      }
+    } else {
+      avatarEl.style.backgroundColor = ""; // 默认颜色
+      avatarEl.title = "";
+    }
   }
 
   // 确保stats对象存在
@@ -633,7 +668,8 @@ export function updateUserInfo() {
     appState.userInfo = {
       username: '',
       email: '',
-      fullName: ''
+      fullName: '',
+      thumbnail: ''
     };
   }
   
@@ -655,11 +691,11 @@ export function updateUserInfo() {
     userEmailEl.textContent = appState.userInfo.email || "-";
   }
   
-  // 更新用户名显示
-  const userUsernameEl = document.getElementById("user-username");
-  if (userUsernameEl) {
-    userUsernameEl.textContent = appState.userInfo.username || "-";
-  }
+  // // 更新用户名显示
+  // const userUsernameEl = document.getElementById("user-username");
+  // if (userUsernameEl) {
+  //   userUsernameEl.textContent = appState.userInfo.username || "-";
+  // }
   
   // 更新Session ID显示（只显示部分字符）
   const sessionIdEl = document.getElementById("user-session-id");
@@ -2352,7 +2388,15 @@ export const submenuConfig = {
         icon: 'fas fa-tools',
         items: [
             { step: 15, text: 'Bulk 操作', icon: 'fas fa-database' },
-            { step: 14, text: '中午食乜', icon: 'fas fa-utensils' }
+            { step: 14, text: '中午食乜', icon: 'fas fa-utensils' },
+            { step: 18, text: 'Execute Anonymous', icon: 'fas fa-code' }
+        ]
+    },
+    'settings': {
+        title: '设置',
+        icon: 'fas fa-cog',
+        items: [
+            { step: 6, text: '版本信息', icon: 'fas fa-info-circle' }
         ]
     }
 };
@@ -2406,6 +2450,14 @@ export function updateHorizontalTabs(activeModule) {
     
     // 添加子菜单项
     config.items.forEach(item => {
+        // 处理分隔线
+        if (item.divider) {
+            const divider = document.createElement("div");
+            divider.className = 'horizontal-tab-divider';
+            tabsContent.appendChild(divider);
+            return;
+        }
+        
         const tabItem = document.createElement("a");
         tabItem.href = "#";
         tabItem.className = 'horizontal-tab-item';
@@ -2426,12 +2478,12 @@ export function updateHorizontalTabs(activeModule) {
 function updateHorizontalTabsFromSection(sectionNumber) {
     // 根据sectionNumber确定模块
     const sectionToModule = {
-        1: null,    // 连接设置 - 不显示横向菜单
+        1: null,    // 连接设置 - 已移除，不显示横向菜单
         2: 'lts',   // 获取当日数据
         3: 'lts',   // 获取报表数据
         4: 'lts',   // 获取文件数据
         5: 'lts',   // LTS 概览
-        6: null,    // 版本信息 - 不显示横向菜单
+        6: 'settings', // 版本信息 - 显示设置横向菜单
         7: 'ott',   // OTT
         8: 'pcd',   // PCD
         9: 'lts',   // VVIP
@@ -2442,7 +2494,8 @@ function updateHorizontalTabsFromSection(sectionNumber) {
         14: 'tools',// 中午食乜
         15: 'tools', // Bulk 操作
         16: 'pcd',  // PCD PID Fallout
-        17: 'pcd'   // PCD QC Issue
+        17: 'pcd',  // PCD QC Issue
+        18: 'tools'  // Execute Anonymous
     };
     
     const activeModule = sectionToModule[sectionNumber];
