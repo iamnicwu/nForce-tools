@@ -1617,6 +1617,12 @@ export async function executeAnonymousCode() {
                 output += res.debugLog;
             }
             
+            // 显示详细日志信息
+            if (result.logDetails && result.logDetails.log) {
+                output += "\n--- Log Details ---\n";
+                output += result.logDetails.log;
+            }
+            
             resultContent.textContent = output;
             resultContainer.style.display = "block";
             showNotification("代码执行完成", "success");
