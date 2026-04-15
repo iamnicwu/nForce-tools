@@ -1324,7 +1324,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
       if (executeResponse && executeResponse.success) {
         // 获取当前用户的最新日志
         logDetails = await this.getLatestDebugLog();
-        console.log("Debug Log Details:", logDetails);
+        console.log("Debug Log Details: ", logDetails);
       }
 
       return {
@@ -1340,58 +1340,45 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
 
   /**
    * 获取当前用户最新的 Debug Log 详情
-   * 使用 Tooling API 查询 Log 对象
+   * 先查询最新日志 ID，再调用 getDebugLogDetail 获取详细信息
    */
-  async getLatestDebugLog(limit = 5) {
+  async getLatestDebugLog(limit = 1) {
     try {
       if (!this.connection) {
         return { success: false, error: "Salesforce connection not established" };
       }
 
       // 查询当前用户最新的日志，按 LastModifiedDate 降序排列
-      const logQuery = `SELECT Id, LogUser.Id, LogUser.Name, Application, Status, Request, Operation,
-                        SystemModstamp, LastModifiedDate, LogLength
-                        FROM Log
-                        ORDER BY LastModifiedDate DESC
+      const logQuery = `SELECT Id, Application, Operation, LogLength, StartTime 
+                        FROM ApexLog 
+                        ORDER BY LastModifiedDate DESC 
                         LIMIT ${limit}`;
 
-      const encodedQuery = encodeURIComponent(logQuery);
-      const logResponse = await this.connection.request({
-        method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedQuery}`
-      });
+      const result = await this.connection.query(logQuery, { autoFetch: true, maxFetch: limit });
+      const records = result.records || [];
 
-      if (logResponse && logResponse.records && logResponse.records.length > 0) {
-        // 获取第一条日志的详细信息
-        const latestLog = logResponse.records[0];
+      if (records.length > 0) {
+        const latestLog = records[0];
         const logId = latestLog.Id;
 
-        // 获取日志的详细 DB 统计信息
-        const logDetailQuery = `SELECT Id, LogUser.Id, LogUser.Name, Application, Status, Request,
-                                Operation, SystemModstamp, LastModifiedDate, LogLength,
-                                DbTotalTime, DbExecuteTime, EmailSendTime,
-                                CPUTime, WorkflowTime, ValidationTime, SerializationTime
-                                FROM Log
-                                WHERE Id = '${logId}'`;
-
-        const encodedDetailQuery = encodeURIComponent(logDetailQuery);
-        const logDetailResponse = await this.connection.request({
-          method: 'GET',
-          url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedDetailQuery}`
-        });
-
-        if (logDetailResponse && logDetailResponse.records && logDetailResponse.records.length > 0) {
+        // 调用 getDebugLogDetail 获取详细日志信息
+        const logDetail = await this.getDebugLogDetail(logId);
+        console.log("logDetail: ", logDetail);
+        if (logDetail.success) {
           return {
             success: true,
-            log: logDetailResponse.records[0],
-            totalLogs: logResponse.records.length
+            log: logDetail.log,
+            logs: records,
+            totalLogs: records.length
           };
         }
 
+        // 如果获取详情失败，仍返回基本信息
         return {
           success: true,
           log: latestLog,
-          totalLogs: logResponse.records.length
+          logs: records,
+          totalLogs: records.length
         };
       }
 
@@ -1415,30 +1402,22 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
       if (!logId) {
         return { success: false, error: "Log ID is required" };
       }
-
-      // 使用 Tooling API 获取 Log 的详细信息
-      const logDetailQuery = `SELECT Id, LogUser.Id, LogUser.Name, Application, Status, Request,
-                              Operation, SystemModstamp, LastModifiedDate, LogLength,
-                              DbTotalTime, DbExecuteTime, EmailSendTime,
-                              CPUTime, WorkflowTime, ValidationTime, SerializationTime,
-                              Location, RequestMap, DebugLevel.Id, DebugLevel.DeveloperName
-                              FROM Log
-                              WHERE Id = '${logId}'`;
-
-      const encodedQuery = encodeURIComponent(logDetailQuery);
-      const response = await this.connection.request({
+      console.log("logId: ", logId);
+      // 使用 ApexLog 的 Body 端点获取日志内容
+      let logBody = await this.connection.request({
         method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedQuery}`
+        url: `/services/data/v${defaultApiVersion}/sobjects/ApexLog/${logId}/Body`
       });
 
-      if (response && response.records && response.records.length > 0) {
-        return {
-          success: true,
-          log: response.records[0]
-        };
+      // 格式化日志内容：将 \n 转换为实际换行符
+      if (typeof logBody === 'string') {
+        logBody = logBody.replace(/\\n/g, '\n');
       }
-
-      return { success: false, error: "Log not found" };
+      console.log("logBody: ", logBody);
+      return {
+        success: true,
+        log: logBody
+      };
     } catch (error) {
       console.error("Get Debug Log Detail Error:", error);
       return { success: false, error: error.message };
