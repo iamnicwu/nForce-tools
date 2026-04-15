@@ -104,6 +104,11 @@
                     <span id="connection-status-badge" class="ant-tag">未连接</span>
                 </div>
                 
+                <!-- 系统环境指示器 -->
+                <div class="env-indicator" id="env-indicator" style="display: none;">
+                    <span id="env-badge" class="ant-tag"></span>
+                </div>
+                
                 <!-- 用户头像和信息 -->
                 <div class="user-profile">
                     <div class="avatar-container" id="avatar-container">
@@ -128,6 +133,14 @@
                             <div class="user-info-item">
                                 <span class="label">用户名:</span>
                                 <span class="value" id="user-username">-</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span class="label">连接状态:</span>
+                                <span class="value" id="user-connection-status">未连接</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span class="label">系统环境:</span>
+                                <span class="value" id="user-system-environment">-</span>
                             </div>
                              
                         </div>
