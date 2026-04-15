@@ -716,6 +716,38 @@ export function updateUserInfo() {
     connectionStatusEl.className = `value ${appState.is_connected ? "text-success" : "text-error"}`;
   }
   
+  // 更新系统环境
+  const systemEnvironmentEl = document.getElementById("user-system-environment");
+  if (systemEnvironmentEl) {
+    if (appState.orgInfo) {
+      systemEnvironmentEl.textContent = appState.orgInfo.IsSandbox ? "Sandbox (UAT)" : "Production";
+      systemEnvironmentEl.className = `value ${appState.orgInfo.IsSandbox ? "text-warning" : "text-success"}`;
+    } else {
+      systemEnvironmentEl.textContent = "-";
+      systemEnvironmentEl.className = "value";
+    }
+  }
+
+  // 更新顶部导航栏系统环境指示器
+  const envIndicator = document.getElementById("env-indicator");
+  const envBadge = document.getElementById("env-badge");
+  if (envIndicator && envBadge) {
+    if (appState.orgInfo) {
+      envIndicator.style.display = "flex";
+      if (appState.orgInfo.IsSandbox) {
+        envBadge.textContent = "Sandbox";
+        envBadge.className = "ant-tag ant-tag-warning";
+        envBadge.title = "当前环境: Sandbox (UAT)";
+      } else {
+        envBadge.textContent = "Production";
+        envBadge.className = "ant-tag ant-tag-error";
+        envBadge.title = "当前环境: Production";
+      }
+    } else {
+      envIndicator.style.display = "none";
+    }
+  }
+  
   // 更新当前步骤
   const currentStepEl = document.getElementById("user-current-step");
   if (currentStepEl) {
