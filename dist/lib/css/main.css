@@ -385,6 +385,24 @@ body {
     gap: 1rem;
 }
 
+.env-indicator {
+    display: flex;
+    align-items: center;
+}
+
+.env-indicator .ant-tag {
+    font-weight: 600;
+    font-size: 12px;
+    padding: 2px 8px;
+}
+
+/* 自定义 Ant Design 标签颜色 */
+.ant-tag-error {
+    color: #fff !important;
+    background-color: #ff4d4f !important;
+    border-color: #ff4d4f !important;
+}
+
 .text-success {
     color: var(--success-color) !important;
 }
@@ -754,6 +772,10 @@ body {
     
     .nav-status {
         display: none; /* 移动端隐藏状态标签，节省空间 */
+    }
+
+    .env-indicator {
+        display: none; /* 移动端隐藏环境指示器，节省空间 */
     }
 
     .ant-card-body {
