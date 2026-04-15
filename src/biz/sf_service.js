@@ -1300,18 +1300,191 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
 
   /**
    * 执行 Anonymous Apex 代码
-   * 使用 Tooling API 的 executeAnonymous 端点
+   * 使用 Tooling API 的 executeAnonymous 端点通过 HTTPS callout
+   * 执行完成后自动获取当前执行的日志详情
    */
   async executeAnonymous(apexCode) {
     try {
       if (!this.connection) {
         return { success: false, error: "Salesforce connection not established" };
       }
-      
-      const response = await this.connection.tooling.executeAnonymous(apexCode);
-      return { success: true, result: response };
+
+      // 1. 执行 Execute Anonymous
+      // apex 代码需要进行 URL encoding 并作为查询参数传递
+      const encodedApexCode = encodeURIComponent(apexCode);
+      const executeResponse = await this.connection.request({
+        method: 'GET',
+        url: `/services/data/v${defaultApiVersion}/tooling/executeAnonymous/?anonymousBody=${encodedApexCode}`
+      });
+
+      console.log("Execute Anonymous Response:", executeResponse);
+
+      // 2. 如果执行成功且有 compiled bytecode 或 success 为 true，自动获取日志详情
+      let logDetails = null;
+      if (executeResponse && executeResponse.success) {
+        // 获取当前用户的最新日志
+        logDetails = await this.getLatestDebugLog();
+        console.log("Debug Log Details:", logDetails);
+      }
+
+      return {
+        success: true,
+        result: executeResponse,
+        logDetails: logDetails
+      };
     } catch (error) {
       console.error("Execute Anonymous Error:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 获取当前用户最新的 Debug Log 详情
+   * 使用 Tooling API 查询 Log 对象
+   */
+  async getLatestDebugLog(limit = 5) {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+
+      // 查询当前用户最新的日志，按 LastModifiedDate 降序排列
+      const logQuery = `SELECT Id, LogUser.Id, LogUser.Name, Application, Status, Request, Operation,
+                        SystemModstamp, LastModifiedDate, LogLength
+                        FROM Log
+                        ORDER BY LastModifiedDate DESC
+                        LIMIT ${limit}`;
+
+      const encodedQuery = encodeURIComponent(logQuery);
+      const logResponse = await this.connection.request({
+        method: 'GET',
+        url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedQuery}`
+      });
+
+      if (logResponse && logResponse.records && logResponse.records.length > 0) {
+        // 获取第一条日志的详细信息
+        const latestLog = logResponse.records[0];
+        const logId = latestLog.Id;
+
+        // 获取日志的详细 DB 统计信息
+        const logDetailQuery = `SELECT Id, LogUser.Id, LogUser.Name, Application, Status, Request,
+                                Operation, SystemModstamp, LastModifiedDate, LogLength,
+                                DbTotalTime, DbExecuteTime, EmailSendTime,
+                                CPUTime, WorkflowTime, ValidationTime, SerializationTime
+                                FROM Log
+                                WHERE Id = '${logId}'`;
+
+        const encodedDetailQuery = encodeURIComponent(logDetailQuery);
+        const logDetailResponse = await this.connection.request({
+          method: 'GET',
+          url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedDetailQuery}`
+        });
+
+        if (logDetailResponse && logDetailResponse.records && logDetailResponse.records.length > 0) {
+          return {
+            success: true,
+            log: logDetailResponse.records[0],
+            totalLogs: logResponse.records.length
+          };
+        }
+
+        return {
+          success: true,
+          log: latestLog,
+          totalLogs: logResponse.records.length
+        };
+      }
+
+      return { success: false, error: "No debug logs found" };
+    } catch (error) {
+      console.error("Get Latest Debug Log Error:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 获取指定 Log 的详细信息
+   * @param {string} logId - Log 的 Id
+   */
+  async getDebugLogDetail(logId) {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+
+      if (!logId) {
+        return { success: false, error: "Log ID is required" };
+      }
+
+      // 使用 Tooling API 获取 Log 的详细信息
+      const logDetailQuery = `SELECT Id, LogUser.Id, LogUser.Name, Application, Status, Request,
+                              Operation, SystemModstamp, LastModifiedDate, LogLength,
+                              DbTotalTime, DbExecuteTime, EmailSendTime,
+                              CPUTime, WorkflowTime, ValidationTime, SerializationTime,
+                              Location, RequestMap, DebugLevel.Id, DebugLevel.DeveloperName
+                              FROM Log
+                              WHERE Id = '${logId}'`;
+
+      const encodedQuery = encodeURIComponent(logDetailQuery);
+      const response = await this.connection.request({
+        method: 'GET',
+        url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedQuery}`
+      });
+
+      if (response && response.records && response.records.length > 0) {
+        return {
+          success: true,
+          log: response.records[0]
+        };
+      }
+
+      return { success: false, error: "Log not found" };
+    } catch (error) {
+      console.error("Get Debug Log Detail Error:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 获取指定 Log 的行日志详情 (LogEntry)
+   * @param {string} logId - Log 的 Id
+   * @param {number} limit - 返回的日志行数限制
+   */
+  async getDebugLogLines(logId, limit = 1000) {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+
+      if (!logId) {
+        return { success: false, error: "Log ID is required" };
+      }
+
+      // 查询 LogEntry 按时间排序
+      const logLinesQuery = `SELECT Id, Timestamp, Sequence, Line, TimestampOffset, ExecutableLine, 
+                              Value, StackTrace, Method, Type
+                              FROM LogEntry
+                              WHERE LogId = '${logId}'
+                              ORDER BY Sequence ASC
+                              LIMIT ${limit}`;
+
+      const encodedQuery = encodeURIComponent(logLinesQuery);
+      const response = await this.connection.request({
+        method: 'GET',
+        url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedQuery}`
+      });
+
+      if (response && response.records) {
+        return {
+          success: true,
+          logLines: response.records,
+          totalSize: response.totalSize || response.records.length
+        };
+      }
+
+      return { success: false, error: "No log lines found" };
+    } catch (error) {
+      console.error("Get Debug Log Lines Error:", error);
       return { success: false, error: error.message };
     }
   }
