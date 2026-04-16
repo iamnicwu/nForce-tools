@@ -1,11 +1,317 @@
 
-
-// Service Worker
-// 目前主要逻辑都在前端页面中处理
-// 保留此文件用于将来扩展后台任务
+// Service Worker for nForce Tools
+// 使用 Chrome Alarm API 管理定时任务
 
 console.log('nForce Tools Service Worker Started');
 
+// Storage key for task configs
+const TASK_CONFIGS_KEY = 'schedule_task_configs';
+
+// Storage key for paused tasks
+const PAUSED_TASKS_KEY = 'schedule_paused_tasks';
+
+// 获取存储的任务配置
+async function getTaskConfigs() {
+  try {
+    const result = await chrome.storage.local.get(TASK_CONFIGS_KEY);
+    return result[TASK_CONFIGS_KEY] || {};
+  } catch (error) {
+    console.error('Error getting task configs:', error);
+    return {};
+  }
+}
+
+// 保存任务配置到存储
+async function saveTaskConfigs(configs) {
+  try {
+    await chrome.storage.local.set({ [TASK_CONFIGS_KEY]: configs });
+  } catch (error) {
+    console.error('Error saving task configs:', error);
+  }
+}
+
+// 获取暂停的任务列表
+async function getPausedTasks() {
+  try {
+    const result = await chrome.storage.local.get(PAUSED_TASKS_KEY);
+    return result[PAUSED_TASKS_KEY] || {};
+  } catch (error) {
+    console.error('Error getting paused tasks:', error);
+    return {};
+  }
+}
+
+// 保存暂停的任务列表
+async function savePausedTasks(pausedTasks) {
+  try {
+    await chrome.storage.local.set({ [PAUSED_TASKS_KEY]: pausedTasks });
+  } catch (error) {
+    console.error('Error saving paused tasks:', error);
+  }
+}
+
+// 监听扩展安装
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('nForce Tools Extension Installed');
+});
+
+// 监听 alarm 触发
+chrome.alarms.onAlarm.addListener((alarm) => {
+  console.log('Alarm triggered:', alarm.name);
+  
+  // 异步获取任务配置
+  getTaskConfigs().then((configs) => {
+    const config = configs[alarm.name];
+    if (config) {
+      console.log('Task config found:', config);
+      
+      // 发送消息给前端页面
+      chrome.runtime.sendMessage({
+        type: 'ALARM_TRIGGERED',
+        alarm: alarm,
+        config: config
+      }).catch(err => {
+        console.log('No active page to send message:', err.message);
+      });
+    } else {
+      console.log('No task config found for alarm:', alarm.name);
+    }
+  });
+});
+
+// 监听来自前端的消息
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Background received message:', message.type);
+  
+  switch (message.type) {
+    case 'CREATE_ALARM':
+      handleCreateAlarm(message.data, sendResponse);
+      return true; // 异步响应
+      
+    case 'GET_ALARMS':
+      handleGetAlarms(sendResponse);
+      return true; // 异步响应
+      
+    case 'PAUSE_ALARM':
+      handlePauseAlarm(message.alarmName, sendResponse);
+      return true; // 异步响应
+      
+    case 'RESUME_ALARM':
+      handleResumeAlarm(message.alarmName, sendResponse);
+      return true; // 异步响应
+      
+    case 'DELETE_ALARM':
+      handleDeleteAlarm(message.alarmName, sendResponse);
+      return true; // 异步响应
+      
+    case 'CLEAR_ALL_ALARMS':
+      handleClearAllAlarms(sendResponse);
+      return true; // 异步响应
+      
+    default:
+      console.log('Unknown message type:', message.type);
+      return false;
+  }
+});
+
+// 创建定时任务
+async function handleCreateAlarm(data, sendResponse) {
+  try {
+    const { name, delayInMinutes, periodInMinutes, config } = data;
+    
+    // 保存任务配置到 storage
+    if (config) {
+      const configs = await getTaskConfigs();
+      configs[name] = config;
+      await saveTaskConfigs(configs);
+    }
+    
+    // 创建 alarm
+    const alarmInfo = {
+      delayInMinutes: delayInMinutes || 1
+    };
+    
+    if (periodInMinutes) {
+      alarmInfo.periodInMinutes = periodInMinutes;
+    }
+    
+    await chrome.alarms.create(name, alarmInfo);
+    
+    console.log('Alarm created:', name, alarmInfo);
+    
+    sendResponse({ success: true, alarmName: name });
+  } catch (error) {
+    console.error('Error creating alarm:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 获取所有定时任务（包括暂停的任务）
+async function handleGetAlarms(sendResponse) {
+  try {
+    const alarms = await chrome.alarms.getAll();
+    
+    // 获取存储的任务配置
+    const configs = await getTaskConfigs();
+    
+    // 获取暂停的任务列表
+    const pausedTasks = await getPausedTasks();
+    
+    // 为每个 alarm 添加配置信息和暂停状态
+    const alarmsWithConfig = alarms.map(alarm => ({
+      ...alarm,
+      config: configs[alarm.name] || null,
+      isPaused: false
+    }));
+    
+    // 添加暂停的任务（不在 active alarms 列表中的）
+    const pausedAlarmList = [];
+    for (const [name, pausedConfig] of Object.entries(pausedTasks)) {
+      // 检查是否已经在 active alarms 中
+      const exists = alarms.find(a => a.name === name);
+      if (!exists) {
+        pausedAlarmList.push({
+          name: name,
+          scheduledTime: pausedConfig.scheduledTime || 0,
+          periodInMinutes: pausedConfig.periodInMinutes || null,
+          config: pausedConfig.config || null,
+          isPaused: true
+        });
+      }
+    }
+    
+    const allAlarms = [...alarmsWithConfig, ...pausedAlarmList];
+    
+    console.log('All alarms (including paused):', allAlarms);
+    
+    sendResponse({ success: true, alarms: allAlarms });
+  } catch (error) {
+    console.error('Error getting alarms:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 暂停定时任务
+async function handlePauseAlarm(alarmName, sendResponse) {
+  try {
+    // 获取当前 alarm 信息
+    const alarm = await chrome.alarms.get(alarmName);
+    if (!alarm) {
+      sendResponse({ success: false, error: 'Alarm not found' });
+      return;
+    }
+    
+    // 获取任务配置
+    const configs = await getTaskConfigs();
+    const config = configs[alarmName];
+    
+    // 保存到暂停列表
+    const pausedTasks = await getPausedTasks();
+    pausedTasks[alarmName] = {
+      scheduledTime: alarm.scheduledTime,
+      periodInMinutes: alarm.periodInMinutes,
+      config: config,
+      pausedAt: Date.now()
+    };
+    await savePausedTasks(pausedTasks);
+    
+    // 清除 alarm
+    await chrome.alarms.clear(alarmName);
+    
+    console.log('Alarm paused:', alarmName);
+    
+    sendResponse({ success: true, alarmName: alarmName });
+  } catch (error) {
+    console.error('Error pausing alarm:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 恢复定时任务
+async function handleResumeAlarm(alarmName, sendResponse) {
+  try {
+    // 获取暂停的任务信息
+    const pausedTasks = await getPausedTasks();
+    const pausedConfig = pausedTasks[alarmName];
+    
+    if (!pausedConfig) {
+      sendResponse({ success: false, error: 'Paused task not found' });
+      return;
+    }
+    
+    // 重新创建 alarm
+    // 计算新的延迟时间：如果之前保存了 scheduledTime，可以计算剩余时间
+    let delayInMinutes = 1; // 默认延迟1分钟
+    if (pausedConfig.scheduledTime && pausedConfig.scheduledTime > Date.now()) {
+      delayInMinutes = Math.max(1, Math.ceil((pausedConfig.scheduledTime - Date.now()) / 60000));
+    }
+    
+    const alarmInfo = {
+      delayInMinutes: delayInMinutes
+    };
+    
+    if (pausedConfig.periodInMinutes) {
+      alarmInfo.periodInMinutes = pausedConfig.periodInMinutes;
+    }
+    
+    await chrome.alarms.create(alarmName, alarmInfo);
+    
+    // 从暂停列表中移除
+    delete pausedTasks[alarmName];
+    await savePausedTasks(pausedTasks);
+    
+    console.log('Alarm resumed:', alarmName, 'with delay:', delayInMinutes, 'minutes');
+    
+    sendResponse({ success: true, alarmName: alarmName, newDelay: delayInMinutes });
+  } catch (error) {
+    console.error('Error resuming alarm:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 删除指定的定时任务
+async function handleDeleteAlarm(alarmName, sendResponse) {
+  try {
+    await chrome.alarms.clear(alarmName);
+    
+    // 从存储中删除任务配置
+    const configs = await getTaskConfigs();
+    delete configs[alarmName];
+    await saveTaskConfigs(configs);
+    
+    // 从暂停列表中删除
+    const pausedTasks = await getPausedTasks();
+    delete pausedTasks[alarmName];
+    await savePausedTasks(pausedTasks);
+    
+    console.log('Alarm deleted:', alarmName);
+    
+    sendResponse({ success: true, alarmName: alarmName });
+  } catch (error) {
+    console.error('Error deleting alarm:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 清除所有定时任务
+async function handleClearAllAlarms(sendResponse) {
+  try {
+    await chrome.alarms.clearAll();
+    
+    // 清空存储的任务配置
+    await chrome.storage.local.remove(TASK_CONFIGS_KEY);
+    await chrome.storage.local.remove(PAUSED_TASKS_KEY);
+    
+    console.log('All alarms cleared');
+    
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error('Error clearing alarms:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 监听标签页点击
 chrome.action.onClicked.addListener((tab) => {
   chrome.tabs.create({
     url: chrome.runtime.getURL('login.html')

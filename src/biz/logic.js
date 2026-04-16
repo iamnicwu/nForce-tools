@@ -1645,3 +1645,310 @@ export async function executeAnonymousCode() {
         }
     }
 }
+
+// 加载定时任务列表 (使用 Chrome Alarm API)
+export async function loadScheduleJobs() {
+    const loadingEl = document.getElementById("schedule-jobs-loading");
+    const emptyEl = document.getElementById("schedule-jobs-empty");
+    const listEl = document.getElementById("schedule-jobs-list");
+    const refreshBtn = document.getElementById("refresh-schedule-jobs-btn");
+
+    try {
+        // 显示 loading
+        if (loadingEl) loadingEl.style.display = "block";
+        if (emptyEl) emptyEl.style.display = "none";
+        if (listEl) listEl.style.display = "none";
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 加载中...';
+        }
+
+        // 使用 Chrome Alarm API 获取任务列表
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ type: 'GET_ALARMS' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || "Communication error"));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+
+        if (result && result.success) {
+            const alarms = result.alarms || [];
+            console.log("Schedule Jobs (Alarms):", alarms);
+
+            if (alarms.length === 0) {
+                if (loadingEl) loadingEl.style.display = "none";
+                if (emptyEl) emptyEl.style.display = "block";
+            } else {
+                if (loadingEl) loadingEl.style.display = "none";
+                if (emptyEl) emptyEl.style.display = "none";
+                if (listEl) listEl.style.display = "block";
+
+                // 保存到 appState
+                appState.schedule_jobs = alarms;
+
+                // 直接导入并调用 ui.js 中的渲染函数
+                import('./ui.js').then((uiModule) => {
+                    if (uiModule.renderScheduleJobsData) {
+                        uiModule.renderScheduleJobsData(alarms);
+                    }
+                });
+
+                showNotification(`已加载 ${alarms.length} 个定时任务`, "success");
+            }
+        } else {
+            throw new Error(result && result.error ? result.error : "获取定时任务失败");
+        }
+    } catch (error) {
+        console.error("获取定时任务出错:", error);
+        showNotification("获取定时任务出错: " + (error.message || error), "error");
+        if (loadingEl) loadingEl.style.display = "none";
+        if (emptyEl) emptyEl.style.display = "block";
+        if (emptyEl) {
+            emptyEl.innerHTML = `<i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 1rem; color: #ff4d4f;"></i>
+                                 <p>加载失败: ${error.message || error}</p>`;
+        }
+    } finally {
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="fas fa-sync"></i> 刷新列表';
+        }
+    }
+}
+
+// 创建定时任务 (使用 Chrome Alarm API)
+export async function createScheduleJob() {
+    const nameInput = document.getElementById("schedule-job-name");
+    const delayInput = document.getElementById("schedule-job-delay");
+    const periodInput = document.getElementById("schedule-job-period");
+    const createBtn = document.getElementById("create-schedule-job-btn");
+
+    // 获取输入值
+    const name = nameInput ? nameInput.value.trim() : "";
+    const delayInMinutes = parseFloat(delayInput ? delayInput.value : "1") || 1;
+    const periodInMinutes = periodInput && periodInput.value.trim() ? parseFloat(periodInput.value) : null;
+
+    // 验证输入
+    if (!name) {
+        showNotification("请输入任务名称", "warning");
+        return;
+    }
+
+    // Chrome alarm name 只能包含字母、数字、下划线，长度限制在 64 字符以内
+    const sanitizedName = name.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 64);
+    if (sanitizedName !== name) {
+        showNotification(`任务名称已自动清理为: ${sanitizedName}`, "info");
+    }
+
+    if (delayInMinutes <= 0) {
+        showNotification("延迟时间必须大于 0", "warning");
+        return;
+    }
+
+    if (periodInMinutes !== null && periodInMinutes <= 0) {
+        showNotification("周期时间必须大于 0", "warning");
+        return;
+    }
+
+    try {
+        if (createBtn) {
+            createBtn.disabled = true;
+            createBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 创建中...';
+        }
+
+        // 使用 Promise 包装 chrome.runtime.sendMessage
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                type: 'CREATE_ALARM',
+                data: {
+                    name: sanitizedName,
+                    delayInMinutes: delayInMinutes,
+                    periodInMinutes: periodInMinutes,
+                    config: {
+                        originalName: name,
+                        createdAt: new Date().toISOString(),
+                        delay: delayInMinutes,
+                        period: periodInMinutes
+                    }
+                }
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || "Communication error"));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+
+        console.log("Create alarm result: ", result);
+
+        if (result && result.success) {
+            showNotification(`定时任务 "${sanitizedName}" 创建成功`, "success");
+            
+            // 清空输入框
+            if (nameInput) nameInput.value = "";
+            if (delayInput) delayInput.value = "1";
+            if (periodInput) periodInput.value = "";
+            
+            // 刷新列表
+            loadScheduleJobs();
+        } else {
+            throw new Error(result && result.error ? result.error : "创建定时任务失败");
+        }
+    } catch (error) {
+        console.error("创建定时任务出错:", error);
+        showNotification("创建定时任务出错: " + (error.message || error), "error");
+    } finally {
+        if (createBtn) {
+            createBtn.disabled = false;
+            createBtn.innerHTML = '<i class="fas fa-plus"></i> 创建任务';
+        }
+    }
+}
+
+// 删除指定的定时任务
+export async function deleteScheduleJob(alarmName) {
+    if (!alarmName) {
+        showNotification("任务名称无效", "warning");
+        return;
+    }
+
+    try {
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                type: 'DELETE_ALARM',
+                alarmName: alarmName
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || "Communication error"));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+
+        if (result && result.success) {
+            showNotification(`定时任务 "${alarmName}" 已删除`, "success");
+            loadScheduleJobs();
+        } else {
+            throw new Error(result && result.error ? result.error : "删除定时任务失败");
+        }
+    } catch (error) {
+        console.error("删除定时任务出错:", error);
+        showNotification("删除定时任务出错: " + (error.message || error), "error");
+    }
+}
+
+// 清除所有定时任务
+export async function clearAllScheduleJobs() {
+    try {
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                type: 'CLEAR_ALL_ALARMS'
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || "Communication error"));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+
+        if (result && result.success) {
+            showNotification("所有定时任务已清除", "success");
+            loadScheduleJobs();
+        } else {
+            throw new Error(result && result.error ? result.error : "清除定时任务失败");
+        }
+    } catch (error) {
+        console.error("清除定时任务出错:", error);
+        showNotification("清除定时任务出错: " + (error.message || error), "error");
+    }
+}
+
+// 暂停定时任务
+export async function pauseScheduleJob(alarmName) {
+    if (!alarmName) {
+        showNotification("任务名称无效", "warning");
+        return;
+    }
+
+    try {
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                type: 'PAUSE_ALARM',
+                alarmName: alarmName
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || "Communication error"));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+
+        if (result && result.success) {
+            showNotification(`定时任务 "${alarmName}" 已暂停`, "success");
+            loadScheduleJobs();
+        } else {
+            throw new Error(result && result.error ? result.error : "暂停定时任务失败");
+        }
+    } catch (error) {
+        console.error("暂停定时任务出错:", error);
+        showNotification("暂停定时任务出错: " + (error.message || error), "error");
+    }
+}
+
+// 恢复定时任务
+export async function resumeScheduleJob(alarmName) {
+    if (!alarmName) {
+        showNotification("任务名称无效", "warning");
+        return;
+    }
+
+    try {
+        const result = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                type: 'RESUME_ALARM',
+                alarmName: alarmName
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || "Communication error"));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+
+        if (result && result.success) {
+            showNotification(`定时任务 "${alarmName}" 已恢复`, "success");
+            loadScheduleJobs();
+        } else {
+            throw new Error(result && result.error ? result.error : "恢复定时任务失败");
+        }
+    } catch (error) {
+        console.error("恢复定时任务出错:", error);
+        showNotification("恢复定时任务出错: " + (error.message || error), "error");
+    }
+}
+
+// 监听来自 background 的 alarm 触发消息
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.type === 'ALARM_TRIGGERED') {
+            console.log('Alarm triggered in page:', message.alarm.name);
+            showNotification(`定时任务 "${message.alarm.name}" 已触发!`, "info");
+            
+            // 触发一个自定义事件，让页面可以处理
+            const event = new CustomEvent('scheduleJobTriggered', {
+                detail: {
+                    alarm: message.alarm,
+                    config: message.config
+                }
+            });
+            document.dispatchEvent(event);
+        }
+    });
+}

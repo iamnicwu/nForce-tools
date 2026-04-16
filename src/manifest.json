@@ -18,7 +18,8 @@
     "tabs",
     "storage",
     "activeTab",
-    "cookies"
+    "cookies",
+    "alarms"
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",
@@ -58,15 +59,12 @@
         "lib/css/*",
         "lib/js/*",
         "lib/js/dayjs.min.js",
-        "lib/js/echarts.min.js",
-        "lib/js/handsontable.full.min.js",
         "lib/js/jsforce.min.js",
         "lib/js/jszip.min.js",
         "lib/js/marked.min.js",
         "lib/js/mermaid.min.js",
         "lib/js/xlsx.full.min.js",
         "lib/css/antd.min.css",
-        "lib/css/handsontable.full.min.css",
         "lib/css/main.css",
         "icons/*",
         "README.md",
