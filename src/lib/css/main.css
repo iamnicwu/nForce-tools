@@ -1486,6 +1486,56 @@ body {
     border-right: none;
 }
 
+/* Schedule Jobs 表格样式，保证表头与数据列对齐 */
+#schedule-jobs-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+#schedule-jobs-table {
+    width: 100%;
+    min-width: 100%;
+    table-layout: fixed; /* 遵循 colgroup 固定列宽，避免内容撑开 */
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+#schedule-jobs-table thead th,
+#schedule-jobs-table tbody td {
+    padding: 12px 16px;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    line-height: 22px;
+    box-sizing: border-box; /* 确保 padding 不影响列宽对齐 */
+}
+
+#schedule-jobs-table thead th {
+    background-color: #fafafa;
+    color: var(--text-primary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#schedule-jobs-table tbody td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* 超长内容省略，避免撑破列宽 */
+}
+
+#schedule-jobs-table tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+/* 避免不同字体/行高导致的垂直对不齐 */
+#schedule-jobs-table,
+#schedule-jobs-table thead,
+#schedule-jobs-table tbody,
+#schedule-jobs-table tr,
+#schedule-jobs-table th,
+#schedule-jobs-table td {
+    font-size: 14px;
+}
+
 /* 表格操作按钮区域 */
 .table-header {
     display: flex;
