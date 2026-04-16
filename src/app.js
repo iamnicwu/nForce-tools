@@ -12,7 +12,8 @@ import {
   showBulkJobsLoading,
   updateHorizontalTabs,
   initHorizontalTabsEvents,
-  submenuConfig
+  submenuConfig,
+  renderScheduleJobsData
 } from "./biz/ui.js";
 import { 
   fetchUserInfo,
@@ -48,7 +49,13 @@ import {
   handleCreateBulkJob,
   handleCheckBulkJob,
   handleDownloadBulkResult,
-  executeAnonymousCode
+  executeAnonymousCode,
+  loadScheduleJobs,
+  createScheduleJob,
+  deleteScheduleJob,
+  pauseScheduleJob,
+  resumeScheduleJob,
+  clearAllScheduleJobs
 } from "./biz/logic.js";
 
 // 验证保存的 session 是否仍然有效
@@ -1023,6 +1030,24 @@ function bindEvents() {
     executeAnonymousBtn.addEventListener("click", executeAnonymousCode);
   }
 
+  // Schedule Jobs 刷新按钮事件
+  const refreshScheduleJobsBtn = document.getElementById("refresh-schedule-jobs-btn");
+  if (refreshScheduleJobsBtn) {
+    refreshScheduleJobsBtn.addEventListener("click", loadScheduleJobs);
+  }
+
+  // Schedule Jobs 创建按钮事件
+  const createScheduleJobBtn = document.getElementById("create-schedule-job-btn");
+  if (createScheduleJobBtn) {
+    createScheduleJobBtn.addEventListener("click", createScheduleJob);
+  }
+
+  // Schedule Jobs 清除所有按钮事件
+  const clearAllScheduleJobsBtn = document.getElementById("clear-all-schedule-jobs-btn");
+  if (clearAllScheduleJobsBtn) {
+    clearAllScheduleJobsBtn.addEventListener("click", clearAllScheduleJobs);
+  }
+
   // 绑定重新初始化事件
   const pageHeader = document.querySelector(".page-header");
   if (pageHeader) {
@@ -1082,6 +1107,11 @@ function bindEvents() {
 
 // 页面加载完成后初始化
 document.addEventListener("DOMContentLoaded", initApp);
+
+// 将 schedule job 相关函数暴露到 window 对象，供 HTML 按钮 onclick 调用
+window.deleteScheduleJob = deleteScheduleJob;
+window.pauseScheduleJob = pauseScheduleJob;
+window.resumeScheduleJob = resumeScheduleJob;
 
 // 全局错误处理：捕获未处理的Promise拒绝
 window.addEventListener('unhandledrejection', function(event) {

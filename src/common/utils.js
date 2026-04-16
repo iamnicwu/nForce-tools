@@ -146,11 +146,7 @@ export function parseMarkdown(markdown) {
         inCodeBlock = false;
       } else {
         const lang = line.trim().substring(3).trim();
-        if (lang === 'mermaid') {
-            html += '<pre class="mermaid">';
-        } else {
-            html += `<pre><code class="language-${lang}">`;
-        }
+        html += `<pre><code class="language-${lang}">`;
         inCodeBlock = true;
       }
       continue;

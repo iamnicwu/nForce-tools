@@ -157,7 +157,7 @@ function extractContext(row, log) {
   const orderNature = getValue(row, "Order Nature", "OrderNature", "OrderNature__c", "Order.Order_Nature__c");
   const createdBy = getValue(row, "Created By", "CreatedBy", "CreatedById", "Order.CreatedBy.Name");
   const apptId = getValue(row, "Appointment ID", "AppointmentId", "Appointment__c", "AppointmentId__c");
-  const lob = getValue(row, "LOB", "LOB__c", "Order.LOB__c");
+  const lob = getValue(row, "Order.LOB__c");
   const orderType = lob === "FixedLine" ? "COM(LTS)" : "COM(PCD)";
   
 
@@ -418,7 +418,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         return orderType;
       }
       else if (lob != 'Fixedline' && fulfillStatus === "Inventory Fallout"){
-        log(`[Remark Rule 3.7.7] PCD order + fulfillment status = Inventory Fallout`);
+        log(`[Remark Rule 3.7.7] PCD order + fulfillment status = Inventory Fallout + ${lob}`);
         return "BAND";
       }
 

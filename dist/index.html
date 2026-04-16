@@ -4,16 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nForce Tools</title>
-    <!-- 引入Handsontable库 (本地) -->
-    <link rel="stylesheet" href="lib/css/handsontable.full.min.css">
-    <script src="lib/js/handsontable.full.min.js"></script>
     <!-- 引入SheetJS库，用于浏览器端Excel文件处理 (本地) -->
     <script src="lib/js/xlsx.full.min.js"></script>
     <!-- 引入 jsforce 库 (本地) -->
     <script src="lib/js/jsforce.min.js"></script>
     <script src="lib/js/dayjs.min.js"></script>
-    <!-- 引入 ECharts 库 (本地) -->
-    <script src="lib/js/echarts.min.js"></script>
     <!-- 引入 JSZip 库 -->
     <script src="lib/js/jszip.min.js"></script>
     <!-- 引入 Ant Design CSS -->
@@ -1274,6 +1269,98 @@ System.debug('Hello World');"></textarea>
                                     <span class="ant-divider-inner-text">执行结果</span>
                                 </div>
                                 <div id="anonymous-result-content" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Schedule Jobs 模块卡片 -->
+            <div id="section-19" class="ant-card ant-card-bordered step-section" style="display: none; opacity: 0.7; pointer-events: none;">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Schedule Jobs</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div style="padding: 2rem 0;">
+                        <div style="margin-bottom: 2rem; text-align: center;">
+                            <div style="width: 80px; height: 80px; background: #f0f5ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                                <i class="fas fa-clock" style="font-size: 32px; color: #2f54eb;"></i>
+                            </div>
+                            <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">Chrome Alarm Jobs</h3>
+                            <p style="color: var(--text-secondary);">使用 Chrome Alarm API 创建和管理本地定时任务</p>
+                        </div>
+
+                        <div style="max-width: 1200px; margin: 0 auto;">
+                            <!-- 创建任务表单 -->
+                            <div class="ant-card ant-card-bordered" style="margin-bottom: 1.5rem;">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-wrapper">
+                                        <div class="ant-card-head-title">创建新任务</div>
+                                    </div>
+                                </div>
+                                <div class="ant-card-body">
+                                    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                                        <div class="form-group" style="flex: 1; min-width: 200px;">
+                                            <label for="schedule-job-name" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">任务名称</label>
+                                            <input type="text" id="schedule-job-name" class="ant-input" placeholder="输入任务名称" />
+                                        </div>
+                                        <div class="form-group" style="flex: 0 0 150px;">
+                                            <label for="schedule-job-delay" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">延迟(分钟)</label>
+                                            <input type="number" id="schedule-job-delay" class="ant-input" value="1" min="0" placeholder="延迟分钟数" />
+                                        </div>
+                                        <div class="form-group" style="flex: 0 0 150px;">
+                                            <label for="schedule-job-period" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">周期(分钟)</label>
+                                            <input type="number" id="schedule-job-period" class="ant-input" value="" min="0" placeholder="留空则不重复" />
+                                        </div>
+                                        <div class="form-group" style="flex: 0 0 auto;">
+                                            <button type="button" id="create-schedule-job-btn" class="ant-btn ant-btn-primary" style="background-color: #52c41a; border-color: #52c41a;">
+                                                <i class="fas fa-plus"></i> 创建任务
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 操作按钮 -->
+                            <div class="form-group" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                                <button type="button" id="refresh-schedule-jobs-btn" class="ant-btn ant-btn-primary" style="background-color: #2f54eb; border-color: #2f54eb;">
+                                    <i class="fas fa-sync"></i> 刷新列表
+                                </button>
+                                <button type="button" id="clear-all-schedule-jobs-btn" class="ant-btn ant-btn-default" style="color: #ff4d4f; border-color: #ff4d4f;">
+                                    <i class="fas fa-trash-alt"></i> 清除所有
+                                </button>
+                            </div>
+
+                            <!-- Jobs 列表容器 -->
+                            <div id="schedule-jobs-container">
+                                <div id="schedule-jobs-loading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                    <i class="fas fa-spinner fa-spin"></i> 正在加载...
+                                </div>
+                                <div id="schedule-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
+                                    <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 1rem;"></i>
+                                    <p>暂无定时任务</p>
+                                </div>
+                                <div id="schedule-jobs-list" style="display: none;">
+                                    <!-- HTML table will be rendered here -->
+                                </div>
+                            </div>
+
+                            <!-- 定时任务列表 -->
+                            <div style="margin-top: 1.5rem;">
+                                <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                    <span class="ant-divider-inner-text">定时任务列表</span>
+                                </div>
+                                <div id="schedule-running-jobs-container">
+                                    <div class="table-container" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden;">
+                                        <div id="schedule-running-jobs-list" class="data-table"></div>
+                                    </div>
+                                </div>
+                                <div id="schedule-running-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                    <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 1rem; color: var(--text-light);"></i>
+                                    <p>暂无定时任务</p>
+                                </div>
                             </div>
                         </div>
                     </div>
