@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "nForce Tools",
-  "version": "3.0",
+  "version": "3.1",
   "description": "NForce Tools：支持订单查询、报表获取、批量数据处理、智能数据分析及 Bulk API 2.0 操作，包含 Tools 工具模块（中午食乜抽签、批量操作）",
   "action": {
     "default_icon": {

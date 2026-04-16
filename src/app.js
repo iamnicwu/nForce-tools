@@ -2,6 +2,7 @@ import { sfConn } from "./biz/sf_service.js";
 import { showNotification } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
 import { appState } from "./biz/state.js";
+import { submenuConfig } from "./biz/ui_config.js";
 import {
   showSection,
   updateUIState,
@@ -12,7 +13,6 @@ import {
   showBulkJobsLoading,
   updateHorizontalTabs,
   initHorizontalTabsEvents,
-  submenuConfig,
   renderScheduleJobsData
 } from "./biz/ui.js";
 import { 
@@ -435,10 +435,13 @@ function bindEvents() {
 
   // 设置和版本信息等普通菜单项点击事件
   const stepLinks = document.querySelectorAll(".step-link");
+  console.log('[DEBUG] Found', stepLinks.length, 'step-link elements');
   stepLinks.forEach((link) => {
     link.addEventListener("click", function (e) {
       e.preventDefault();
       const sectionNumber = parseInt(this.getAttribute("data-step"));
+      const linkText = this.textContent.trim();
+      console.log(`[DEBUG] step-link clicked: data-step=${sectionNumber}, text="${linkText}"`);
       // showSection 内部已有连接状态检查
       showSection(sectionNumber);
     });

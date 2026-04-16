@@ -4,20 +4,12 @@ import { showNotification } from "../common/utils.js";
 import { processExcelFile as processExcelFileUtil, processVVIPExcelFile as processVVIPExcelFileUtil, processAnalysisExcelFile as processAnalysisExcelFileUtil, analyzeData as analyzeDataUtil, analyzeT2Data as analyzeT2DataUtil, exportToExcel, getUniqueOrderCount, readExcelFile, parseSheetData } from "../common/excel_utils.js";
 import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState } from "./ui.js";
 import {applyT2Rules} from "../common/t2rules.js"
-// 默认午餐地点
-const DEFAULT_LUNCH_PLACES = [
-  {"name": "万达兰州拉面"},
-  {"name": "京华胜记"},
-  {"name": "京华牛杂面"},
-  {"name": "荣耀国际"},
-  {"name": "负一楼"},
-  {"name": "万达木桶饭"}
-];
+import { DEFAULT_LUNCH_PLACES } from "./ui_config.js";
 
 // 初始化午餐功能
 export function initLunch() {
   if (!appState.lunch_places || appState.lunch_places.length === 0) {
-    appState.lunch_places = DEFAULT_LUNCH_PLACES;
+    appState.lunch_places = [...DEFAULT_LUNCH_PLACES];
     console.log("已加载默认午餐地点");
   }
   updateLunchUIState();
@@ -1868,7 +1860,7 @@ export async function clearAllScheduleJobs() {
     }
 }
 
-// 暂停定时任务
+// 暂停/恢复定时任务（根据当前状态自动决定操作）
 export async function pauseScheduleJob(alarmName) {
     if (!alarmName) {
         showNotification("任务名称无效", "warning");
@@ -1876,9 +1868,37 @@ export async function pauseScheduleJob(alarmName) {
     }
 
     try {
+        // 先获取任务列表，找到对应的任务来判断状态
+        const alarmsResult = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ type: 'GET_ALARMS' }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message || "Communication error"));
+                } else {
+                    resolve(response);
+                }
+            });
+        });
+
+        if (!alarmsResult || !alarmsResult.success) {
+            throw new Error("获取任务列表失败");
+        }
+
+        const alarms = alarmsResult.alarms || [];
+        const alarm = alarms.find(a => a.name === alarmName);
+
+        if (!alarm) {
+            showNotification(`定时任务 "${alarmName}" 不存在`, "warning");
+            return;
+        }
+
+        // 根据 isPaused 状态决定是暂停还是恢复
+        const isPaused = alarm.isPaused === true;
+        const actionType = isPaused ? 'RESUME_ALARM' : 'PAUSE_ALARM';
+        const actionText = isPaused ? '恢复' : '暂停';
+
         const result = await new Promise((resolve, reject) => {
             chrome.runtime.sendMessage({
-                type: 'PAUSE_ALARM',
+                type: actionType,
                 alarmName: alarmName
             }, (response) => {
                 if (chrome.runtime.lastError) {
@@ -1890,14 +1910,14 @@ export async function pauseScheduleJob(alarmName) {
         });
 
         if (result && result.success) {
-            showNotification(`定时任务 "${alarmName}" 已暂停`, "success");
+            showNotification(`定时任务 "${alarmName}" 已${actionText}`, "success");
             loadScheduleJobs();
         } else {
-            throw new Error(result && result.error ? result.error : "暂停定时任务失败");
+            throw new Error(result && result.error ? result.error : `${actionText}定时任务失败`);
         }
     } catch (error) {
-        console.error("暂停定时任务出错:", error);
-        showNotification("暂停定时任务出错: " + (error.message || error), "error");
+        console.error("操作定时任务出错:", error);
+        showNotification("操作定时任务出错: " + (error.message || error), "error");
     }
 }
 

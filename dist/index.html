@@ -13,8 +13,6 @@
     <script src="lib/js/jszip.min.js"></script>
     <!-- 引入 Ant Design CSS -->
     <link rel="stylesheet" href="lib/css/antd.min.css">
-    <!-- 引入 Mermaid (本地) -->
-    <script src="lib/js/mermaid.min.js"></script>
     <!-- 引入 Marked -->
     <script src="lib/js/marked.min.js" type="module"></script>
     <!-- 引入自定义CSS -->
@@ -1323,43 +1321,55 @@ System.debug('Hello World');"></textarea>
                                 </div>
                             </div>
 
-                            <!-- 操作按钮 -->
-                            <div class="form-group" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
-                                <button type="button" id="refresh-schedule-jobs-btn" class="ant-btn ant-btn-primary" style="background-color: #2f54eb; border-color: #2f54eb;">
-                                    <i class="fas fa-sync"></i> 刷新列表
-                                </button>
-                                <button type="button" id="clear-all-schedule-jobs-btn" class="ant-btn ant-btn-default" style="color: #ff4d4f; border-color: #ff4d4f;">
-                                    <i class="fas fa-trash-alt"></i> 清除所有
-                                </button>
-                            </div>
-
-                            <!-- Jobs 列表容器 -->
-                            <div id="schedule-jobs-container">
-                                <div id="schedule-jobs-loading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                                    <i class="fas fa-spinner fa-spin"></i> 正在加载...
-                                </div>
-                                <div id="schedule-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
-                                    <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 1rem;"></i>
-                                    <p>暂无定时任务</p>
-                                </div>
-                                <div id="schedule-jobs-list" style="display: none;">
-                                    <!-- HTML table will be rendered here -->
-                                </div>
-                            </div>
-
-                            <!-- 定时任务列表 -->
-                            <div style="margin-top: 1.5rem;">
-                                <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
-                                    <span class="ant-divider-inner-text">定时任务列表</span>
-                                </div>
-                                <div id="schedule-running-jobs-container">
-                                    <div class="table-container" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden;">
-                                        <div id="schedule-running-jobs-list" class="data-table"></div>
+                            <!-- Jobs 列表卡片 -->
+                            <div class="ant-card ant-card-bordered" style="margin-bottom: 1.5rem;">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-wrapper" style="display: flex; align-items: center; justify-content: space-between;">
+                                        <div class="ant-card-head-title">定时任务列表</div>
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button type="button" id="refresh-schedule-jobs-btn" class="ant-btn ant-btn-primary ant-btn-sm" style="background-color: #2f54eb; border-color: #2f54eb;">
+                                                <i class="fas fa-sync"></i> 刷新列表
+                                            </button>
+                                            <button type="button" id="clear-all-schedule-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm" style="color: #ff4d4f; border-color: #ff4d4f;">
+                                                <i class="fas fa-trash-alt"></i> 清除所有
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                                <div id="schedule-running-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                                    <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 1rem; color: var(--text-light);"></i>
-                                    <p>暂无定时任务</p>
+                                <div class="ant-card-body" style="padding: 0;">
+                                    <div id="schedule-jobs-container">
+                                        <div id="schedule-jobs-loading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                            <i class="fas fa-spinner fa-spin"></i> 正在加载...
+                                        </div>
+                                        <div id="schedule-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
+                                            <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 1rem;"></i>
+                                            <p>暂无定时任务</p>
+                                        </div>
+                                        <table id="schedule-jobs-table" class="schedule-jobs-table" style="display: none; width: 100%; border-collapse: collapse; table-layout: fixed;">
+                                            <colgroup>
+                                                <col style="width: 25%;">
+                                                <col style="width: 10%;">
+                                                <col style="width: 10%;">
+                                                <col style="width: 15%;">
+                                                <col style="width: 25%;">
+                                                <col style="width: 15%;">
+                                            </colgroup>
+                                            <thead>
+                                                <tr style="background: #fafafa; border-bottom: 1px solid var(--border-color);">
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">任务名称</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">类型</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">状态</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">周期(分钟)</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">下次执行</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="schedule-jobs-list">
+                                                
+                                                <!-- Jobs will be rendered here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
                         </div>

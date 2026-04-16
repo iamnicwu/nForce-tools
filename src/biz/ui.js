@@ -2,6 +2,14 @@ import { appState } from "./state.js";
 import { Icons } from "../common/icons.js";
 import { renderTable } from "../common/table_utils.js";
 import { showNotification, parseMarkdown } from "../common/utils.js";
+import { 
+    submenuConfig, 
+    sectionToModule, 
+    DEFAULT_LUNCH_PLACES,
+    DEFAULT_STATS,
+    DEFAULT_USER_INFO,
+    BULK_JOBS_DISPLAY_FIELDS
+} from "./ui_config.js";
 
 // 更新午餐 UI 状态
 export function updateLunchUIState() {
@@ -79,6 +87,8 @@ let t2AnalysisChartFulfillment = null;
 
 // 显示对应section
 export function showSection(sectionNumber) {
+  console.log(`[DEBUG] showSection called with sectionNumber=${sectionNumber}, is_connected=${appState.is_connected}`);
+  
   // 如果是连接设置 (section 1)，重定向到版本信息 (section 6)
   if (sectionNumber === 1) {
     sectionNumber = 6;
@@ -96,31 +106,53 @@ export function showSection(sectionNumber) {
   if (appState.is_connected) {
     // 连接成功后，可以访问所有功能section
     const targetSection = document.getElementById(`section-${sectionNumber}`);
+    console.log(`[DEBUG] Looking for section-${sectionNumber}, found:`, !!targetSection);
     if (targetSection) {
       targetSection.style.display = "block";
+      targetSection.style.opacity = "1";
+      targetSection.style.pointerEvents = "auto";
+      console.log(`[DEBUG] Section ${sectionNumber} display set to block, opacity=1, pointerEvents=auto`);
     } else {
-      console.error(`Section ${sectionNumber} not found`);
+      console.error(`[ERROR] Section ${sectionNumber} not found`);
     }
   } else {
     // 未连接时，只能访问版本信息和多session选择页面
+    console.log(`[DEBUG] Not connected, only allowing section 0 or 6`);
     if (sectionNumber === 0 || sectionNumber === 6) {
       const targetSection = document.getElementById(`section-${sectionNumber}`);
       if (targetSection) {
         targetSection.style.display = "block";
+        console.log(`[DEBUG] Section ${sectionNumber} (allowed when not connected) display set to block`);
       } else {
-        console.error(`Section ${sectionNumber} not found`);
+        console.error(`[ERROR] Section ${sectionNumber} not found`);
       }
+    } else {
+      console.log(`[DEBUG] Section ${sectionNumber} is NOT allowed when not connected`);
     }
   }
 
   // 如果是版本信息页面 (section 6)，加载 README
   if (sectionNumber === 6 && !appState.readme_loaded) {
+    console.log(`[DEBUG] Loading README for section 6`);
     loadReadme();
   }
 
   // 如果是 LTS 页面 (section 5)，加载 LTS Summary
   if (sectionNumber === 5 && !appState.lts_summary_loaded) {
+    console.log(`[DEBUG] Loading LTS Summary for section 5, lts_summary_loaded=${appState.lts_summary_loaded}`);
     loadLTSSummary();
+  } else if (sectionNumber === 5 && appState.lts_summary_loaded) {
+    console.log(`[DEBUG] LTS Summary already loaded, skipping`);
+  }
+
+  // 如果是 Schedule Jobs 页面 (section 19)，加载定时任务列表
+  if (sectionNumber === 19) {
+    console.log(`[DEBUG] Loading Schedule Jobs for section 19`);
+    import('./logic.js').then((logicModule) => {
+      if (logicModule.loadScheduleJobs) {
+        logicModule.loadScheduleJobs();
+      }
+    });
   }
   
   // 更新侧边栏激活链接
@@ -2000,184 +2032,415 @@ export function renderMarkdownContent(container, markdownText) {
   processMermaidDiagrams(container);
 }
 
-// 动态加载 Mermaid 库
-async function loadMermaid() {
-  if (window.mermaid) return window.mermaid;
+/**
+ * CSS/HTML 流程图渲染器 - 替代 Mermaid
+ * 支持基本的 flowchart 语法：graph TD, 节点定义, 箭头连接
+ */
+class FlowchartRenderer {
+  constructor() {
+    this.nodes = new Map(); // nodeId -> { id, label, type }
+    this.edges = []; // [{ from, to, label }]
+    this.subgraphs = []; // [{ id, label, nodes: [] }]
+    this.currentSubgraph = null;
+  }
 
-  return new Promise((resolve, reject) => {
-    console.log("正在从 CDN 加载 Mermaid 库...");
-    // 优先使用 CDN 加载, 减少插件体积
-    const cdnScript = document.createElement('script');
-    cdnScript.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js';
-    cdnScript.onload = () => {
-      console.log("Mermaid 库从 CDN 加载成功");
-      resolve(window.mermaid);
-    };
-    cdnScript.onerror = (err) => {
-      console.error("Mermaid 库从 CDN 加载失败:", err);
-      // CDN 失败时尝试本地加载作为备选
-      console.log("尝试从本地加载 Mermaid...");
-      const script = document.createElement('script');
-      script.src = 'lib/js/mermaid.min.js';
-      script.onload = () => {
-        console.log("Mermaid 库本地加载成功");
-        resolve(window.mermaid);
-      };
-      script.onerror = (e) => {
-        console.error("Mermaid 库本地加载也失败:", e);
-        reject(new Error("无法加载 Mermaid 库"));
-      };
-      document.head.appendChild(script);
-    };
-    document.head.appendChild(cdnScript);
-  });
+  // 解析 mermaid flowchart 代码
+  parse(code) {
+    this.nodes.clear();
+    this.edges = [];
+    this.subgraphs = [];
+    this.currentSubgraph = null;
+
+    const lines = code.trim().split('\n');
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line || line.startsWith('%%')) continue; // 跳过空行和注释
+
+      // 检测 graph 类型
+      if (line.match(/^(graph|flowchart)\s+(TD|LR)/)) {
+        continue;
+      }
+
+      // subgraph 开始: subgraph ID ["label"] 或 subgraph ID [label]
+      const subgraphStartMatch = line.match(/^subgraph\s+(\w+)\s*\[(.+?)\]$/);
+      if (subgraphStartMatch) {
+        this.currentSubgraph = {
+          id: subgraphStartMatch[1],
+          label: subgraphStartMatch[2],
+          nodes: []
+        };
+        this.subgraphs.push(this.currentSubgraph);
+        continue;
+      }
+
+      // subgraph 结束
+      if (line === 'end') {
+        this.currentSubgraph = null;
+        continue;
+      }
+
+      // 解析整行
+      this.parseLine(line);
+    }
+
+    return this;
+  }
+
+  // 解析一行
+  parseLine(line) {
+    // 首先提取所有节点定义
+    // 方形节点: ID["label"]
+    const squareMatches = line.matchAll(/(\w+)\[([^\]]+)\]/g);
+    for (const match of squareMatches) {
+      const [full, id, label] = match;
+      this.addNode(id, this.decodeHtmlEntities(label), 'square');
+    }
+
+    // 圆角节点: ID(label)
+    const roundMatches = line.matchAll(/(\w+)\(([^)]+)\)/g);
+    for (const match of roundMatches) {
+      const [full, id, label] = match;
+      // 跳过方形节点
+      if (!this.nodes.has(id)) {
+        this.addNode(id, this.decodeHtmlEntities(label), 'round');
+      }
+    }
+
+    // 菱形节点: ID{label}
+    const diamondMatches = line.matchAll(/(\w+)\{([^}]+)\}/g);
+    for (const match of diamondMatches) {
+      const [full, id, label] = match;
+      if (!this.nodes.has(id)) {
+        this.addNode(id, this.decodeHtmlEntities(label), 'diamond');
+      }
+    }
+
+    // 提取边定义
+    // 格式: A --> B 或 A -->|label| B
+    const edgeRegex = /(\w+)\s*(-->|--|==>)\|?([^|]*?)\|?\s*(\w+)/g;
+    let match;
+    
+    while ((match = edgeRegex.exec(line)) !== null) {
+      const [full, from, arrow, label, to] = match;
+      
+      // 如果起始节点还没定义，添加为方形节点
+      if (!this.nodes.has(from)) {
+        this.addNode(from, from, 'square');
+      }
+      
+      // 如果结束节点还没定义，添加为方形节点
+      if (!this.nodes.has(to)) {
+        this.addNode(to, to, 'square');
+      }
+      
+      // 添加边
+      this.edges.push({
+        from,
+        to,
+        label: label ? label.trim() : ''
+      });
+    }
+  }
+
+  addNode(id, label, type) {
+    if (!this.nodes.has(id)) {
+      const node = { id, label, type };
+      this.nodes.set(id, node);
+      if (this.currentSubgraph) {
+        this.currentSubgraph.nodes.push(id);
+        node.subgraphId = this.currentSubgraph.id;
+      }
+    }
+  }
+
+  decodeHtmlEntities(text) {
+    if (!text) return '';
+    return text
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/<br\s*\/?>/gi, '<br>')
+      .replace(/&nbsp;/g, ' ');
+  }
+
+  // 渲染为 HTML/CSS
+  render() {
+    if (this.nodes.size === 0) {
+      return '<div class="flowchart-error">无法解析流程图: 未发现节点</div>';
+    }
+
+    let html = `<div class="flowchart-container">`;
+
+    // 渲染 subgraph
+    for (const sg of this.subgraphs) {
+      html += `<div class="flowchart-subgraph">
+        <div class="flowchart-subgraph-title">${this.escapeHtml(sg.label)}</div>
+        <div class="flowchart-subgraph-content">`;
+      
+      for (const nodeId of sg.nodes) {
+        const node = this.nodes.get(nodeId);
+        if (node) {
+          html += this.renderNode(node);
+        }
+      }
+      
+      html += `</div></div>`;
+    }
+
+    // 渲染不在 subgraph 中的节点
+    for (const [id, node] of this.nodes) {
+      const inSubgraph = this.subgraphs.some(sg => sg.nodes.includes(id));
+      if (!inSubgraph) {
+        html += this.renderNode(node);
+      }
+    }
+
+    // 渲染边 - 使用 CSS flexbox 布局
+    html += `<div class="flowchart-flow">`;
+    for (const edge of this.edges) {
+      html += this.renderEdge(edge);
+    }
+    html += `</div>`;
+
+    html += `</div>`;
+    return html;
+  }
+
+  renderNode(node) {
+    const shapeClass = `flowchart-node-${node.type}`;
+    const label = node.label.replace(/<br\s*\/?>/gi, '<br>');
+    return `<div class="flowchart-node ${shapeClass}" data-node-id="${this.escapeHtml(node.id)}">
+      <span class="flowchart-node-label">${label}</span>
+    </div>`;
+  }
+
+  renderEdge(edge) {
+    const labelHtml = edge.label 
+      ? `<div class="flowchart-edge-label">${this.escapeHtml(edge.label)}</div>` 
+      : '';
+    const arrowHtml = `<span class="flowchart-arrow">→</span>`;
+
+    return `<div class="flowchart-edge">
+      <span class="flowchart-edge-from">${this.escapeHtml(edge.from)}</span>
+      ${arrowHtml}
+      ${labelHtml}
+      <span class="flowchart-edge-to">${this.escapeHtml(edge.to)}</span>
+    </div>`;
+  }
+
+  escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 }
 
-// 处理 Mermaid 图表
-async function processMermaidDiagrams(container) {
-  // 收集所有需要渲染的 Mermaid 节点信息
+// 添加流程图样式到页面
+function addFlowchartStyles() {
+  if (document.getElementById('flowchart-styles')) return;
+  
+  const style = document.createElement('style');
+  style.id = 'flowchart-styles';
+  style.textContent = `
+    .flowchart-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      gap: 15px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      position: relative;
+    }
+    
+    .flowchart-node {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 20px;
+      margin: 8px;
+      min-width: 120px;
+      max-width: 300px;
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.4;
+      box-sizing: border-box;
+    }
+    
+    .flowchart-node-square {
+      background: #e6f7ff;
+      border: 2px solid #1890ff;
+      border-radius: 4px;
+    }
+    
+    .flowchart-node-round {
+      background: #fff1b8;
+      border: 2px solid #faad14;
+      border-radius: 20px;
+    }
+    
+    .flowchart-node-diamond {
+      background: #f6ffed;
+      border: 2px solid #52c41a;
+      border-radius: 4px;
+    }
+    
+    .flowchart-subgraph {
+      border: 2px dashed #8c8c8c;
+      border-radius: 8px;
+      padding: 10px;
+      margin: 10px 0;
+      width: 100%;
+      max-width: 600px;
+    }
+    
+    .flowchart-subgraph-title {
+      font-weight: bold;
+      color: #5c5c5c;
+      margin-bottom: 10px;
+      padding: 5px 10px;
+      background: #f5f5f5;
+      border-radius: 4px;
+    }
+    
+    .flowchart-subgraph-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .flowchart-flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+    }
+    
+    .flowchart-edge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      background: rgba(255,255,255,0.8);
+      border-radius: 4px;
+      font-size: 12px;
+      color: #5c5c5c;
+    }
+    
+    .flowchart-edge-from,
+    .flowchart-edge-to {
+      padding: 4px 8px;
+      background: #f0f0f0;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    
+    .flowchart-edge-label {
+      padding: 2px 8px;
+      background: #fff1b8;
+      border: 1px solid #faad14;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #5c5c5c;
+    }
+    
+    .flowchart-arrow {
+      color: #5c5c5c;
+      font-weight: bold;
+    }
+    
+    .flowchart-error {
+      color: #ff4d4f;
+      padding: 16px;
+      border: 1px solid #ffccc7;
+      background-color: #fff2f0;
+      border-radius: 4px;
+    }
+    
+    .flowchart-loading {
+      color: #666;
+      padding: 20px;
+      text-align: center;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// 处理 Mermaid/流程图代码块 - 使用 CSS/HTML 渲染
+function processMermaidDiagrams(container) {
+  console.log("processMermaidDiagrams: 使用 CSS/HTML 渲染流程图");
+  
+  // 添加流程图样式
+  addFlowchartStyles();
+
+  // 收集所有需要渲染的流程图代码块
   const nodesToProcess = [];
-  console.log("processMermaidDiagrams");
+  
   // 1. 处理 marked 生成的 <pre><code class="language-mermaid">
   container.querySelectorAll('code.language-mermaid').forEach(code => {
     const pre = code.parentElement;
     if (pre.tagName === 'PRE') {
-        nodesToProcess.push({
-            element: pre,
-            code: code.textContent // 获取原始代码
-        });
+      nodesToProcess.push({
+        element: pre,
+        code: code.textContent
+      });
     }
   });
 
   // 2. 处理 parseMarkdown 生成的 <pre class="mermaid">
   container.querySelectorAll('pre.mermaid').forEach(pre => {
-      nodesToProcess.push({
-          element: pre,
-          code: pre.textContent // 获取原始代码
-      });
+    nodesToProcess.push({
+      element: pre,
+      code: pre.textContent
+    });
   });
 
   if (nodesToProcess.length === 0) return;
 
-  console.log("processMermaidDiagrams: 检查 mermaid 是否可用");
-  
-  // 确保 Mermaid 已加载
-  if (!window.mermaid) {
-    try {
-      await loadMermaid();
-    } catch (error) {
-      console.error("Mermaid 加载失败，无法渲染图表:", error);
-      nodesToProcess.forEach(({ element }) => {
-        element.innerHTML = `<div style="color: red; padding: 10px; border: 1px solid red;">无法加载流程图组件 (Mermaid)</div>`;
-      });
-      return;
-    }
-  }
+  console.log(`processMermaidDiagrams: 发现 ${nodesToProcess.length} 个流程图`);
 
-  console.log("processMermaidDiagrams: mermaid 可用", window.mermaid);
-
-  // 初始化 Mermaid (如果尚未初始化)
-  // 注意：mermaid.initialize 应该只调用一次，或者在配置变更时调用
-  // 这里我们做一个简单的检查，避免重复初始化导致的问题
-  if (!window.mermaidInitialized) {
-    try {
-      mermaid.initialize({
-        startOnLoad: false, // 手动初始化
-        theme: 'base', // 使用 base 主题以便自定义
-        themeVariables: {
-          primaryColor: '#e6f7ff',
-          primaryTextColor: '#000000',
-          primaryBorderColor: '#1890ff',
-          lineColor: '#5c5c5c',
-          secondaryColor: '#fff1b8',
-          tertiaryColor: '#fff',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-        },
-        flowchart: {
-          curve: 'basis', // 使用平滑曲线
-          padding: 20,
-          htmlLabels: true
-        },
-        securityLevel: 'loose',
-        logLevel: 'error'
-      });
-      window.mermaidInitialized = true;
-    } catch (e) {
-      console.error('Mermaid 初始化配置失败:', e);
-    }
-  }
-      
   // 逐个渲染
-  nodesToProcess.forEach(async ({ element, code }, index) => {
-    // 创建容器 div
+  nodesToProcess.forEach(({ element, code }) => {
+    // 创建容器
     const div = document.createElement('div');
-    div.className = 'mermaid';
-    // 初始状态样式
+    div.className = 'flowchart-wrapper';
     div.style.display = 'flex';
     div.style.justifyContent = 'center';
     div.style.padding = '20px';
-    div.innerHTML = '<div style="color: #666;"><i class="fas fa-spinner fa-spin"></i> 正在渲染流程图...</div>';
+    div.style.overflowX = 'auto';
+    
+    // 显示加载状态
+    div.innerHTML = '<div class="flowchart-loading"><i class="fas fa-spinner fa-spin"></i> 正在渲染流程图...</div>';
     
     // 替换原元素
     element.replaceWith(div);
 
-    const id = `mermaid-svg-${Date.now()}-${index}`;
     try {
-        // 清理代码，去除首尾空白
-        const cleanCode = code.trim();
-        
-        // 渲染
-        // 检查是否支持 mermaid.render (v10+)
-        if (typeof mermaid.render === 'function') {
-            const { svg } = await mermaid.render(id, cleanCode);
-            div.innerHTML = svg;
-        } else {
-            // 旧版本兼容 (v9-)
-            // 旧版本 render 通常是 render(id, txt, cb)
-            mermaid.render(id, cleanCode, (svg) => {
-                div.innerHTML = svg;
-            });
-        }
-        
-        // 渲染成功后移除临时样式
-        div.style.padding = '';
+      // 解析并渲染
+      const renderer = new FlowchartRenderer();
+      renderer.parse(code);
+      div.innerHTML = renderer.render();
+      div.style.padding = '';
     } catch (error) {
-        console.error(`Mermaid 图表 [${id}] 渲染错误:`, error);
-        
-        // 尝试解析错误行号
-        // Error message example: "Parse error on line 2: ..."
-        const lineMatch = error.message && error.message.match(/line\s+(\d+)/i);
-        let errorLine = -1;
-        if (lineMatch) {
-            errorLine = parseInt(lineMatch[1], 10);
-            console.log(`%c检测到错误发生在第 ${errorLine} 行`, 'color: red; font-weight: bold; font-size: 14px;');
-        }
-
-        console.group('Mermaid 出错代码详情');
-        const lines = code.split('\n');
-        lines.forEach((line, idx) => {
-            const lineNum = idx + 1;
-            const isErrorLine = lineNum === errorLine;
-            const prefix = isErrorLine ? '>> ' : '   ';
-            const style = isErrorLine ? 'color: red; font-weight: bold; background: #ffe6e6;' : 'color: gray;';
-            console.log(`%c${prefix}${lineNum.toString().padEnd(3)}| ${line}`, style);
-        });
-        console.groupEnd();
-        
-        // 显示错误信息
-        div.innerHTML = `
-            <div style="text-align: left; color: #ff4d4f; padding: 16px; border: 1px solid #ffccc7; background-color: #fff2f0; border-radius: 4px; width: 100%; overflow: auto;">
-                <div style="font-weight: bold; margin-bottom: 8px;">
-                    <i class="fas fa-exclamation-circle"></i> 流程图渲染失败
-                </div>
-                <div style="font-family: monospace; font-size: 12px; margin-bottom: 8px;">${error.message || '未知错误'}</div>
-                <details>
-                    <summary style="cursor: pointer; color: #1890ff; font-size: 12px;">查看原始代码</summary>
-                    <pre style="margin-top: 8px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">${code.replace(/</g, '<').replace(/>/g, '>')}</pre>
-                </details>
-            </div>
-        `;
-        div.style.display = 'block'; // 错误信息块级显示
+      console.error('流程图渲染错误:', error);
+      div.innerHTML = `
+        <div style="text-align: left; color: #ff4d4f; padding: 16px; border: 1px solid #ffccc7; background-color: #fff2f0; border-radius: 4px; width: 100%; overflow: auto;">
+          <div style="font-weight: bold; margin-bottom: 8px;">
+            <i class="fas fa-exclamation-circle"></i> 流程图渲染失败
+          </div>
+          <div style="font-family: monospace; font-size: 12px; margin-bottom: 8px;">${error.message || '未知错误'}</div>
+          <details>
+            <summary style="cursor: pointer; color: #1890ff; font-size: 12px;">查看原始代码</summary>
+            <pre style="margin-top: 8px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+          </details>
+        </div>
+      `;
+      div.style.padding = '';
     }
   });
 }
@@ -2204,20 +2467,29 @@ async function loadReadme() {
 
 // 加载 LTS Fallout Summary
 async function loadLTSSummary() {
+  console.log('[DEBUG] loadLTSSummary called');
   const container = document.getElementById('lts-summary-content');
-  if (!container) return;
+  if (!container) {
+    console.error('[DEBUG] lts-summary-content container not found');
+    return;
+  }
 
   try {
+    console.log('[DEBUG] Fetching docs/LTS_Fallout_Summary.md');
     const response = await fetch('docs/LTS_Fallout_Summary.md');
+    console.log('[DEBUG] fetch response ok:', response.ok, 'status:', response.status);
     if (response.ok) {
       const text = await response.text();
+      console.log('[DEBUG] Fetched text length:', text.length);
       renderMarkdownContent(container, text);
       appState.lts_summary_loaded = true;
+      console.log('[DEBUG] LTS Summary loaded successfully, lts_summary_loaded set to true');
     } else {
+      console.error('[DEBUG] Failed to fetch LTS Summary, status:', response.status);
       container.innerHTML = '<p style="color: var(--error-color);">加载 LTS Fallout Summary 失败</p>';
     }
   } catch (error) {
-    console.error('加载 LTS Fallout Summary 失败:', error);
+    console.error('[DEBUG] Exception loading LTS Fallout Summary:', error);
     container.innerHTML = '<p style="color: var(--error-color);">加载 LTS Fallout Summary 出错</p>';
   }
 }
@@ -2376,63 +2648,6 @@ export function showBulkJobsLoading() {
     if (emptyEl) emptyEl.style.display = "none";
 }
 
-// 子菜单配置
-export const submenuConfig = {
-    'lts': {
-        title: 'LTS',
-        icon: 'fas fa-cubes',
-        items: [
-            { step: 5, text: '概览', icon: 'fas fa-home' },
-            { step: 2, text: '获取当日数据', icon: 'fas fa-calendar-day' },
-            { step: 3, text: '获取报表数据', icon: 'fas fa-chart-bar' },
-            { step: 4, text: '获取文件数据', icon: 'fas fa-file-upload' },
-            { step: 10, text: '数据分析', icon: 'fas fa-chart-pie' },
-            { step: 9, text: 'VVIP', icon: 'fas fa-star' },
-            { step: 12, text: 'T-4 Outstanding', icon: 'fas fa-file-alt' },
-            { step: 13, text: 'T-4 Outstanding分析', icon: 'fas fa-chart-line' }
-        ]
-    },
-    'ott': {
-        title: 'OTT',
-        icon: 'fas fa-tv',
-        items: [
-            { step: 7, text: 'OTT', icon: 'fas fa-tv' }
-        ]
-    },
-    'pcd': {
-        title: 'PCD',
-        icon: 'fas fa-laptop-code',
-        items: [
-            { step: 8, text: 'PCD', icon: 'fas fa-laptop-code' },
-            { step: 16, text: 'Data issue - PID fallout', icon: 'fas fa-exclamation-triangle' },
-            { step: 17, text: 'Data issue - QC issue', icon: 'fas fa-search' }
-        ]
-    },
-    'cvp7': {
-        title: 'CVP7',
-        icon: 'fas fa-network-wired',
-        items: [
-            { step: 11, text: 'CVP7', icon: 'fas fa-network-wired' }
-        ]
-    },
-    'tools': {
-        title: 'Tools',
-        icon: 'fas fa-tools',
-        items: [
-            { step: 15, text: 'Bulk 操作', icon: 'fas fa-database' },
-            { step: 14, text: '中午食乜', icon: 'fas fa-utensils' },
-            { step: 18, text: 'Execute Anonymous', icon: 'fas fa-code' }
-        ]
-    },
-    'settings': {
-        title: '设置',
-        icon: 'fas fa-cog',
-        items: [
-            { step: 6, text: '版本信息', icon: 'fas fa-info-circle' }
-        ]
-    }
-};
-
 // 更新横向菜单栏
 export function updateHorizontalTabs(activeModule) {
     const tabsContainer = document.getElementById("horizontal-tabs");
@@ -2445,18 +2660,10 @@ export function updateHorizontalTabs(activeModule) {
         const visibleSection = document.querySelector('.step-section[style*="display: block"]');
         if (visibleSection) {
             const sectionId = visibleSection.id;
-            // 根据sectionId判断当前模块
-            const sectionToModule = {
-                'section-5': 'lts', 'section-2': 'lts', 'section-3': 'lts',
-                'section-4': 'lts', 'section-10': 'lts', 'section-9': 'lts',
-                'section-12': 'lts', 'section-13': 'lts',
-                'section-7': 'ott',
-                'section-8': 'pcd',
-                'section-11': 'cvp7',
-                'section-15': 'tools',
-                'section-14': 'tools'
-            };
-            activeModule = sectionToModule[sectionId];
+            // 从 sectionId (如 'section-5') 中提取数字部分
+            const sectionNumber = parseInt(sectionId.replace('section-', ''), 10);
+            // 使用导入的 sectionToModule 映射
+            activeModule = sectionToModule[sectionNumber];
         }
     }
     
@@ -2508,28 +2715,7 @@ export function updateHorizontalTabs(activeModule) {
 
 // 根据section number更新横向菜单栏
 function updateHorizontalTabsFromSection(sectionNumber) {
-    // 根据sectionNumber确定模块
-    const sectionToModule = {
-        1: null,    // 连接设置 - 已移除，不显示横向菜单
-        2: 'lts',   // 获取当日数据
-        3: 'lts',   // 获取报表数据
-        4: 'lts',   // 获取文件数据
-        5: 'lts',   // LTS 概览
-        6: 'settings', // 版本信息 - 显示设置横向菜单
-        7: 'ott',   // OTT
-        8: 'pcd',   // PCD
-        9: 'lts',   // VVIP
-        10: 'lts',  // 数据分析
-        11: 'cvp7', // CVP7
-        12: 'lts',  // T-4 Outstanding
-        13: 'lts',  // T-4 Outstanding分析
-        14: 'tools',// 中午食乜
-        15: 'tools', // Bulk 操作
-        16: 'pcd',  // PCD PID Fallout
-        17: 'pcd',  // PCD QC Issue
-        18: 'tools'  // Execute Anonymous
-    };
-    
+    // 使用导入的 sectionToModule 映射
     const activeModule = sectionToModule[sectionNumber];
     updateHorizontalTabs(activeModule);
 }
@@ -2547,5 +2733,135 @@ export function initHorizontalTabsEvents() {
                 showSection(step);
             }
         }
+    });
+}
+
+// 渲染 Schedule Jobs 列表
+export function renderScheduleJobsData(alarms) {
+    const listEl = document.getElementById("schedule-jobs-list");
+    const tableEl = document.getElementById("schedule-jobs-table");
+    const emptyEl = document.getElementById("schedule-jobs-empty");
+    if (!listEl) return;
+    
+    // 清空列表
+    listEl.innerHTML = "";
+    
+    if (!alarms || alarms.length === 0) {
+        if (tableEl) tableEl.style.display = "none";
+        if (emptyEl) emptyEl.style.display = "block";
+        return;
+    }
+    
+    if (emptyEl) emptyEl.style.display = "none";
+    if (tableEl) tableEl.style.display = "table";
+    
+    alarms.forEach((alarm) => {
+        const tr = document.createElement("tr");
+        tr.style.cssText = "border-bottom: 1px solid var(--border-color); transition: background 0.2s;";
+        tr.onmouseenter = () => tr.style.background = "#f5f5f5";
+        tr.onmouseleave = () => tr.style.background = "#fff";
+
+        // 统一创建居中单元格
+        const makeTd = (html) => {
+            const td = document.createElement('td');
+            td.style.cssText = 'padding: 12px 16px; text-align: center; vertical-align: middle; box-sizing: border-box;';
+            td.innerHTML = html;
+            return td;
+        };
+        
+        // 格式化下次触发时间
+        let nextRunText = "N/A";
+        if (alarm.scheduledTime) {
+            const date = new Date(alarm.scheduledTime);
+            nextRunText = date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+        
+        // 判断是否为周期任务
+        const isPeriodic = alarm.periodInMinutes && alarm.periodInMinutes > 0;
+        const isPaused = alarm.isPaused === true;
+
+        // 名称
+        const nameTd = makeTd(`
+            <span style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
+                <i class="fas fa-clock" style="color: #2f54eb;"></i>
+                <span style="font-weight: 500; color: #262626;">${alarm.name || 'Unnamed Job'}</span>
+            </span>
+        `);
+
+        // 类型
+        const typeTd = makeTd(
+            isPeriodic
+                ? '<span style="background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">周期</span>'
+                : '<span style="background: #f5f5f5; color: #8c8c8c; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">一次性</span>'
+        );
+
+        // 状态
+        const statusTd = makeTd(
+            isPaused
+                ? '<span style="background: #fff1f0; color: #ff4d4f; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">已暂停</span>'
+                : '<span style="background: #f6ffed; color: #52c41a; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">运行中</span>'
+        );
+
+        // 周期
+        const periodTd = makeTd(`${isPeriodic ? (alarm.periodInMinutes + ' 分钟') : '-'}`);
+        periodTd.style.color = '#8c8c8c';
+
+        // 下次执行
+        const nextTd = makeTd(`
+            <span style="display:inline-flex; align-items:center; justify-content:center; gap:6px; color:#8c8c8c;">
+                <i class="fas fa-calendar-alt"></i>${nextRunText}
+            </span>
+        `);
+
+        // 操作
+        const actionTd = document.createElement('td');
+        actionTd.style.cssText = 'padding: 12px 16px; text-align: center; vertical-align: middle;';
+        const actionWrap = document.createElement('div');
+        actionWrap.style.cssText = 'display:inline-flex; align-items:center; justify-content:center; gap:6px;';
+
+        const pauseBtn = document.createElement('button');
+        pauseBtn.className = 'ant-btn ant-btn-sm';
+        pauseBtn.title = '暂停/恢复';
+        pauseBtn.innerHTML = `<i class="fas ${isPaused ? 'fa-play' : 'fa-pause'}"></i> ${isPaused ? '恢复' : '暂停'}`;
+        pauseBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (window && typeof window.pauseScheduleJob === 'function') {
+                window.pauseScheduleJob(alarm.name);
+            }
+        });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'ant-btn ant-btn-sm ant-btn-dangerous';
+        deleteBtn.title = '删除';
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i> 删除';
+        deleteBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const confirmed = window.confirm(`确认删除定时任务 "${alarm.name}" 吗？`);
+            if (!confirmed) return;
+            if (window && typeof window.deleteScheduleJob === 'function') {
+                window.deleteScheduleJob(alarm.name);
+            }
+        });
+
+        actionWrap.appendChild(pauseBtn);
+        actionWrap.appendChild(deleteBtn);
+        actionTd.appendChild(actionWrap);
+
+        // 拼装行
+        tr.appendChild(nameTd);
+        tr.appendChild(typeTd);
+        tr.appendChild(statusTd);
+        tr.appendChild(periodTd);
+        tr.appendChild(nextTd);
+        tr.appendChild(actionTd);
+
+        listEl.appendChild(tr);
     });
 }

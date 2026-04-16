@@ -6,7 +6,12 @@
 
 ## 功能特性
 
-- **Salesforce连接管理**
+### 核心功能
+- **LTS Fallout 案例总结**：新增 LTS 订单 Fallout 案例总结功能，提供详细的业务流程图和案例汇总表，帮助用户快速理解和处理 LTS 订单异常场景。
+- **Schedule Jobs 管理**：支持查看、创建、暂停、恢复和清除定时任务，方便自动化工作流程。
+- **Debug Log 查看器**：内置 Apex Debug Log 查看器，方便开发者调试和诊断 Salesforce 代码问题。
+
+### Salesforce连接管理
   - 支持手动输入Session ID连接
   - 支持自动检测当前浏览器中已登录的Salesforce Session
   - 智能识别Production和Sandbox环境
@@ -129,6 +134,10 @@ nForce-tools/
 3. 批量查询时，建议单次处理的数据量不要过大，以免触发Salesforce API限制。
 
 ## 更新日志
+
+### v3.1 (2026-04-17)
+- 新增 Schedule Jobs 管理功能
+- 新增 Debug Log 查看器功能
 
 ### v3.0 (2026-04-14)
 - 大版本更新，重构插件架构
