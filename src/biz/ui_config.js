@@ -47,13 +47,19 @@ export const submenuConfig = {
         icon: 'fas fa-tools',
         items: [
             { step: 15, text: 'Bulk 操作', icon: 'fas fa-database' },
-            { step: 14, text: '中午食乜', icon: 'fas fa-utensils' },
             { step: 19, text: 'Schedule Jobs', icon: 'fas fa-clock' },
             { step: 18, text: 'Execute Anonymous', icon: 'fas fa-code' }
         ]
     },
+    'misc': {
+        title: 'Misc',
+        icon: 'fas fa-ellipsis-h',
+        items: [
+            { step: 14, text: '中午食乜', icon: 'fas fa-utensils' }
+        ]
+    },
     'settings': {
-        title: '设置',
+        title: 'Setup',
         icon: 'fas fa-cog',
         items: [
             { step: 6, text: '版本信息', icon: 'fas fa-info-circle' }
@@ -76,7 +82,7 @@ export const sectionToModule = {
     11: 'cvp7', // CVP7
     12: 'lts',  // T-4 Outstanding
     13: 'lts',  // T-4 Outstanding分析
-    14: 'tools',// 中午食乜
+    14: 'misc',  // 中午食乜
     15: 'tools', // Bulk 操作
     16: 'pcd',  // PCD PID Fallout
     17: 'pcd',  // PCD QC Issue
