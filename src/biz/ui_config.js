@@ -59,7 +59,7 @@ export const submenuConfig = {
         ]
     },
     'settings': {
-        title: 'Setup',
+        title: 'Settings',
         icon: 'fas fa-cog',
         items: [
             { step: 6, text: '版本信息', icon: 'fas fa-info-circle' }

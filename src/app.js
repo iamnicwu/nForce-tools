@@ -448,13 +448,19 @@ function bindEvents() {
   });
 
   // 主菜单点击事件 - 点击侧边栏主菜单时更新横向菜单栏
-  const navItems = document.querySelectorAll(".sidebar > .sidebar-nav > .nav-section > .nav-list > .nav-item[data-module]");
+  // 使用更宽松的选择器，确保所有带 data-module 的 nav-item 都能被选中
+  const navItems = document.querySelectorAll(".nav-item[data-module]");
+  console.log('[DEBUG] Found', navItems.length, 'nav-items with data-module');
   navItems.forEach((item) => {
     item.addEventListener("click", function (e) {
       const module = this.getAttribute("data-module");
+      console.log(`[DEBUG] nav-item clicked, module="${module}"`);
       if (module && submenuConfig[module]) {
         // 更新横向菜单栏
+        console.log(`[DEBUG] Calling updateHorizontalTabs("${module}")`);
         updateHorizontalTabs(module);
+      } else {
+        console.log(`[DEBUG] module "${module}" not in submenuConfig or is null`);
       }
     });
   });
