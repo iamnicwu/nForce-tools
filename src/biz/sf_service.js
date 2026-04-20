@@ -164,7 +164,7 @@ export let sfConn = {
       // AND order.Order_Nature__c includes ('New installation','External Relocation', 'Internal Relocation')
       
       // 优化：直接获取查询结果，避免流式回调带来的额外开销
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
+      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 999999 });
       const records = result.records || [];
       
       if (records.length > 0) {
@@ -257,7 +257,7 @@ export let sfConn = {
               'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
       
       // 优化：直接获取查询结果，避免流式回调带来的额外开销
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 9999 });
+      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
       const records = result.records || [];
       
       if (records.length > 0) {
@@ -364,7 +364,7 @@ export let sfConn = {
           ${dateCondition}`;
       
       // 优化：直接获取查询结果，避免流式回调带来的额外开销
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 9999 });
+      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
       const records = result.records || [];
       
       if (records.length > 0) {
@@ -633,7 +633,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
     }
   },
 
-  async getPCDDailyData(startDate = null, endDate = null) {
+  async getPCDDailyData(customQuery = null) {
     try {
       if (!this.connection) {
         return {
@@ -642,47 +642,44 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         };
       }
 
-      let records = [];
-      let PCDExpiry = [];
-      let LTSExpiry = [];
-      
-      let ltsRecords = await this.getLTSExpiryData();
-      console.log(
-        "获取LTS数据开始", ltsRecords.length
-      );
-      if (ltsRecords.success) {
-        LTSExpiry = ltsRecords.data;
-        console.log(
-          "获取LTS数据成功，总计:",
-          LTSExpiry.length,
-          "条记录"
-        );
+      let dailyQuery = '';
+
+      // 如果提供了自定义 SOQL 查询，则使用它；否则使用默认查询
+      if (customQuery && customQuery.trim()) {
+        console.log("使用自定义 SOQL 查询:", customQuery);
+        dailyQuery = customQuery;
       } else {
-        console.error("获取LTS数据失败:", ltsRecords.error);
+        dailyQuery = `SELECT order.Name,
+          order.OrderNumber,
+          order.Order_Nature__c,
+          order.Service_Request_Date__c,
+          order.Attention__c,
+          FulfillmentRemark__c,
+          order.id,
+          order.Custom_OrderStatus__c,
+          order.Custom_FulfilmentStatus__c,
+          FulfillmentId__c,
+          AppointmentId__c,
+          vlocity_cmt__FulfilmentStatus__c,
+          BRM_Request_Id__c,
+          LOB__c,
+          order.Is_Voluntary__c,
+          order.Self_Return__c
+      FROM OrderItem
+      WHERE
+          (MainProduct__c = TRUE OR Product2.vlocity_cmt__SubType__c = 'NowTV Standalone Starter Offer') AND
+          LOB__c !='' AND
+          order.Attention__c = '' AND
+          order.Service_Request_Date__c <= TODAY AND
+          order.Service_Request_Date__c > 2026-01-01 AND
+          order.Custom_OrderStatus__c NOT IN (
+              'Ready To Submit', 'Superseded', 'Activated',
+              'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
       }
 
-      let pcdRecords = await this.getPCDExpiryData();
-      console.log(
-        "获取PCD数据开始", pcdRecords.length
-      );
-      if (pcdRecords.success) {
-        PCDExpiry = pcdRecords.data;
-        console.log(
-          "获取PCD数据成功，总计:",
-          PCDExpiry.length,
-          "条记录"
-        );
-      } else {
-        console.error("获取PCD数据失败:", pcdRecords.error);
-      }
+      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
+      const records = result.records || [];
       
-      records = [...PCDExpiry, ...LTSExpiry];
-      console.log(
-        "获取数据成功，总计:",
-        records.length,
-        "条记录"
-      );
-
       if (records.length > 0) {
         // 预处理数据，展平嵌套结构
         const processedRecords = flattenRecords(records);
@@ -785,82 +782,6 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
       };
     } catch (error) {
       console.error("获取VVIP数据失败:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  async getLTSExpiryData() {
-    try {
-      if (!this.connection) {
-        return {
-          success: false,
-          error: "Salesforce connection not established",
-        };
-      }
-
-      let dailyQuery = `SELECT
-    order.Name,
-    order.OrderNumber,
-    order.Order_Nature__c,
-    order.Service_Request_Date__c,
-    order.Salesman_Staff_ID__c,
-    order.Original_Salesman__r.Name,
-    order.Channel_Name__c,
-    order.LOB__c,
-    FulfillmentId__c,
-    AppointmentId__c,
-    order.Attention__c,
-    FulfillmentRemark__c,
-    order.Custom_OrderStatus__c,
-    order.Custom_FulfilmentStatus__c,
-    FulfillmentDetail__c,
-    order.Is_Voluntary__c,
-    vlocity_cmt__FulfilmentStatus__c,
-    Brm_Feedback_Code__c,
-    BRM_Feedback_Error_Log__c,
-    BRM_Request_Id__c,
-    order.CreatedBy.name,
-    OSS_Service_Number__c,
-    order.ServiceNumber__c,
-    order.Self_Return__c,
-    order.PreInstallation__c,
-    order.KeepExistAddrSubscriptionLOB__c
-FROM
-    OrderItem
-WHERE
-    order.RecordType.name = 'Consumer Fixed'
-    AND order.LOB__c = 'Fixedline'
-    AND MainProduct__c = true
-    AND (
-        order.Custom_FulfilmentStatus__c IN (
-            'Address Under Review',
-            'Address Approval',
-            'Address Rejected',
-            'Number Investigation',
-            'DN Inventory Ready',
-            'Waiting for Inventory'
-        )
-        OR order.Custom_OrderStatus__c IN ('In Progress-Fulfilment Completed', 'In Progress')
-    )
-    AND order.Service_Request_Date__c >= 2025-07-01 AND 
-order.Service_Request_Date__c < TODAY`;
-      
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 9999 });
-      const records = result.records || [];
-      
-      if (records.length > 0) {
-        return {
-          success: true,
-          data: records,
-        };
-      } else {
-        return {
-            success: true,
-            data: [],
-        };
-      }
-    } catch (error) {
-      console.error("获取 LTS expiry 当日数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -971,40 +892,28 @@ order.Service_Request_Date__c < TODAY`;
           order.OrderNumber,
           order.Order_Nature__c,
           order.Service_Request_Date__c,
-          order.Salesman_Staff_ID__c,
-          order.Original_Salesman__r.Name,
-          order.Channel_Name__c,
-          order.LOB__c,
-          FulfillmentId__c,
-          AppointmentId__c,
           order.Attention__c,
           FulfillmentRemark__c,
+          order.id,
           order.Custom_OrderStatus__c,
           order.Custom_FulfilmentStatus__c,
-          FulfillmentDetail__c,
-          order.Is_Voluntary__c,
+          FulfillmentId__c,
+          AppointmentId__c,
           vlocity_cmt__FulfilmentStatus__c,
-          Brm_Feedback_Code__c,
-          BRM_Feedback_Error_Log__c,
           BRM_Request_Id__c,
-          order.CreatedBy.name,
-          OSS_Service_Number__c,
-          order.ServiceNumber__c,
-          order.Self_Return__c,
-          order.PreInstallation__c,
-          order.KeepExistAddrSubscriptionLOB__c
+          LOB__c
       FROM OrderItem
       WHERE
-          order.RecordType.name = 'Consumer Fixed' AND
-          MainProduct__c = true AND
-          LOB__c in ('Broadband','NowTV') AND
-          order.Channel_Owner__c = 'BU_MOB' AND
+          (MainProduct__c = TRUE OR Product2.vlocity_cmt__SubType__c = 'NowTV Standalone Starter Offer') AND
+          LOB__c !='' AND
+          order.Service_Request_Date__c <= TODAY AND
+          order.Service_Request_Date__c > 2026-01-01 AND
           order.Custom_OrderStatus__c NOT IN (
-              'Ready To Submit', 'Superseded', 'Activated', 'Cancelled', 'Discarded') AND
-          order.Service_Request_Date__c >= 2025-10-01 AND 
-order.Service_Request_Date__c < TODAY`;
+              'Ready To Submit', 'Superseded', 'Activated',
+              'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
       
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 9999 });
+              console.log("dailyQuery: ", dailyQuery);
+      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
       const records = result.records || [];
       
       if (records.length > 0) {
@@ -1059,7 +968,7 @@ OrderId  IN (SELECT ID FROM Order WHERE
     FulfillmentSystemId__c != 'WFM' AND 
     Order.Custom_OrderStatus__c != 'Cancelled'`;
       
-      const result = await this.connection.query(pidFalloutQuery, { autoFetch: true, maxFetch: 99999 });
+      const result = await this.connection.query(pidFalloutQuery, { autoFetch: true, maxFetch: 999999 });
       const records = result.records || [];
       
       if (records.length > 0) {
@@ -1086,7 +995,7 @@ WHERE (Name LIKE '%callout-noss%' OR Name LIKE '%callout-opg%')
 AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedIds.join("','")}')`;
             
             try {
-              const orchResult = await this.connection.query(orchestrationQuery, { autoFetch: true, maxFetch: 99999 });
+              const orchResult = await this.connection.query(orchestrationQuery, { autoFetch: true, maxFetch: 999999 });
               if (orchResult.records && orchResult.records.length > 0) {
                 allOrchestrationItems = allOrchestrationItems.concat(orchResult.records);
               }
@@ -1184,7 +1093,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
       ORDER BY
           Last_Submitted_Date__c ASC`;
       
-      const orderResult = await this.connection.query(orderQuery, { autoFetch: true, maxFetch: 99999 });
+      const orderResult = await this.connection.query(orderQuery, { autoFetch: true, maxFetch: 999999 });
       const orderRecords = orderResult.records || [];
       
       if (orderRecords.length === 0) {
@@ -1225,7 +1134,7 @@ WHERE (Name LIKE '%callout-noss%' OR Name LIKE '%callout-opg%')
 AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedIds.join("','")}')`;
         
         try {
-          const orchResult = await this.connection.query(orchestrationQuery, { autoFetch: true, maxFetch: 99999 });
+          const orchResult = await this.connection.query(orchestrationQuery, { autoFetch: true, maxFetch: 999999 });
           if (orchResult.records && orchResult.records.length > 0) {
             allOrchestrationItems = allOrchestrationItems.concat(orchResult.records);
           }

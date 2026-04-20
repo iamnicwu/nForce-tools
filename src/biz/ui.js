@@ -637,8 +637,7 @@ export function updateStats() {
 export function updateUserInfo() {
   // 更新头像
   const avatarEl = document.getElementById("user-avatar");
-  console.log(avatarEl);
-  console.log(appState.userInfo);
+  
   if (avatarEl) {
     // 检查是否有缩略图
     if (appState.userInfo && appState.userInfo.thumbnail) {
@@ -2480,7 +2479,7 @@ async function loadLTSSummary() {
     console.log('[DEBUG] fetch response ok:', response.ok, 'status:', response.status);
     if (response.ok) {
       const text = await response.text();
-      console.log('[DEBUG] Fetched text length:', text.length);
+      // console.log('[DEBUG] Fetched text length:', text.length);
       renderMarkdownContent(container, text);
       appState.lts_summary_loaded = true;
       console.log('[DEBUG] LTS Summary loaded successfully, lts_summary_loaded set to true');
@@ -2705,11 +2704,14 @@ export function updateHorizontalTabs(activeModule) {
         
         // 检查是否为当前激活的section
         const currentSection = document.getElementById(`section-${item.step}`);
+        // console.log("currentSection", currentSection);
         if (currentSection && currentSection.style.display === 'block') {
+          // console.log("currentSection1: ", currentSection);
             tabItem.classList.add('active');
         }
         
         tabsContent.appendChild(tabItem);
+        // console.log("tabsContent: ", tabsContent);
     });
 }
 

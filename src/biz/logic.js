@@ -476,38 +476,19 @@ export async function getPCDDailyData() {
   try {
     console.log("开始获取 PCD 当日数据");
 
-    // 获取自定义日期参数
-    let startDate = null;
-    let endDate = null;
-    const customDateCheckbox = document.getElementById("pcd-daily-custom-date-checkbox");
+    // 获取自定义 SOQL 查询
+    let customQuery = null;
+    const customQueryInput = document.getElementById("pcd-daily-soql-query");
     
-    if (customDateCheckbox && customDateCheckbox.checked) {
-      const startDateInput = document.getElementById("pcd-daily-start-date");
-      const endDateInput = document.getElementById("pcd-daily-end-date");
-      
-      if (startDateInput && startDateInput.value) {
-        startDate = startDateInput.value;
-      }
-      
-      if (endDateInput && endDateInput.value) {
-        endDate = endDateInput.value;
-      }
-      
-      if (!startDate && !endDate) {
-        showNotification("请至少选择一个日期", "warning");
-        // 隐藏loading mask
-        const loadingMask = document.getElementById("loading-mask");
-        if (loadingMask) {
-          loadingMask.style.display = "none";
-        }
-        return;
-      }
-      
-      console.log(`使用自定义日期范围: ${startDate} 到 ${endDate}`);
+    if (customQueryInput && customQueryInput.value && customQueryInput.value.trim()) {
+      customQuery = customQueryInput.value.trim();
+      console.log(`使用自定义 SOQL 查询: ${customQuery}`);
+    } else {
+      console.log("使用默认查询");
     }
 
     // 使用sfConn对象获取 PCD 当日数据
-    const result = await sfConn.getPCDDailyData(startDate, endDate);
+    const result = await sfConn.getPCDDailyData(customQuery);
     console.log("获取 PCD 当日数据结果:", result);
 
     if (result.success) {
