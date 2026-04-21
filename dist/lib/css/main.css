@@ -1715,3 +1715,354 @@ body {
         height: 150px;
     }
 }
+
+/* ==========================================
+   统一UI组件样式
+   ========================================== */
+
+/* 统一页面标题区域 */
+.section-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.section-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.section-icon i {
+    font-size: 32px;
+}
+
+.section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.section-desc {
+    color: var(--text-secondary);
+    max-width: 500px;
+    text-align: left;
+    margin: 0 auto;
+    padding-left: 20px;
+}
+
+.section-desc li {
+    margin-bottom: 4px;
+}
+
+.section-desc strong {
+    color: var(--text-primary);
+}
+
+.section-desc ul {
+    padding-left: 20px;
+    margin-top: 5px;
+}
+
+.section-desc ul li {
+    list-style-type: circle;
+}
+
+/* 统一内容区域容器 */
+.section-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 0;
+}
+
+/* 统一操作按钮区域 */
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.action-buttons .ant-btn {
+    min-width: 140px;
+}
+
+/* 统一文件上传拖拽区域 */
+.unified-upload-area {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.upload-drag-wrapper {
+    position: relative;
+    border: 2px dashed var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 3rem 2rem;
+    text-align: center;
+    transition: var(--transition);
+    cursor: pointer;
+    background: var(--bg-primary);
+}
+
+.upload-drag-wrapper:hover,
+.upload-drag-wrapper.dragover {
+    border-color: var(--primary-color);
+    background-color: rgba(24, 144, 255, 0.05);
+}
+
+.upload-drag-wrapper .upload-icon {
+    font-size: 48px;
+    color: var(--text-light);
+    margin-bottom: 1rem;
+    transition: var(--transition);
+}
+
+.upload-drag-wrapper:hover .upload-icon {
+    color: var(--primary-color);
+    transform: scale(1.1);
+}
+
+.upload-drag-wrapper .upload-text {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.upload-drag-wrapper .upload-hint {
+    font-size: 0.875rem;
+    color: var(--text-light);
+}
+
+.upload-drag-wrapper input[type="file"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* 已选择文件状态 */
+.upload-drag-wrapper.has-file {
+    border-color: var(--success-color);
+    background-color: rgba(82, 196, 26, 0.05);
+}
+
+.upload-drag-wrapper.has-file .upload-icon {
+    color: var(--success-color);
+}
+
+/* 统一表格容器 */
+.unified-table-wrapper {
+    margin-top: 2rem;
+    width: 100%;
+}
+
+.table-container-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.table-container-header h4 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.table-container-body {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.table-container-body .data-table {
+    width: 100%;
+}
+
+/* 统一的表单布局 */
+.unified-form {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.unified-form .form-group {
+    margin-bottom: 1rem;
+}
+
+.unified-form .form-group.text-left {
+    text-align: left;
+}
+
+.unified-form .ant-checkbox-wrapper {
+    font-size: 0.875rem;
+}
+
+/* 日期选择器容器 */
+.date-range-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.date-range-container .date-field {
+    flex: 1;
+}
+
+.date-range-container .date-field label {
+    display: block;
+    text-align: left;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.date-range-container .date-separator {
+    margin-top: 18px;
+}
+
+/* 统一模块颜色主题 */
+.theme-lts { --theme-color: #1890ff; --theme-bg: #e6f7ff; }
+.theme-pcd { --theme-color: #1890ff; --theme-bg: #e6f7ff; }
+.theme-vvip { --theme-color: #faad14; --theme-bg: #fffbe6; }
+.theme-analysis { --theme-color: #722ed1; --theme-bg: #f9f0ff; }
+.theme-t2 { --theme-color: #fa8c16; --theme-bg: #fff7e6; }
+.theme-tools { --theme-color: #2f54eb; --theme-bg: #f0f5ff; }
+.theme-lunch { --theme-color: #eb2f96; --theme-bg: #fff0f6; }
+.theme-schedule { --theme-color: #52c41a; --theme-bg: #f6ffed; }
+
+/* 模块图标样式 */
+.module-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1.5rem;
+}
+
+.module-icon i {
+    font-size: 32px;
+}
+
+/* 统一卡片样式 */
+.unified-card {
+    margin-bottom: 1.5rem;
+}
+
+.unified-card .ant-card-head {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    padding: 0 24px;
+    min-height: 56px;
+}
+
+.unified-card .ant-card-head-title {
+    font-weight: 600;
+    font-size: 16px;
+    padding: 16px 0;
+}
+
+.unified-card .ant-card-body {
+    padding: 24px;
+}
+
+/* 空状态显示 */
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 1rem;
+    color: var(--text-light);
+}
+
+.empty-state p {
+    margin: 0;
+}
+
+/* 加载状态 */
+.loading-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.loading-state i {
+    font-size: 24px;
+    margin-bottom: 0.5rem;
+}
+
+/* 成功状态 */
+.success-state {
+    text-align: center;
+    padding: 2rem;
+}
+
+.success-state i {
+    font-size: 48px;
+    color: var(--success-color);
+    margin-bottom: 1rem;
+}
+
+.success-state p {
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .section-header {
+        margin-bottom: 1.5rem;
+    }
+    
+    .section-icon {
+        width: 64px;
+        height: 64px;
+    }
+    
+    .section-icon i {
+        font-size: 24px;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+        width: 100%;
+        max-width: 300px;
+    }
+    
+    .action-buttons .ant-btn {
+        width: 100%;
+    }
+    
+    .date-range-container {
+        flex-direction: column;
+    }
+    
+    .date-range-container .date-separator {
+        display: none;
+    }
+    
+    .table-container-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+}

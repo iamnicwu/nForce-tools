@@ -459,6 +459,12 @@ function bindEvents() {
         // 更新横向菜单栏
         console.log(`[DEBUG] Calling updateHorizontalTabs("${module}")`);
         updateHorizontalTabs(module);
+        
+        // 如果点击的是 Tools 模块，默认选中 Bulk 操作 (step 15)
+        if (module === 'tools') {
+          console.log(`[DEBUG] Tools clicked, defaulting to Bulk Operations (step 15)`);
+          showSection(15);
+        }
       } else {
         console.log(`[DEBUG] module "${module}" not in submenuConfig or is null`);
       }
