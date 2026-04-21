@@ -299,6 +299,11 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 1.12] Ready To Submit + '${fulfillStatus}' -> N/A`);
       return "N/A";
     }
+
+    if(fulfillStatus === "Cancelled"){
+      log(`[Status Rule 1.13] Ready To Submit + '${fulfillStatus}' -> ${orderType}`);
+      return orderType;
+    }
   } 
   
   if (status === "Amend Requested") {
@@ -312,6 +317,11 @@ function evaluateStatusRules(ctx, BANDKeywords) {
     }
     if(fulfillStatus === "In Progress" || fulfillStatus === "In Progress-Distributed"){
       log(`[Status Rule 2.3] Amend Requested + '${fulfillStatus}' -> ${orderType}`);
+      return orderType;
+    }
+
+    if(fulfillStatus === "Cancelled"){
+      log(`[Status Rule 2.5] Amend Requested + '${fulfillStatus}' -> ${orderType}`);
       return orderType;
     }
 
