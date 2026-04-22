@@ -828,106 +828,16 @@ export function renderPCDDailyData(data) {
 
 // 渲染 PCD PID Fallout 数据
 export function renderPCDPIDFalloutData(data) {
-  const container = document.getElementById("pcd-pid-fallout-data-container");
-  const table = document.getElementById("pcd-pid-fallout-data-table");
+
+  pcdPidFalloutDataHot = renderTable("pcd-pid-fallout-data-container", "pcd-pid-fallout-data-table" , data, pcdPidFalloutDataHot);
   
-  // 销毁旧实例
-  if (pcdPidFalloutDataHot) {
-    pcdPidFalloutDataHot.destroy();
-    pcdPidFalloutDataHot = null;
-  }
-  
-  if (!data || data.length === 0) {
-    container.style.display = "none";
-    return;
-  }
-  
-  // 准备Handsontable需要的数据格式
-  const tableColumns = Object.keys(data[0]).map(col => ({
-      title: col.replace(/__c/g, '').replace(/_/g, ' '),
-      data: col
-  }));
-  
-  // 配置Handsontable
-  const hotConfig = {
-    data: data,
-    columns: tableColumns,
-    colHeaders: true,
-    rowHeaders: true,
-    stretchH: 'all',
-    autoWrapRow: true,
-    autoWrapCol: true,
-    maxRows: 1000,
-    width: '100%',
-    height: '500px',
-    licenseKey: 'non-commercial-and-evaluation',
-    filters: true,
-    dropdownMenu: true,
-    sortIndicator: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    manualColumnMove: true,
-    search: true,
-    contextMenu: true
-  };
-  
-  // 创建Handsontable实例
-  pcdPidFalloutDataHot = new Handsontable(table, hotConfig);
-  
-  // 显示数据容器
-  container.style.display = "block";
 }
 
 // 渲染 PCD QC Issue 数据
 export function renderPCDQCIssueData(data) {
-  const container = document.getElementById("pcd-qc-issue-data-container");
-  const table = document.getElementById("pcd-qc-issue-data-table");
-  
-  // 销毁旧实例
-  if (pcdQCIssueDataHot) {
-    pcdQCIssueDataHot.destroy();
-    pcdQCIssueDataHot = null;
-  }
-  
-  if (!data || data.length === 0) {
-    container.style.display = "none";
-    return;
-  }
-  
-  // 准备Handsontable需要的数据格式
-  const tableColumns = Object.keys(data[0]).map(col => ({
-      title: col.replace(/__c/g, '').replace(/_/g, ' '),
-      data: col
-  }));
-  
-  // 配置Handsontable
-  const hotConfig = {
-    data: data,
-    columns: tableColumns,
-    colHeaders: true,
-    rowHeaders: true,
-    stretchH: 'all',
-    autoWrapRow: true,
-    autoWrapCol: true,
-    maxRows: 1000,
-    width: '100%',
-    height: '500px',
-    licenseKey: 'non-commercial-and-evaluation',
-    filters: true,
-    dropdownMenu: true,
-    sortIndicator: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    manualColumnMove: true,
-    search: true,
-    contextMenu: true
-  };
-  
-  // 创建Handsontable实例
-  pcdQCIssueDataHot = new Handsontable(table, hotConfig);
-  
-  // 显示数据容器
-  container.style.display = "block";
+
+  // 渲染 QC issue 数据
+  pcdQCIssueDataHot = renderTable("pcd-qc-issue-data-container","pcd-qc-issue-data-table", data, pcdQCIssueDataHot);
 }
 
 // 渲染报表数据

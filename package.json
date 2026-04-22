@@ -1,6 +1,6 @@
 {
   "name": "nforce-tools",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "NForce Tools: Chrome扩展用于Salesforce订单查询、报表获取、数据分析等",
   "main": "src/app.js",
   "scripts": {
