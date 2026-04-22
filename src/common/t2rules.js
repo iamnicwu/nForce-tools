@@ -406,7 +406,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 3.6] In Progress + Leased-In Failed -> Sales`);
       return "Sales";
     } 
-    if (fulfillStatus === "Waiting For Inventory" || fulfillStatus === "Inventory Fallout") {
+    if (fulfillStatus === "Waiting For Inventory" || fulfillStatus === "Inventory Fallout"|| fulfillStatus === "Manual Assign Inventory") {
       if (fulfillRemark.includes("UIM")) {
         if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
           log(`[Remark Rule 3.7.3] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
