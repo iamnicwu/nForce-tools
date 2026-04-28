@@ -1,6 +1,6 @@
 import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
-import { showNotification } from "../common/utils.js";
+import { showNotification, loadingLog } from "../common/utils.js";
 import { processExcelFile as processExcelFileUtil, processVVIPExcelFile as processVVIPExcelFileUtil, processAnalysisExcelFile as processAnalysisExcelFileUtil, analyzeData as analyzeDataUtil, analyzeT2Data as analyzeT2DataUtil, exportToExcel, getUniqueOrderCount, readExcelFile, parseSheetData } from "../common/excel_utils.js";
 import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState } from "./ui.js";
 import {applyT2Rules} from "../common/t2rules.js"
@@ -319,6 +319,15 @@ export async function getT2Data() {
 export async function getSalesforceData() {
   try {
     console.log("开始获取最新Salesforce数据");
+    loadingLog("开始获取Salesforce数据...", "info");
+
+    // 显示日志区域
+    const loadingLogEl = document.getElementById("loading-log");
+    if (loadingLogEl) {
+      loadingLogEl.style.display = "block";
+      const logContent = document.getElementById("loading-log-content");
+      if (logContent) logContent.innerHTML = "";
+    }
 
     // 使用sfConn对象获取Salesforce数据
     const result = await sfConn.getSFData(appState.order_numbers, (count) => {
@@ -327,6 +336,7 @@ export async function getSalesforceData() {
       if (recordCountSpan) {
         recordCountSpan.textContent = count;
       }
+      loadingLog(`正在获取数据，已匹配 ${count} 条记录...`, "info");
     });
     
     if (result.success) {
@@ -350,6 +360,7 @@ export async function getSalesforceData() {
           loadingMask.style.display = "none";
           console.log("已隐藏loading mask");
         }
+        loadingLog(`数据获取完成，共 ${result.salesforceData.length} 条记录`, "success");
 
         // 显示数据
         renderLatestData(result.salesforceData);
@@ -364,6 +375,7 @@ export async function getSalesforceData() {
     }
   } catch (error) {
     console.error("获取Salesforce数据失败:", error);
+    loadingLog(`获取Salesforce数据失败: ${error.message}`, "error");
     showNotification(
       "获取Salesforce数据失败，请检查Session ID和网络连接",
       "error"
@@ -840,12 +852,25 @@ export function processExcelFile(file) {
   // 显示loading mask
   const loadingMask = document.getElementById("loading-mask");
   const recordCountSpan = document.getElementById("record-count");
+  const loadingLogElement = document.getElementById("loading-log");
 
   if (loadingMask && recordCountSpan) {
     loadingMask.style.display = "flex";
     loadingMask.querySelector("h3").textContent = "正在处理Excel文件...";
     recordCountSpan.textContent = "0";
   }
+
+  // 确保日志区域显示
+  if (loadingLogElement) {
+    loadingLogElement.style.display = "block";
+    const logContent = document.getElementById("loading-log-content");
+    if (logContent) {
+      logContent.innerHTML = ""; // 清空之前的日志
+    }
+  }
+
+  // 初始化日志
+  loadingLog("准备处理文件...", "info");
 
   processExcelFileUtil(
     file,
@@ -863,6 +888,7 @@ export function processExcelFile(file) {
       appState.stats.uploadedOrders = orderNumbers.length;
       // 不再强制跳转步骤，保持在当前步骤
       console.log("应用状态已更新");
+      loadingLog(`已保存 ${orderNumbers.length} 个订单号到应用状态`, "success");
 
       updateUIState();
       // 更新统计数据
@@ -879,6 +905,7 @@ export function processExcelFile(file) {
       }
 
       console.log("文件上传处理完成");
+      loadingLog("文件上传处理完成", "success");
     },
     (error) => {
       // 失败回调
@@ -887,6 +914,7 @@ export function processExcelFile(file) {
         loadingMask.style.display = "none";
       }
       console.error("处理Excel文件失败:", error);
+      loadingLog(`处理Excel文件失败: ${error}`, "error");
     }
   );
 }

@@ -1,4 +1,4 @@
-import { showNotification } from "./utils.js";
+import { showNotification, loadingLog } from "./utils.js";
 
 /**
  * 导出数据到 Excel
@@ -47,15 +47,17 @@ export function exportToExcel(data, fileNamePrefix, sheetName) {
  */
 export function processExcelFile(file, onSuccess, onError) {
   if (!file) return;
-
+  console.log("123");
   if (!file.name.endsWith(".xlsx")) {
     console.error("文件格式不正确，请上传Excel文件(.xlsx)");
     showNotification("请上传Excel文件(.xlsx)", "error");
+    loadingLog("文件格式不正确，请上传Excel文件(.xlsx)", "error");
     if (onError) onError("文件格式不正确");
     return;
   }
 
   console.log("开始处理Excel文件:", file.name);
+  loadingLog(`开始处理Excel文件: ${file.name}`, "info");
   showNotification("正在处理文件...", "success");
 
   // 使用SheetJS读取Excel文件
@@ -63,12 +65,14 @@ export function processExcelFile(file, onSuccess, onError) {
   reader.onload = function (e) {
     try {
       console.log("文件读取完成，开始解析Excel");
+      loadingLog("文件读取完成，正在解析Excel...", "info");
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       console.log(
         "Excel文件解析成功，工作表数量:",
         workbook.SheetNames.length
       );
+      loadingLog(`Excel文件解析成功，发现 ${workbook.SheetNames.length} 个工作表`, "success");
 
       // 智能选择最新的工作表 (类似 Python 逻辑)
       let targetSheetName = null;
@@ -104,6 +108,7 @@ export function processExcelFile(file, onSuccess, onError) {
 
       if (targetSheetName) {
         console.log(`找到最新日期的工作表: ${targetSheetName}`);
+        loadingLog(`选择工作表: ${targetSheetName}`, "info");
       } else {
         // 优先查找名为 'details' 的工作表
         targetSheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'details');
@@ -111,16 +116,19 @@ export function processExcelFile(file, onSuccess, onError) {
         if (!targetSheetName) {
           console.log("未找到日期格式或 'details' 工作表，使用第一个工作表");
           targetSheetName = workbook.SheetNames[0];
+          loadingLog(`未找到指定工作表，使用: ${targetSheetName}`, "warning");
         }
       }
 
       // 获取工作表
       const worksheet = workbook.Sheets[targetSheetName];
       console.log("正在处理工作表:", targetSheetName);
+      loadingLog(`正在处理工作表: ${targetSheetName}`, "info");
 
       // 将工作表转换为JSON数据
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
       console.log("工作表转换为JSON数据成功，行数:", jsonData.length);
+      loadingLog(`工作表转换为JSON数据成功，共 ${jsonData.length} 行`, "success");
 
       // 提取订单号
       const orderNumbers = [];
@@ -129,19 +137,23 @@ export function processExcelFile(file, onSuccess, onError) {
         "ordernumber",
         "order number",
         "order.ordernumber",
-        "order no",
-        "order_no",
-        "order id",
-        "order_id",
-        "订单号",
-        "订单编号"
+        "Order Number",
+        "order_number__c", // 针对 Salesforce 字段名
+        "ordernumber__c"   // Salesforce 变体 (不带下划线)
       ];
 
       if (jsonData.length > 0) {
+        loadingLog(`正在查找订单号列...`, "info");
         // 查找订单号列
         let orderColumn = null;
         const firstRowKeys = Object.keys(jsonData[0]);
         console.log("查找订单号列，可用列:", firstRowKeys);
+        loadingLog(`可用列: ${firstRowKeys.join(', ')}`, "info");
+
+        // 预处理 possibleColumnNames，生成清理后的版本用于快速查找
+        const cleanPossibleNames = possibleColumnNames.map(name =>
+          name.replace(/[^a-z0-9\u4e00-\u9fa5]/g, "").toLowerCase()
+        );
 
         // 尝试查找匹配的列
         for (const key of firstRowKeys) {
@@ -149,18 +161,23 @@ export function processExcelFile(file, onSuccess, onError) {
           // 直接匹配
           if (possibleColumnNames.includes(normalizedKey)) {
             orderColumn = key;
+            console.log("直接匹配到订单号列:", key);
+            loadingLog(`直接匹配到订单号列: ${key}`, "success");
             break;
           }
           // 去除空格和特殊字符后匹配
-          const cleanKey = normalizedKey.replace(/[^a-z0-9\u4e00-\u9fa5]/g, ""); // 保留中文
-          if (possibleColumnNames.some(name => name.replace(/[^a-z0-9\u4e00-\u9fa5]/g, "") === cleanKey)) {
+          const cleanKey = normalizedKey.replace(/[^a-z0-9\u4e00-\u9fa5]/g, "");
+          if (cleanPossibleNames.includes(cleanKey)) {
             orderColumn = key;
+            console.log("清理后匹配到订单号列:", key, "(原始:", cleanKey, ")");
+            loadingLog(`清理后匹配到订单号列: ${key}`, "success");
             break;
           }
         }
 
         if (orderColumn) {
           console.log("找到订单号列:", orderColumn);
+          loadingLog(`开始提取订单号 (列: ${orderColumn})...`, "info");
           // 提取订单号，去重
           const uniqueOrders = new Set();
           jsonData.forEach((row) => {
@@ -181,12 +198,14 @@ export function processExcelFile(file, onSuccess, onError) {
             orderNumbers.length,
             "个唯一订单号"
           );
+          loadingLog(`提取完成，共 ${orderNumbers.length} 个唯一订单号`, "success");
           
           if (onSuccess) {
             onSuccess(orderNumbers);
           }
         } else {
           console.error("未找到订单号列，请检查Excel文件格式");
+          loadingLog("未找到订单号列，请检查Excel文件格式", "error");
           showNotification(
             "未找到订单号列，请检查Excel文件格式",
             "error"
@@ -196,10 +215,12 @@ export function processExcelFile(file, onSuccess, onError) {
         }
       } else {
         console.log("Excel文件中没有数据行");
+        loadingLog("Excel文件中没有数据行", "warning");
         if (onError) onError("Excel文件中没有数据行");
       }
     } catch (error) {
       console.error("处理Excel文件时出错:", error);
+      loadingLog(`处理Excel文件时出错: ${error.message}`, "error");
       showNotification("处理Excel文件失败，请检查文件格式", "error");
       if (onError) onError(error);
     }
@@ -207,12 +228,14 @@ export function processExcelFile(file, onSuccess, onError) {
 
   reader.onerror = function () {
     console.error("读取Excel文件失败");
+    loadingLog("读取Excel文件失败", "error");
     showNotification("读取Excel文件失败", "error");
     if (onError) onError("读取Excel文件失败");
   };
 
   // 开始读取文件
   console.log("开始读取文件...");
+  loadingLog("正在读取文件...", "info");
   reader.readAsArrayBuffer(file);
 }
 

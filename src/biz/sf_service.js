@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import { flattenRecords, remove_duplicates } from "../common/utils.js";
+import { flattenRecords, remove_duplicates, loadingLog } from "../common/utils.js";
 import { applyExpiryRules, applyT2Rules } from "../common/t2rules.js";
 
 export let defaultApiVersion = "65.0";
@@ -421,18 +421,21 @@ export let sfConn = {
         const soql = `select order.Name,order.OrderNumber,order.Order_Nature__c,order.Service_Request_Date__c,
         order.Attention__c,FulfillmentRemark__c,order.id,order.Custom_OrderStatus__c,
         order.Custom_FulfilmentStatus__c,FulfillmentId__c,AppointmentId__c,vlocity_cmt__FulfilmentStatus__c,
-        BRM_Request_Id__c from OrderItem where 
+        BRM_Request_Id__c from OrderItem where
         MainProduct__c = true AND
         LOB__c ='FixedLine' AND
         order.OrderNumber in ('${escapedOrderNumbers.join(
           "','"
         )}')`;
 
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(orderNumbers.length / BATCH_SIZE);
         console.log(
-          `正在查询数据，批次: ${Math.floor(i / BATCH_SIZE) + 1}, 数量: ${
+          `正在查询数据，批次: ${batchNum}/${totalBatches}, 数量: ${
             batchOrderNumbers.length
           }`
         );
+        loadingLog(`正在查询第 ${batchNum}/${totalBatches} 批次 (${batchOrderNumbers.length} 条订单)...`, "info");
 
         // 优化：直接获取查询结果，避免流式回调带来的额外开销
         const result = await this.connection.query(soql, { autoFetch: true });
@@ -441,7 +444,9 @@ export let sfConn = {
           if (onProgress) onProgress(allRecords.length);
         }
         console.log(`已获取${result.records.length}条记录`);
+        loadingLog(`第 ${batchNum} 批次完成，已获取 ${result.records ? result.records.length : 0} 条记录`, "success");
       }
+      loadingLog(`所有批次查询完成，共获取 ${allRecords.length} 条记录，正在处理...`, "info");
 
       // 展平数据
       const processedRecords = flattenRecords(allRecords);

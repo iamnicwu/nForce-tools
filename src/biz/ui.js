@@ -852,57 +852,7 @@ export function renderT2Data(data) {
 
 // 渲染T-4分析数据
 export function renderT2AnalysisData(data) {
-  const container = document.getElementById("t2-analysis-data-container");
-  const table = document.getElementById("t2-analysis-data-table");
-  
-  // 销毁旧实例
-  if (t2AnalysisDataHot) {
-    t2AnalysisDataHot.destroy();
-    t2AnalysisDataHot = null;
-  }
-  
-  if (!data || data.length === 0) {
-    container.style.display = "none";
-    return;
-  }
-  
-  // 准备Handsontable需要的数据格式
-  const tableColumns = Object.keys(data[0]).map(col => ({
-      title: col,
-      data: col
-  }));
-  
-  // 配置Handsontable
-  const hotConfig = {
-    data: data,
-    columns: tableColumns,
-    colHeaders: true,
-    rowHeaders: true,
-    stretchH: 'all',
-    autoWrapRow: true,
-    autoWrapCol: true,
-    maxRows: 1000,
-    width: '100%',
-    height: '500px',
-    licenseKey: 'non-commercial-and-evaluation',
-    filters: true,
-    dropdownMenu: true,
-    sortIndicator: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    manualColumnMove: true,
-    search: true,
-    contextMenu: true
-  };
-  
-  // 创建Handsontable实例
-  t2AnalysisDataHot = new Handsontable(table, hotConfig);
-  
-  // 显示数据容器
-  container.style.display = "block";
-
-  // 渲染图表
-  renderT2AnalysisCharts(data);
+  t2AnalysisDataHot = renderTable("t2-analysis-data-container","t2-analysis-data-table" , data, hotConfig);
 }
 
 // 渲染T-4分析图表
@@ -1083,85 +1033,7 @@ export function renderT2AnalysisCharts(data) {
 
 // 渲染最新数据
 export function renderLatestData(data) {
-  const container = document.getElementById("latest-data-container");
-  const table = document.getElementById("latest-data-table");
-  
-  // 销毁旧实例
-  if (latestDataHot) {
-    latestDataHot.destroy();
-    latestDataHot = null;
-  }
-  
-  if (!data || data.length === 0) {
-    container.style.display = "none";
-    return;
-  }
-  
-  // 准备Handsontable需要的数据格式
-  const tableColumns = Object.keys(data[0]).map(col => ({
-      title: col.replace(/__c/g, '').replace(/Order_/g, '').replace(/_/g, ' '),
-      data: col
-  }));
-  
-  // 配置Handsontable
-  const hotConfig = {
-    data: data,
-    columns: tableColumns,
-    colHeaders: true,
-    rowHeaders: true,
-    stretchH: 'all',
-    autoWrapRow: true,
-    autoWrapCol: true,
-    maxRows: 1000,
-    width: '100%',
-    height: '500px',
-    licenseKey: 'non-commercial-and-evaluation',
-    filters: true,
-    dropdownMenu: true,
-    sortIndicator: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    manualColumnMove: true,
-    search: true,
-    contextMenu: {
-        items: {
-            'row_above': {
-                name: '在上方插入行'
-            },
-            'row_below': {
-                name: '在下方插入行'
-            },
-            'col_left': {
-                name: '在左侧插入列'
-            },
-            'col_right': {
-                name: '在右侧插入列'
-            },
-            'remove_row': {
-                name: '删除行'
-            },
-            'remove_col': {
-                name: '删除列'
-            },
-            '---------': '---------',
-            'copy': {
-                name: '复制'
-            },
-            'cut': {
-                name: '剪切'
-            },
-            'paste': {
-                name: '粘贴'
-            }
-        }
-    }
-  };
-  
-  // 创建Handsontable实例
-  latestDataHot = new Handsontable(table, hotConfig);
-  
-  // 显示数据容器
-  container.style.display = "block";
+  latestDataHot = renderTable("latest-data-container", "latest-data-table", data, latestDataHot);
 }
 
 // 渲染VVIP数据
@@ -1464,9 +1336,9 @@ export function renderAnalysisChart(data) {
 
 // 更新文件上传UI
 export function updateFileUploadUI(file) {
-  const fileUpload = document.querySelector("#file-upload-form .file-upload");
+  const fileUpload = document.querySelector("#file-upload-form .upload-drag-wrapper");
   if (!fileUpload) return;
-
+  console.log("1");
   // 更改图标为Excel文件图标
   const iconContainer = fileUpload.querySelector(".ant-upload-drag-icon");
   if (iconContainer) {
@@ -1494,7 +1366,7 @@ export function updateFileUploadUI(file) {
 
 // 更新VVIP文件上传UI
 export function updateVVIPFileUploadUI(file) {
-  const fileUpload = document.querySelector("#vvip-file-upload-form .file-upload");
+  const fileUpload = document.querySelector("#vvip-file-upload-form .upload-drag-wrapper");
   if (!fileUpload) return;
 
   // 更改图标为Excel文件图标
@@ -1524,7 +1396,7 @@ export function updateVVIPFileUploadUI(file) {
 
 // 更新T-4分析文件上传UI
 export function updateT2AnalysisFileUploadUI(file) {
-  const fileUpload = document.querySelector("#t2-analysis-file-upload-form .file-upload");
+  const fileUpload = document.querySelector("#t2-analysis-file-upload-form .upload-drag-wrapper");
   if (!fileUpload) return;
 
   // 更改图标为Excel文件图标
@@ -1554,7 +1426,7 @@ export function updateT2AnalysisFileUploadUI(file) {
 
 // 更新T-4规则文件上传UI
 export function updateT2RulesFileUploadUI(file) {
-  const fileUpload = document.querySelector("#t2-rules-file-upload-form .file-upload");
+  const fileUpload = document.querySelector("#t2-rules-file-upload-form .upload-drag-wrapper");
   if (!fileUpload) return;
 
   // 更改图标为JSON文件图标
@@ -1694,7 +1566,7 @@ export function renderT2RulesList(rules) {
 
 // 更新数据分析文件上传UI
 export function updateAnalysisFileUploadUI(file) {
-  const fileUpload = document.querySelector("#analysis-file-upload-form .file-upload");
+  const fileUpload = document.querySelector("#analysis-file-upload-form .upload-drag-wrapper");
   if (!fileUpload) return;
 
   // 更改图标为Excel文件图标
@@ -2405,7 +2277,7 @@ async function loadLTSSummary() {
 
 // 更新午餐文件上传UI
 export function updateLunchFileUploadUI(file) {
-  const fileUpload = document.querySelector("#lunch-file-upload-form .file-upload");
+  const fileUpload = document.querySelector("#lunch-file-upload-form .upload-drag-wrapper");
   if (!fileUpload) return;
 
   // 更改图标

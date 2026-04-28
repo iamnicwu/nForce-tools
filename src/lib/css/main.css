@@ -1063,6 +1063,58 @@ body {
     color: var(--primary-color);
 }
 
+/* Loading Log 日志显示区域样式 */
+.loading-log {
+    margin-top: 1rem;
+    width: 100%;
+    max-width: 500px;
+    max-height: 200px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background-color: var(--bg-secondary);
+    overflow: hidden;
+}
+
+.loading-log-header {
+    padding: 0.5rem 1rem;
+    background-color: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.loading-log-content {
+    padding: 0.75rem;
+    max-height: 150px;
+    overflow-y: auto;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.loading-log-content .log-entry {
+    margin-bottom: 0.25rem;
+    padding: 0.125rem 0;
+}
+
+.loading-log-content .log-entry.info {
+    color: var(--primary-color);
+}
+
+.loading-log-content .log-entry.success {
+    color: #52c41a;
+}
+
+.loading-log-content .log-entry.error {
+    color: #ff4d4f;
+}
+
+.loading-log-content .log-entry.warning {
+    color: #faad14;
+}
+
 /* Markdown 样式 */
 .markdown-body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
