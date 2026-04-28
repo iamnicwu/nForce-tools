@@ -659,7 +659,7 @@ function bindEvents() {
 
 
   // 拖拽事件处理
-  const fileUpload = document.querySelector(".file-upload");
+  const fileUpload = document.querySelector("#file-upload-form .upload-drag-wrapper");
   if (fileUpload) {
     // 拖拽进入
     fileUpload.addEventListener("dragover", function (e) {
@@ -719,7 +719,7 @@ function bindEvents() {
   }
 
   // VVIP拖拽事件处理
-  const vvipFileUpload = document.querySelector("#vvip-file-upload-form .file-upload");
+  const vvipFileUpload = document.querySelector("#vvip-file-upload-form .upload-drag-wrapper");
   if (vvipFileUpload) {
     // 拖拽进入
     vvipFileUpload.addEventListener("dragover", function (e) {
@@ -779,7 +779,7 @@ function bindEvents() {
   }
 
   // 数据分析拖拽事件处理
-  const analysisFileUpload = document.querySelector("#analysis-file-upload-form .file-upload");
+  const analysisFileUpload = document.querySelector("#analysis-file-upload-form .upload-drag-wrapper");
   if (analysisFileUpload) {
     // 拖拽进入
     analysisFileUpload.addEventListener("dragover", function (e) {
@@ -839,7 +839,7 @@ function bindEvents() {
   }
 
   // T-4 分析文件拖拽事件处理
-  const t2AnalysisFileUpload = document.querySelector("#t2-analysis-file-upload-form .file-upload");
+  const t2AnalysisFileUpload = document.querySelector("#t2-analysis-file-upload-form .upload-drag-wrapper");
   if (t2AnalysisFileUpload) {
     // 拖拽进入
     t2AnalysisFileUpload.addEventListener("dragover", function (e) {
@@ -968,7 +968,7 @@ function bindEvents() {
   }
 
   // 午餐文件拖拽事件处理
-  const lunchFileUpload = document.querySelector("#lunch-file-upload-form .file-upload");
+  const lunchFileUpload = document.querySelector("#lunch-file-upload-form .upload-drag-wrapper");
   if (lunchFileUpload) {
     // 拖拽进入
     lunchFileUpload.addEventListener("dragover", function (e) {

@@ -238,13 +238,16 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 1.4] Ready To Submit + Inventory Replenishment -> F&S`);
       return "F&S";
     } 
-    if (fulfillStatus === "Inventory Fallout") {
-      if (fulfillRemark.includes("UIM")) {
-        if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
-          log(`[Remark Rule 1.5.1] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
-          return "BAND";
-        }
-        else if(fulfillRemark.includes("SALES FOLLOW-UP)")){
+    if (fulfillStatus === "Waiting For Inventory" || 
+      fulfillStatus === "Inventory Fallout"|| 
+      fulfillStatus === "Manual Assign Inventory") {
+      
+      if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
+        log(`[Remark Rule 1.5.1] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
+        return "BAND";
+      }
+      else if (fulfillRemark.includes("UIM")) {
+        if(fulfillRemark.includes("SALES FOLLOW-UP)")){
           log(`[Remark Rule 1.5.2] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
           return "Sales";
         }
@@ -406,13 +409,16 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       log(`[Status Rule 3.6] In Progress + Leased-In Failed -> Sales`);
       return "Sales";
     } 
-    if (fulfillStatus === "Waiting For Inventory" || fulfillStatus === "Inventory Fallout"|| fulfillStatus === "Manual Assign Inventory") {
-      if (fulfillRemark.includes("UIM")) {
-        if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
+    if (fulfillStatus === "Waiting For Inventory" || 
+      fulfillStatus === "Inventory Fallout"|| 
+      fulfillStatus === "Manual Assign Inventory") {
+      
+      if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
           log(`[Remark Rule 3.7.3] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
           return "BAND";
-        }
-        else if(fulfillRemark.includes("SALES FOLLOW-UP)")){
+      }
+      else if (fulfillRemark.includes("UIM")) {
+        if(fulfillRemark.includes("SALES FOLLOW-UP)")){
           log(`[Remark Rule 3.7.4] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
           return "Sales";
         }

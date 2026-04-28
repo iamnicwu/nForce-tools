@@ -125,6 +125,45 @@ function closeNotification(key) {
 }
 
 /**
+ * 在loading-log区域显示日志消息
+ * @param {string} message - 日志消息
+ * @param {string} type - 日志类型 (info, success, error, warning)
+ */
+export function loadingLog(message, type = 'info') {
+    const logContent = document.getElementById('loading-log-content');
+    const loadingLog = document.getElementById('loading-log');
+    
+    if (!loadingLog) return;
+    
+    // 确保日志区域显示
+    loadingLog.style.display = 'block';
+    
+    if (!logContent) return;
+    
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    
+    // 添加时间戳
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('zh-CN', { hour12: false });
+    
+    entry.textContent = `[${timeStr}] ${message}`;
+    logContent.appendChild(entry);
+    
+    // 自动滚动到最新消息
+    logContent.scrollTop = logContent.scrollHeight;
+    
+    // 同时输出到console
+    if (type === 'error') {
+        console.error(`[Loading] ${message}`);
+    } else if (type === 'warning') {
+        console.warn(`[Loading] ${message}`);
+    } else {
+        console.log(`[Loading] ${message}`);
+    }
+}
+
+/**
  * 简单的 Markdown 解析器
  * @param {string} markdown 
  * @returns {string} HTML
