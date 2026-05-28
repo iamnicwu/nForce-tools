@@ -328,7 +328,7 @@ export async function getSalesforceData() {
       const logContent = document.getElementById("loading-log-content");
       if (logContent) logContent.innerHTML = "";
     }
-
+    console.log("appState.order_numbers: ", appState.order_numbers);
     // 使用sfConn对象获取Salesforce数据
     const result = await sfConn.getSFData(appState.order_numbers, (count) => {
       // 更新记录数显示
@@ -338,21 +338,22 @@ export async function getSalesforceData() {
       }
       loadingLog(`正在获取数据，已匹配 ${count} 条记录...`, "info");
     });
-    
+    console.log("result1: " + result.data);
     if (result.success) {
+        console.log("result: " + result.data);
         // 更新记录数显示
         const recordCountSpan = document.getElementById("record-count");
         if (recordCountSpan) {
-          recordCountSpan.textContent = result.salesforceData.length;
+          recordCountSpan.textContent = result.data.length;
           console.log("已更新UI记录数显示");
         }
 
         // 更新统计数据
-        appState.stats.fetchedData = result.salesforceData.length;
+        appState.stats.fetchedData = result.data.length;
         updateStats();
 
         // 保存数据到应用状态
-        appState.latest_data = result.salesforceData;
+        appState.latest_data = result.data;
 
         // 隐藏loading mask
         const loadingMask = document.getElementById("loading-mask");
@@ -360,10 +361,10 @@ export async function getSalesforceData() {
           loadingMask.style.display = "none";
           console.log("已隐藏loading mask");
         }
-        loadingLog(`数据获取完成，共 ${result.salesforceData.length} 条记录`, "success");
+        loadingLog(`数据获取完成，共 ${result.data.length} 条记录`, "success");
 
         // 显示数据
-        renderLatestData(result.salesforceData);
+        renderLatestData(result.data);
 
         // 显示导出按钮
         const exportBtn = document.getElementById("export-latest-data");
@@ -371,7 +372,7 @@ export async function getSalesforceData() {
           exportBtn.style.display = "inline-block";
         }
 
-        showNotification(`最新数据获取成功，共 ${result.salesforceData.length} 条记录`);
+        showNotification(`最新数据获取成功，共 ${result.data.length} 条记录`);
     }
   } catch (error) {
     console.error("获取Salesforce数据失败:", error);

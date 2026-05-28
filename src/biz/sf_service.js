@@ -405,7 +405,7 @@ export let sfConn = {
         return { success: false, error: "No order numbers provided" };
       }
 
-      const BATCH_SIZE = 600;
+      const BATCH_SIZE = 500;
       let allRecords = [];
 
       // 分批处理
@@ -418,13 +418,11 @@ export let sfConn = {
         );
 
         // 构建SOQL查询，获取订单相关数据
-        const soql = `select order.Name,order.OrderNumber,order.Order_Nature__c,order.Service_Request_Date__c,
-        order.Attention__c,FulfillmentRemark__c,order.id,order.Custom_OrderStatus__c,
-        order.Custom_FulfilmentStatus__c,FulfillmentId__c,AppointmentId__c,vlocity_cmt__FulfilmentStatus__c,
-        BRM_Request_Id__c from OrderItem where
-        MainProduct__c = true AND
-        LOB__c ='FixedLine' AND
-        order.OrderNumber in ('${escapedOrderNumbers.join(
+        const soql = `SELECT Order.Name, Order.OrderNumber, Order.Order_Nature__c,	Order.Service_Request_Date__c,	
+Order.Attention__c,	Order.Id,	Order.Custom_OrderStatus__c, Order.Custom_FulfilmentStatus__c,	
+FulfillmentRemark__c,	FulfillmentId__c,	AppointmentId__c,	vlocity_cmt__FulfilmentStatus__c,	BRM_Request_Id__c
+ FROM OrderItem WHERE 
+Order.ordernumber in ('${escapedOrderNumbers.join(
           "','"
         )}')`;
 
@@ -447,17 +445,33 @@ export let sfConn = {
         loadingLog(`第 ${batchNum} 批次完成，已获取 ${result.records ? result.records.length : 0} 条记录`, "success");
       }
       loadingLog(`所有批次查询完成，共获取 ${allRecords.length} 条记录，正在处理...`, "info");
-
-      // 展平数据
-      const processedRecords = flattenRecords(allRecords);
-
-      // 启用去重逻辑
-      const removedDupeList = remove_duplicates(processedRecords);
       
-      return {
-        success: true,
-        salesforceData: removedDupeList,
-      };
+      
+        // 展平数据
+        const processedRecords = flattenRecords(allRecords);
+        // 启用去重逻辑
+        const removedDupeList = remove_duplicates(processedRecords);
+        console.log("removedDupeList: " , removedDupeList);
+        // 增加额外的列，并确保它们在最前面
+        const addFields = removedDupeList.map(record => {
+          return {
+            ...record,
+            'Issue Status': '',
+            'Latest Action By': '',
+            'Action': '',
+            'Remark': '',
+            'Root Cause Category': ''
+          };
+        });
+        console.log("addFields: " , addFields);
+        // 应用 T2 规则
+        const finalRecords = applyExpiryRules(addFields);
+        console.log("finalRecords, "+ finalRecords);
+        return {
+          success: true,
+          data: finalRecords,
+        };
+      
     } catch (error) {
       console.error("获取Salesforce数据失败:", error);
       return { success: false, error: error.message };
