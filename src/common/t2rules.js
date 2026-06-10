@@ -345,7 +345,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
 
     if(orderNature === 'Termination'){
       if(fulfillStatus === 'In Progress'){
-        if (fulfillRemark.includes("ORDER ABORT")) {
+        if (fulfillRemark != null && typeof fulfillRemark == "string" && fulfillRemark.includes("ORDER ABORT")) {
           log(`[Remark Rule 3.0.0] NORA updated "ORDER ABORT" -> NORA`);
           return "NORA";
         }
