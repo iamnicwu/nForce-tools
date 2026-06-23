@@ -433,7 +433,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         log(`[Remark Rule 3.7.6] OPG updated \"CANCELLED\" -> ${orderType}`);
         return orderType;
       }
-      else if (lob != 'Fixedline'){
+      else if (lob != 'Fixedline' && fulfillStatus === "Inventory Fallout"){
         log(`[Remark Rule 3.7.7] PCD order + fulfillment status = Inventory Fallout + ${lob}`);
         return "BAND";
       }
