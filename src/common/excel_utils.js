@@ -45,6 +45,9 @@ export function exportToExcel(data, fileNamePrefix, sheetName) {
  * @param {Function} onSuccess - 成功回调，参数为订单号数组
  * @param {Function} onError - 失败回调，参数为错误信息
  */
+// 文件大小限制：50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 export function processExcelFile(file, onSuccess, onError) {
   if (!file) return;
   console.log("123");
@@ -53,6 +56,15 @@ export function processExcelFile(file, onSuccess, onError) {
     showNotification("请上传Excel文件(.xlsx)", "error");
     loadingLog("文件格式不正确，请上传Excel文件(.xlsx)", "error");
     if (onError) onError("文件格式不正确");
+    return;
+  }
+
+  // 检查文件大小
+  if (file.size > MAX_FILE_SIZE) {
+    console.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
+    showNotification(`文件过大，最大支持 50MB`, "error");
+    loadingLog(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`, "error");
+    if (onError) onError("文件过大");
     return;
   }
 
@@ -252,6 +264,14 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
     console.error("文件格式不正确，请上传Excel文件(.xlsx)");
     showNotification("请上传Excel文件(.xlsx)", "error");
     if (onError) onError("文件格式不正确");
+    return;
+  }
+
+  // 检查文件大小
+  if (file.size > MAX_FILE_SIZE) {
+    console.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
+    showNotification(`文件过大，最大支持 50MB`, "error");
+    if (onError) onError("文件过大");
     return;
   }
 
@@ -790,6 +810,14 @@ export function processAnalysisExcelFile(file, onSuccess, onError) {
     console.error("文件格式不正确，请上传Excel文件(.xlsx)");
     showNotification("请上传Excel文件(.xlsx)", "error");
     if (onError) onError("文件格式不正确");
+    return;
+  }
+
+  // 检查文件大小
+  if (file.size > MAX_FILE_SIZE) {
+    console.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
+    showNotification(`文件过大，最大支持 50MB`, "error");
+    if (onError) onError("文件过大");
     return;
   }
 

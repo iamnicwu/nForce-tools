@@ -9,7 +9,7 @@
     --text-secondary: rgba(0, 0, 0, 0.45);
     --text-light: rgba(0, 0, 0, 0.25);
     --bg-primary: #ffffff;
-    --bg-secondary: #f0f2f5; /* Ant Design 默认背景色 */
+    --bg-secondary: #edf1f7; /* 页面底色：轻蓝灰，避免全白单调 */
     --border-color: #d9d9d9;
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -63,278 +63,10 @@ body {
 /* 管理后台样式 */
 .admin-body {
     display: flex;
+    flex-direction: column;
     height: 100vh;
     overflow: hidden;
     background-color: var(--bg-secondary);
-}
-
-/* 侧边栏样式 - 适配 Ant Design Layout.Sider 风格 */
-.sidebar {
-    width: 200px; /* Ant Design 默认宽度 */
-    background-color: #001529; /* Ant Design Dark Sider */
-    border-right: none;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
-    transition: all 0.2s;
-    color: rgba(255, 255, 255, 0.65);
-    position: relative;
-    z-index: 10;
-}
-
-.sidebar.collapsed {
-    width: 80px;
-}
-
-.sidebar-header {
-    padding: 0 16px; /* Ant Design padding */
-    height: 64px;
-    line-height: 64px;
-    background: #002140; /* Logo区域背景 */
-    display: flex;
-    justify-content: center; /* 居中 */
-    align-items: center;
-    overflow: hidden;
-    transition: all 0.3s;
-}
-
-.sidebar-logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    overflow: hidden;
-    text-decoration: none;
-    width: 100%;
-}
-
-.sidebar-logo-img {
-    width: 32px;
-    height: 32px;
-    flex-shrink: 0;
-}
-
-.sidebar-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #fff;
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    opacity: 1;
-    transition: opacity 0.3s;
-}
-
-.sidebar.collapsed .sidebar-title {
-    opacity: 0;
-    display: none;
-}
-
-.sidebar.collapsed .sidebar-logo {
-    justify-content: center;
-}
-
-/* 移除旧的 toggle 样式 */
-.sidebar-toggle {
-    display: none;
-}
-
-.sidebar-toggle-mobile {
-    background: none;
-    border: none;
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.65);
-    cursor: pointer;
-    padding: 0 10px;
-    transition: color 0.3s;
-}
-
-.sidebar-toggle-mobile:hover {
-    color: #fff;
-    background-color: transparent;
-}
-
-/* 侧边栏导航 */
-.sidebar-nav {
-    flex: 1;
-    padding: 0; /* Ant Menu 没有 padding */
-    overflow-y: auto;
-    overflow-x: hidden;
-}
-
-.nav-section {
-    margin-bottom: 0;
-    /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
-}
-
-.nav-section-title {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.45);
-    margin: 0;
-    padding: 16px 16px 8px 24px; /* 匹配 Ant Menu padding */
-    line-height: 1.5;
-    transition: all 0.3s;
-}
-
-.sidebar.collapsed .nav-section-title {
-    display: none;
-}
-
-.nav-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.nav-item {
-    margin-bottom: 0; /* Ant Menu item 紧凑 */
-}
-
-.nav-link {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 16px 0 24px;
-    height: 40px;
-    line-height: 40px;
-    color: rgba(255, 255, 255, 0.65);
-    text-decoration: none;
-    transition: all 0.3s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin: 4px 0; /* Ant Menu item margin */
-    cursor: pointer;
-}
-
-.nav-link:hover {
-    color: #fff;
-}
-
-.nav-link.active {
-    background-color: #1890ff;
-    color: #fff;
-}
-
-.nav-icon {
-    font-size: 14px; /* Ant Design icon size */
-    width: 14px;
-    min-width: 14px;
-    text-align: center;
-    transition: font-size 0.15s cubic-bezier(0.215, 0.61, 0.355, 1), margin 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
-}
-
-.nav-text {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    opacity: 1;
-    transition: opacity 0.3s cubic-bezier(0.645, 0.045, 0.355, 1), width 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
-}
-
-/* 菜单徽章样式 */
-.nav-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 6px;
-    font-size: 12px;
-    font-weight: 500;
-    color: #fff;
-    background-color: #ff4d4f;
-    border-radius: 10px;
-    margin-left: auto;
-}
-
-/* 折叠状态隐藏徽章 */
-.sidebar.collapsed .nav-badge {
-    display: none;
-}
-
-/* 子菜单样式 */
-.nav-submenu {
-    display: none;
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    background-color: #000c17; /* Ant Design Dark SubMenu bg */
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.45);
-}
-
-.nav-item.open .nav-submenu {
-    display: block;
-}
-
-.nav-submenu .nav-link {
-    padding-left: 48px; /* 增加缩进 */
-    margin: 0;
-    height: 40px;
-    line-height: 40px;
-}
-
-.submenu-arrow {
-    margin-left: auto;
-    transition: transform 0.3s;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-.nav-item.open .submenu-arrow {
-    transform: rotate(90deg);
-}
-
-/* 折叠状态 */
-.sidebar.collapsed .nav-link {
-    padding: 0 calc(50% - 7px); /* Center icon */
-    justify-content: center;
-}
-
-.sidebar.collapsed .nav-text,
-.sidebar.collapsed .submenu-arrow {
-    opacity: 0;
-    display: none;
-}
-
-.sidebar.collapsed .nav-submenu {
-    display: none !important; /* 简单处理：折叠时隐藏子菜单 */
-}
-
-/* Trigger 样式 */
-.sidebar-trigger {
-    height: 48px;
-    line-height: 48px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s;
-    background: #002140;
-    color: #fff;
-    font-size: 16px;
-}
-
-.sidebar-trigger:hover {
-    background: #1890ff;
-}
-
-.sidebar.collapsed .sidebar-trigger i {
-    transform: rotate(180deg);
-}
-
-/* 侧边栏页脚 */
-.sidebar-footer {
-    display: block;
-    padding: 12px 16px;
-    background-color: #002140;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-copyright {
-    margin: 0;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.45);
-    text-align: center;
 }
 
 /* 主内容区 */
@@ -361,10 +93,6 @@ body {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.sidebar-toggle-mobile {
-    display: none;
 }
 
 .page-title {
@@ -394,6 +122,32 @@ body {
     font-weight: 600;
     font-size: 12px;
     padding: 2px 8px;
+}
+
+/* 顶部导航「设置」入口 */
+.nav-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: #f2f5fa;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.nav-settings-btn i,
+.nav-settings-btn .svg-icon {
+    color: var(--primary-color);
+}
+
+.nav-settings-btn:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: #e9f1ff;
 }
 
 /* 自定义 Ant Design 标签颜色 */
@@ -740,24 +494,6 @@ body {
 }
 
 @media (max-width: 768px) {
-    .sidebar {
-        position: fixed;
-        left: -250px;
-        top: 0;
-        height: 100vh;
-        z-index: 1000;
-        transition: left 0.3s ease-in-out;
-        box-shadow: 2px 0 8px rgba(0,0,0,0.15);
-    }
-    
-    .sidebar.open {
-        left: 0;
-    }
-    
-    .sidebar-toggle-mobile {
-        display: block;
-    }
-    
     .page-title {
         font-size: 1rem;
     }
@@ -972,7 +708,7 @@ body {
     animation: pulse 0.3s ease-in-out;
 }
 
-/* 步骤section样式 */
+/* 步骤section样式 - 详情页内一次只显示一个 */
 .step-section {
     display: none;
     transition: all 0.3s ease-in-out;
@@ -1344,133 +1080,6 @@ body {
     box-shadow: var(--shadow-sm);
     overflow-x: auto;
     border: 1px solid var(--border-color);
-}
-
-/* 横向菜单栏样式 - 与侧边栏风格一致 */
-.horizontal-tabs {
-    display: none;
-    background: linear-gradient(180deg, #001529 0%, #002140 100%);
-    border-bottom: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    padding: 0 24px;
-    overflow-x: auto;
-    min-height: 56px;
-}
-
-.horizontal-tabs::-webkit-scrollbar {
-    height: 4px;
-}
-
-.horizontal-tabs::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.horizontal-tabs::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 2px;
-}
-
-.horizontal-tabs-content {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 56px;
-    padding: 10px 0;
-}
-
-.horizontal-tab-module-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    font-weight: 600;
-    color: #fff;
-    font-size: 13px;
-    white-space: nowrap;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    margin-right: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-.horizontal-tab-module-title i {
-    color: #1890ff;
-    font-size: 14px;
-}
-
-.horizontal-tab-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    color: rgba(255, 255, 255, 0.65);
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-    border-radius: 6px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    cursor: pointer;
-    position: relative;
-    background: transparent;
-}
-
-.horizontal-tab-item:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.horizontal-tab-item.active {
-    color: #fff;
-    background: #1890ff;
-    font-weight: 600;
-    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.3);
-}
-
-.horizontal-tab-item.active::after {
-    content: '';
-    position: absolute;
-    bottom: 2px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 20px;
-    height: 2px;
-    background: #fff;
-    border-radius: 1px;
-}
-
-.horizontal-tab-item i {
-    font-size: 13px;
-    color: inherit;
-}
-
-/* 横向菜单分隔线样式 */
-.horizontal-tab-divider {
-    width: 1px;
-    height: 24px;
-    background: rgba(255, 255, 255, 0.25);
-    margin: 0 8px;
-    flex-shrink: 0;
-}
-
-/* 调整主内容区域和页面内容的样式 */
-.main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.page-content {
-    flex: 1;
-    padding: 24px;
-    overflow-y: auto;
-    background-color: var(--bg-secondary);
-}
-
-/* 当横向菜单栏显示时，调整页面内容区域的padding-top */
-.horizontal-tabs:not([style*="display: none"]) + .page-content {
-    padding-top: 16px;
 }
 
 /* 表格容器样式 */
@@ -2116,5 +1725,741 @@ body {
         flex-direction: column;
         gap: 0.5rem;
         align-items: flex-start;
+    }
+}
+
+/* ===== App 图标式布局（v3.2） ===== */
+
+/* 顶栏 Logo */
+.top-nav-logo {
+    width: 32px;
+    height: 32px;
+}
+
+/* 未连接锁定状态 */
+.step-section.needs-connection {
+    opacity: 0.65;
+    pointer-events: none;
+}
+
+.step-section.needs-connection .ant-card-head-wrapper::after {
+    content: "需连接";
+    flex-shrink: 0;
+    font-size: 12px;
+    line-height: 20px;
+    padding: 0 8px;
+    border-radius: 4px;
+    background-color: #fafafa;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+/* ---------- 首页：配色与布局 ---------- */
+.launcher-view {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* 渐变主视觉 */
+.launcher-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 26px;
+    margin-bottom: 20px;
+    border-radius: 16px;
+    background: linear-gradient(120deg, #1677ff 0%, #4c5bd4 52%, #722ed1 100%);
+    box-shadow: 0 6px 18px rgba(22, 119, 255, 0.22);
+    color: #fff;
+}
+
+.launcher-hero-text {
+    min-width: 0;
+}
+
+.launcher-hero-title {
+    font-size: 21px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0 0 4px;
+}
+
+.launcher-hero-subtitle {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.86);
+    margin: 0;
+}
+
+/* 布局配置（作为「设置 → 布局配置」功能页，见 #section-20） */
+.layout-panel-tip {
+    margin: 0 0 10px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
+.layout-panel-tip code {
+    padding: 1px 5px;
+    margin: 0 2px;
+    font-size: 11px;
+    background: #f2f5fa;
+    border-radius: 4px;
+    color: #4c5bd4;
+}
+
+.layout-json-input {
+    width: 100%;
+    height: 320px;
+    padding: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: #fafbfd;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.layout-json-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: #fff;
+}
+
+.layout-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+/* 设置总览列表（#section-21，布局配置是其中一项） */
+.settings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 14px 16px;
+    text-align: left;
+    font-family: inherit;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.settings-row:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 14px rgba(22, 119, 255, 0.12);
+    transform: translateY(-1px);
+}
+
+.settings-row-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    font-size: 18px;
+    border-radius: 11px;
+    background: var(--row-tint, #e6f1fb);
+    color: var(--row-accent, #1677ff);
+}
+
+.settings-row-text {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-row-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-row-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.settings-row-arrow {
+    flex-shrink: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* Session 链接 / 连接信息（#section-22） */
+.session-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #ad6800;
+    background: #fffbe6;
+    border: 1px solid #ffe58f;
+    border-radius: 10px;
+}
+
+.session-warning .svg-icon,
+.session-warning i {
+    flex-shrink: 0;
+    margin-top: 2px;
+    font-size: 14px;
+    color: #faad14;
+}
+
+.kv-group {
+    margin-bottom: 18px;
+}
+
+.kv-group-title {
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.kv-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-primary);
+}
+
+.kv-row + .kv-row {
+    margin-top: -1px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+.kv-row:first-of-type {
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+.kv-label {
+    flex-shrink: 0;
+    width: 150px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.kv-value {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.kv-value.mono {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+}
+
+.kv-value[data-masked="1"] {
+    color: var(--text-secondary);
+    letter-spacing: 0.08em;
+}
+
+.kv-value.kv-empty {
+    color: var(--text-secondary);
+}
+
+.kv-actions {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.kv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text-primary);
+    background: #f2f5fa;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.kv-btn:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: #e9f1ff;
+}
+
+.kv-btn-primary {
+    color: var(--primary-color);
+    border-color: #91caff;
+    background: #e9f1ff;
+}
+
+.kv-empty-state {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.kv-empty-state .svg-icon,
+.kv-empty-state i {
+    font-size: 32px;
+    color: #bfbfbf;
+}
+
+.kv-empty-state p {
+    margin: 8px 0 0;
+    font-size: 13px;
+}
+
+.kv-empty-hint {
+    font-size: 12px;
+    color: #bfbfbf;
+}
+
+@media (max-width: 768px) {
+    .kv-row {
+        flex-wrap: wrap;
+    }
+
+    .kv-label {
+        width: 100%;
+    }
+}
+
+/* 常用功能区 */
+.favorites-section {
+    margin-bottom: 20px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #eef4ff 0%, #f7f0ff 100%);
+    border: 1px solid #dbe6ff;
+}
+
+.favorites-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.favorites-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fav-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* 常用功能区头部的「编辑 / 完成 / 恢复默认」按钮 */
+.fav-head-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #2b4acb;
+    background: #fff;
+    border: 1px solid rgba(76, 91, 212, 0.3);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fav-head-btn:hover {
+    background: #eef2ff;
+    border-color: #4c5bd4;
+}
+
+.fav-head-btn-primary {
+    color: #fff;
+    background: #4c5bd4;
+    border-color: #4c5bd4;
+}
+
+.fav-head-btn-primary:hover {
+    color: #fff;
+    background: #3b48b8;
+    border-color: #3b48b8;
+}
+
+.favorites-section.is-editing {
+    box-shadow: inset 0 0 0 2px rgba(76, 91, 212, 0.16);
+}
+
+.favorites-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 0 0 12px;
+}
+
+.favorites-hint b {
+    color: #4c5bd4;
+}
+
+/* 常用功能为空时的引导 */
+.favorites-empty {
+    padding: 20px 18px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px dashed rgba(76, 91, 212, 0.35);
+    border-radius: 12px;
+}
+
+.favorites-empty-star {
+    color: #faad14;
+    font-size: 15px;
+}
+
+.favorites-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2b4acb;
+}
+
+.favorites-title i {
+    color: #faad14;
+}
+
+.favorites-grid .tile {
+    border-color: rgba(76, 91, 212, 0.28);
+    box-shadow: 0 2px 8px rgba(76, 91, 212, 0.08);
+}
+
+/* 编辑态：磁贴不响应跳转，底部腾出位置放 ← → × */
+.favorites-grid .tile.is-editing {
+    padding-bottom: 42px;
+    cursor: default;
+}
+
+.favorites-grid .tile.is-editing:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* 功能分组 */
+.launcher-group {
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    background: var(--bg-primary);
+    border: 1px solid #e9ecf2;
+    border-left: 3px solid var(--group-accent, var(--primary-color));
+    border-radius: 14px;
+}
+
+.launcher-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.launcher-group-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--group-accent, var(--primary-color));
+    background: var(--group-tint, #e6f1fb);
+    border-radius: 999px;
+}
+
+.launcher-group-count {
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+/* 功能图标磁贴 */
+.tile {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    background: var(--bg-primary);
+    border: 1px solid #e9ecf2;
+    border-radius: 12px;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.tile:hover {
+    background: var(--tile-soft, #f7faff);
+    border-color: var(--tile-accent, var(--primary-color));
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(15, 35, 95, 0.1);
+}
+
+.tile.active {
+    border-color: var(--tile-accent, var(--primary-color));
+    background: var(--tile-soft, #f7faff);
+}
+
+.tile-icon {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    background: var(--tile-tint, #e6f1fb);
+    color: var(--tile-accent, var(--primary-color));
+}
+
+.tile-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.tile-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tile-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 磁贴外层：让「☆ 加入常用」按钮能放在 <a> 之外，避免可点击元素互相嵌套 */
+.tile-cell {
+    position: relative;
+    display: flex;
+    min-width: 0;
+}
+
+.tile-cell > .tile {
+    flex: 1;
+    min-width: 0;
+    /* 给右侧的 ☆ / ★ 按钮预留位置 */
+    padding-right: 36px;
+}
+
+.favorites-grid .tile-cell > .tile {
+    padding-right: 14px;
+}
+
+/* 卡片右下角的「加入 / 移出常用功能」星标 */
+.tile-fav-btn {
+    position: absolute;
+    top: 50%;
+    right: 9px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    font-size: 15px;
+    line-height: 1;
+    color: #c3c8d6;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    opacity: 0;
+    user-select: none;
+    transition: opacity 0.18s, color 0.18s, background 0.18s;
+}
+
+.tile-cell:hover .tile-fav-btn {
+    opacity: 1;
+}
+
+.tile-fav-btn:hover {
+    color: #faad14;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(15, 35, 95, 0.16);
+}
+
+.tile-fav-btn.is-on {
+    opacity: 1;
+    color: #faad14;
+}
+
+/* 常用功能区「编辑态」：← → 调序、× 移出 */
+.tile-edit-actions {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 9px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tile-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 24px;
+    font-size: 13px;
+    line-height: 1;
+    color: #2b4acb;
+    background: #fff;
+    border: 1px solid rgba(76, 91, 212, 0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s;
+}
+
+.tile-edit-btn:hover {
+    background: #eef2ff;
+    border-color: #4c5bd4;
+}
+
+.tile-edit-btn.is-disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.tile-edit-btn.is-disabled:hover {
+    background: #fff;
+    border-color: rgba(76, 91, 212, 0.3);
+}
+
+.tile-edit-remove {
+    margin-left: auto;
+    color: #d4380d;
+    border-color: rgba(212, 56, 13, 0.3);
+}
+
+.tile-edit-remove:hover {
+    background: #fff2e8;
+    border-color: #d4380d;
+}
+
+/* 锁图标：replaceIcons 会把 <i> 替换成 <svg>（类名丢失），
+   所以这里用外层包裹的 .tile-lock-wrap 做结构选择器 */
+.tile-lock-wrap > svg {
+    display: none;
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 13px;
+    height: 13px;
+    color: var(--text-light);
+}
+
+.tile.locked {
+    opacity: 0.55;
+}
+
+.tile.locked .tile-lock-wrap > svg {
+    display: block;
+}
+
+/* ---------- 详情页 ---------- */
+.detail-view {
+    max-width: 1280px;
+    margin: 0 auto;
+}
+
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border: 1px solid #e9ecf2;
+    border-radius: 12px;
+}
+
+.detail-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.detail-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+    .launcher-hero {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 18px;
+    }
+
+    .tile-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .tile-desc {
+        display: none;
+    }
+
+    .detail-title {
+        font-size: 15px;
+    }
+
+    .favorites-hint {
+        display: none;
+    }
+
+    /* 窄屏 / 触屏没有 hover，星标常显，否则用户找不到入口 */
+    .tile-fav-btn {
+        opacity: 1;
     }
 }

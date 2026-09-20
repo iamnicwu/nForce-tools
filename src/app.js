@@ -2,7 +2,11 @@ import { sfConn } from "./biz/sf_service.js";
 import { showNotification } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
 import { appState } from "./biz/state.js";
-import { submenuConfig } from "./biz/ui_config.js";
+import { OneDriveWorkbookService } from "./common/onedrive_service.js";
+import { initUiLayout, renderLauncher } from "./biz/ui_layout.js";
+// marked 以 ES Module 形式发布（不挂在 window 上），这里显式引入并暴露给
+// ui.js 的 renderMarkdownContent 使用，否则 README / LTS 概览会退化成简易解析器
+import { marked } from "./lib/js/marked.min.js";
 import {
   showSection,
   updateUIState,
@@ -11,8 +15,8 @@ import {
   moveRuleTo,
   renderMarkdownContent,
   showBulkJobsLoading,
-  updateHorizontalTabs,
-  initHorizontalTabsEvents,
+  initLauncher,
+  goHome,
   renderScheduleJobsData
 } from "./biz/ui.js";
 import { 
@@ -73,6 +77,29 @@ async function validateStoredSession() {
   }
 }
 
+// 服务端明确判定「会话无效」的错误码
+const AUTH_FAILURE_CODES = [
+  "INVALID_SESSION_ID",
+  "SESSION_EXPIRED",
+  "INVALID_LOGIN",
+  "INVALID_GRANT",
+  "UNAUTHORIZED"
+];
+
+/**
+ * 判断最近一次连接失败是否属于「会话真的失效」。
+ * 只有这种情况才允许把界面降级为未连接；
+ * 如果是 CSP / 网络 / 代理导致的请求被拦截（没有 errorCode / 状态码），
+ * 必须保留已连接状态，否则就会出现「刚找到 session 进入主页却显示未连接」。
+ */
+function isSessionAuthFailure() {
+  const err = sfConn.lastError;
+  if (!err) return false;
+  if (err.statusCode === 401 || err.statusCode === 403) return true;
+  if (!err.errorCode) return false;
+  return AUTH_FAILURE_CODES.includes(err.errorCode.toUpperCase());
+}
+
 // 初始化应用
 async function initApp() {
   // 从 chrome.storage.local 读取登录状态
@@ -86,13 +113,12 @@ async function initApp() {
     ]);
     
     // 如果有保存的登录状态，初始化 appState
+    // 注意：Session 信息仅保存在 chrome.storage.local 中，不再使用 localStorage
     if (stored.sf_session_id) {
       appState.session_id = stored.sf_session_id;
-      localStorage.setItem('sf_session_id', stored.sf_session_id);
     }
     if (stored.sf_instance_url) {
       appState.instance_url = stored.sf_instance_url;
-      localStorage.setItem('sf_instance_url', stored.sf_instance_url);
     }
     if (stored.is_connected === true) {
       appState.is_connected = true;
@@ -107,53 +133,102 @@ async function initApp() {
     console.warn('从 chrome.storage.local 读取登录状态失败:', e);
   }
 
-  // 如果之前已连接，验证 session 是否仍然有效
-  if (appState.is_connected && appState.session_id && appState.instance_url) {
-    const isValid = await validateStoredSession();
-    if (!isValid) {
-      console.log('保存的 session 已过期或无效，打开登录页面...');
-      // 清除过期的 session 信息
-      appState.is_connected = false;
-      appState.session_id = null;
-      appState.instance_url = null;
-      localStorage.removeItem('sf_session_id');
-      localStorage.removeItem('sf_instance_url');
-      await chrome.storage.local.remove(['sf_session_id', 'sf_instance_url', 'is_connected', 'userInfo', 'orgInfo']);
-      
-      // 打开 login.html 页面重新登录
-      chrome.tabs.create({
-        url: chrome.runtime.getURL('login.html')
-      });
-      return; // 停止初始化，等待用户重新登录
-    }
-  }
-
+  // ===== 先把界面完整渲染出来：任何情况下都不能白屏 =====
   // 替换图标
   replaceIcons();
 
   // 初始化午餐功能
   initLunch();
-  
-  // 初始化横向菜单栏点击事件
-  initHorizontalTabsEvents();
 
-  // 更新UI状态
+  // 初始化首页交互（返回按钮 / Esc 快捷键）
+  initLauncher();
+
+  // 更新UI状态（连接徽标 / 统计数据 / 锁定状态）
   updateUIState();
 
-  // 显示初始section - autoDetectSession 内部已经处理了多session选择页面的显示
-  // 如果 available_sessions 存在且长度大于1，说明正在显示选择页面，不需要再次调用 showSection
-  // 如果 is_connected 为 true，说明已经自动连接成功
-  // 否则显示默认的连接设置页面
-  if (!appState.available_sessions || appState.available_sessions.length <= 1) {
-    if (appState.is_connected) {
-      showSection(5); // 连接成功后默认显示 LTS 概览
-    } else {
-      showSection(1); // 默认显示连接设置
-    }
+  // 渲染功能中心首页（布局由 rules/ui_layout.json 驱动）
+  try {
+    await initUiLayout();
+  } catch (e) {
+    console.error("首页布局渲染失败:", e);
+    showNotification(`首页布局渲染失败：${e.message || e}`, "error");
+    renderLauncherErrorHint(e);
+  }
+
+  // 默认停留在「功能中心」首页，由用户点击图标进入具体功能
+  goHome();
+  if (!appState.is_connected) {
+    showNotification("尚未连接 Salesforce，请点击「连接设置」完成连接", "warning");
   }
 
   // 绑定事件
   bindEvents();
+
+  // ===== 最后再尝试恢复 Salesforce 会话：只做「尽力而为」，绝不影响首页展示 =====
+  // 重要：这里失败时不能把界面降级为「未连接」。
+  // 校验请求可能被 CSP / 网络 / 代理拦截，但会话本身是好的；
+  // 之前直接降级（甚至清空 session 并跳登录页）会造成
+  // 「找到 session 进入主页却显示未连接、且没有功能图标」的问题。
+  if (appState.is_connected && appState.session_id && appState.instance_url) {
+    const isValid = await validateStoredSession();
+    if (isValid) {
+      console.log("已恢复 Salesforce 会话");
+      // 补齐用户 / 组织信息（失败不影响功能）
+      try {
+        await fetchUserInfo();
+        await fetchOrgInfo();
+      } catch (e) {
+        console.warn("获取用户/组织信息失败（不影响功能）:", e);
+      }
+      updateUIState();
+      try {
+        await renderLauncher();
+      } catch (e) {
+        console.warn('刷新首页图标状态失败:', e);
+      }
+    } else if (isSessionAuthFailure()) {
+      // 只有服务端明确返回「会话无效」时才降级
+      console.warn("Salesforce 会话已失效，降级为未连接状态（保留 session ID 便于重试）");
+      appState.is_connected = false;
+      // 只清除连接标记，保留 session_id / instance_url 以便用户直接重试
+      try {
+        await chrome.storage.local.set({ is_connected: false });
+      } catch (e) {
+        console.warn('更新连接状态失败:', e);
+      }
+      updateUIState();
+      try {
+        await renderLauncher();
+      } catch (e) {
+        console.warn('刷新首页图标状态失败:', e);
+      }
+      showNotification("Salesforce 会话已失效，请在「连接设置」重新测试连接或重新登录", "error");
+    } else {
+      // 无法判定会话失效（多为请求被拦截）：保留已连接状态，仅记录日志
+      console.warn("启动时会话校验未通过（可能是网络/CSP 限制），保留已连接状态。原因:", sfConn.lastError);
+    }
+  }
+}
+
+// 首页渲染失败时的兜底提示，避免出现空白页面
+function renderLauncherErrorHint(error) {
+  const host = document.getElementById("launcher-groups");
+  if (!host) return;
+  host.innerHTML = `
+    <section class="launcher-group">
+      <div class="launcher-group-head">
+        <span class="launcher-group-chip">首页加载失败</span>
+      </div>
+      <p style="margin:0 0 12px; color: var(--text-secondary); font-size: 13px;">
+        功能列表加载失败：${error && error.message ? error.message : error}。
+        可点击上方「布局配置」检查 JSON，或点「恢复默认」后重试。
+      </p>
+      <button type="button" class="ant-btn ant-btn-primary" id="launcher-retry-btn">重新加载首页</button>
+    </section>`;
+  const retry = document.getElementById("launcher-retry-btn");
+  if (retry) {
+    retry.addEventListener("click", () => window.location.reload());
+  }
 }
 
 // 绑定事件
@@ -167,7 +242,6 @@ function bindEvents() {
 
       if (sessionId) {
         appState.session_id = sessionId;
-        localStorage.setItem("sf_session_id", sessionId);
         updateUIState();
         showNotification("Session ID已成功保存");
 
@@ -218,9 +292,10 @@ function bindEvents() {
 
           // 更新UI状态
           updateUIState();
-          
-          showSection(5);
-          showNotification("Salesforce连接成功");
+
+          // 连接成功后回到功能中心，所有功能图标解锁
+          goHome();
+          showNotification("Salesforce连接成功，可点击图标进入功能");
         } else {
           // 连接失败
           throw new Error("Connection failed");
@@ -433,75 +508,21 @@ function bindEvents() {
 
 
 
-  // 设置和版本信息等普通菜单项点击事件
-  const stepLinks = document.querySelectorAll(".step-link");
-  console.log('[DEBUG] Found', stepLinks.length, 'step-link elements');
-  stepLinks.forEach((link) => {
-    link.addEventListener("click", function (e) {
-      e.preventDefault();
-      const sectionNumber = parseInt(this.getAttribute("data-step"));
-      const linkText = this.textContent.trim();
-      console.log(`[DEBUG] step-link clicked: data-step=${sectionNumber}, text="${linkText}"`);
-      // showSection 内部已有连接状态检查
-      showSection(sectionNumber);
-    });
-  });
+  // （v3.2 App 图标式布局）首页图标点击已改为事件委托，见 ui_layout.js 的 initUiLayout
+  // 侧边栏 / 横向菜单事件已移除
 
-  // 主菜单点击事件 - 点击侧边栏主菜单时更新横向菜单栏
-  // 使用更宽松的选择器，确保所有带 data-module 的 nav-item 都能被选中
-  const navItems = document.querySelectorAll(".nav-item[data-module]");
-  console.log('[DEBUG] Found', navItems.length, 'nav-items with data-module');
-  navItems.forEach((item) => {
-    item.addEventListener("click", function (e) {
-      const module = this.getAttribute("data-module");
-      console.log(`[DEBUG] nav-item clicked, module="${module}"`);
-      if (module && submenuConfig[module]) {
-        // 更新横向菜单栏
-        console.log(`[DEBUG] Calling updateHorizontalTabs("${module}")`);
-        updateHorizontalTabs(module);
-        
-        // 如果点击的是 Tools 模块，默认选中 Bulk 操作 (step 15)
-        if (module === 'tools') {
-          console.log(`[DEBUG] Tools clicked, defaulting to Bulk Operations (step 15)`);
-          showSection(15);
-        }
-      } else {
-        console.log(`[DEBUG] module "${module}" not in submenuConfig or is null`);
-      }
-    });
-  });
-
-  // 子菜单切换事件 - 处理 Tools 等可展开的子菜单
-  const submenuToggles = document.querySelectorAll(".submenu-toggle");
-  submenuToggles.forEach((toggle) => {
-    toggle.addEventListener("click", function (e) {
-      e.preventDefault();
-      const parentItem = this.closest(".nav-item");
-      if (parentItem) {
-        parentItem.classList.toggle("open");
-        
-        // 如果是子菜单展开，也更新横向菜单栏
-        const module = parentItem.getAttribute("data-module");
-        if (module && parentItem.classList.contains("open") && submenuConfig[module]) {
-          updateHorizontalTabs(module);
-        }
-      }
-    });
-  });
-  
-  // 侧边栏切换事件
-  const sidebarTrigger = document.getElementById("sidebar-trigger");
-  if (sidebarTrigger) {
-    sidebarTrigger.addEventListener("click", function () {
-      const sidebar = document.querySelector(".sidebar");
-      if (sidebar) {
-        sidebar.classList.toggle("collapsed");
-        // 触发 resize 事件以调整 Handsontable
-        window.dispatchEvent(new Event('resize'));
-      }
-    });
+  // 顶部导航「设置」入口 + 设置页内的各项跳转
+  const settingsNavBtn = document.getElementById("settings-nav-btn");
+  if (settingsNavBtn) {
+    settingsNavBtn.addEventListener("click", () => showSection(21));
   }
-  
+  document.querySelectorAll(".settings-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const target = parseInt(row.getAttribute("data-goto"), 10);
+      if (target) showSection(target);
+    });
+  });
+
   // 导出当日数据按钮点击事件
   const exportDailyDataBtn = document.getElementById("export-daily-data");
   if (exportDailyDataBtn) {
@@ -645,17 +666,7 @@ function bindEvents() {
     });
   }
   
-  // 移动端侧边栏切换事件
-  const sidebarToggleMobile = document.getElementById("sidebar-toggle-mobile");
-  if (sidebarToggleMobile) {
-    sidebarToggleMobile.addEventListener("click", function () {
-      const sidebar = document.querySelector(".sidebar");
-      if (sidebar) {
-        sidebar.classList.toggle("open");
-      }
-    });
-  }
-  
+  // （v3.1）移动端侧边栏已移除
 
 
   // 拖拽事件处理
@@ -1120,13 +1131,100 @@ function bindEvents() {
   }
 }
 
+// 把 marked 暴露到 window，供 ui.js / 其他模块的 Markdown 渲染使用
+if (marked) {
+  window.marked = marked;
+}
+
 // 页面加载完成后初始化
-document.addEventListener("DOMContentLoaded", initApp);
+// 使用 readyState 判断，避免脚本在 DOMContentLoaded 之后才执行时永不初始化
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
 
 // 将 schedule job 相关函数暴露到 window 对象，供 HTML 按钮 onclick 调用
 window.deleteScheduleJob = deleteScheduleJob;
 window.pauseScheduleJob = pauseScheduleJob;
 window.resumeScheduleJob = resumeScheduleJob;
+
+/**
+ * 测试 OneDrive Workbook 连接
+ * 从 Chrome Storage 自动读取 graph_token 和 workbook 配置进行测试
+ *
+ * 使用方法：在 Chrome DevTools Console 中直接输入
+ *   await testOneDrive()
+ *
+ * 配置 Token 和 Workbook：
+ *   await chrome.storage.local.set({
+ *     graph_token: 'your-microsoft-graph-access-token',
+ *     onedrive_workbook_path: 'Documents/data.xlsx'
+ *   });
+ */
+window.testOneDrive = async function() {
+  console.log('===== OneDrive Workbook 连接测试 =====');
+
+  const service = new OneDriveWorkbookService();
+  const result = await service.testConnection();
+
+  console.log('测试结果:', result);
+
+  if (result.success) {
+    showNotification(result.message, 'success');
+    console.log('Worksheet 列表:', result.worksheets.map(w => w.name));
+  } else {
+    showNotification(result.message, 'error');
+    console.error('测试失败详情:', result);
+  }
+
+  return result;
+};
+
+/**
+ * 列出 OneDrive 最近 Excel 文件（帮助查找有效的 Workbook ID）
+ * 用法：await listOneDriveFiles()
+ */
+window.listOneDriveFiles = async function(limit = 10) {
+  const service = new OneDriveWorkbookService();
+  try {
+    const files = await service.listRecentFiles(limit);
+    const excelFiles = files.filter(f => f.name.endsWith('.xlsx'));
+    console.log('===== OneDrive 最近 Excel 文件 =====');
+    excelFiles.forEach((f, i) => {
+      console.log(`${i + 1}. ${f.name}`);
+      console.log(`   ID: ${f.id}`);
+      console.log(`   URL: ${f.webUrl}`);
+    });
+    return excelFiles;
+  } catch (error) {
+    console.error('列出文件失败:', error);
+    showNotification('列出文件失败: ' + error.message, 'error');
+    return [];
+  }
+};
+
+/**
+ * 按文件名搜索 OneDrive Workbook
+ * 用法：await searchOneDriveWorkbook('data.xlsx')
+ */
+window.searchOneDriveWorkbook = async function(fileName) {
+  const service = new OneDriveWorkbookService();
+  try {
+    const files = await service.searchWorkbookByName(fileName);
+    console.log(`===== 搜索 "${fileName}" 结果 =====`);
+    files.forEach((f, i) => {
+      console.log(`${i + 1}. ${f.name}`);
+      console.log(`   ID: ${f.id}`);
+      console.log(`   Path: ${f.path}`);
+    });
+    return files;
+  } catch (error) {
+    console.error('搜索失败:', error);
+    showNotification('搜索失败: ' + error.message, 'error');
+    return [];
+  }
+};
 
 // 全局错误处理：捕获未处理的Promise拒绝
 window.addEventListener('unhandledrejection', function(event) {

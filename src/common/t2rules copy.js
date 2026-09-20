@@ -433,7 +433,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         log(`[Remark Rule 3.7.6] OPG updated \"CANCELLED\" -> ${orderType}`);
         return orderType;
       }
-      else if (lob != 'Fixedline' && fulfillStatus === "Inventory Fallout"){
+      else if (lob !== "Fixedline"){
         log(`[Remark Rule 3.7.7] PCD order + fulfillment status = Inventory Fallout + ${lob}`);
         return "BAND";
       }
@@ -604,6 +604,12 @@ function evaluateRemarkRules(ctx, m1Criteria) {
     }
 
     if (remark.includes("INVENTORY FALLOUT") || remark.includes("Fallout Reason: Cable assignment issue")) {
+
+      if(remark.includes("ADDRESS CHECK IN PROGRESS")){
+        log(`[Remark Rule 7.3.0] INVENTORY FALLOUT + ADDRESS CHECK IN PROGRESS -> F&S`);
+        return "F&S";
+      }
+
       if (remark.includes("OPS")) {
         log(`[Remark Rule 7.3.1] INVENTORY FALLOUT + OPS -> OPS`);
         return "OPS";
