@@ -1,10 +1,8 @@
 import { appState } from "./state.js";
 import { Icons } from "../common/icons.js";
 import { renderTable } from "../common/table_utils.js";
-import { showNotification, parseMarkdown } from "../common/utils.js";
-import { 
-    submenuConfig, 
-    sectionToModule, 
+import { showNotification, parseMarkdown, escapeHtml } from "../common/utils.js";
+import {
     DEFAULT_LUNCH_PLACES,
     DEFAULT_STATS,
     DEFAULT_USER_INFO,
@@ -85,102 +83,142 @@ let analysisBarChart = null;
 let t2AnalysisChartStatus = null;
 let t2AnalysisChartFulfillment = null;
 
-// 显示对应section
+// Resize 事件监听器引用，用于防止重复注册
+let analysisResizeListener = null;
+let t2AnalysisResizeListener = null;
+
+// 显示对应功能（v3.2：从首页进入详情页，一次只显示一个功能）
 export function showSection(sectionNumber) {
   console.log(`[DEBUG] showSection called with sectionNumber=${sectionNumber}, is_connected=${appState.is_connected}`);
-  
-  // 如果是连接设置 (section 1)，重定向到版本信息 (section 6)
-  if (sectionNumber === 1) {
-    sectionNumber = 6;
-  }
-  
-  // 隐藏所有section
-  const sections = document.querySelectorAll(".step-section");
-  if (sections && sections.length > 0) {
-    sections.forEach((section) => {
-      section.style.display = "none";
-    });
+
+  // 未连接时仅允许访问连接设置(1)、版本信息(6)、布局配置(20)与设置(21)
+  if (!appState.is_connected && ![1, 6, 20, 21].includes(sectionNumber)) {
+    console.log(`[DEBUG] Section ${sectionNumber} requires connection`);
+    showNotification("请先完成 Salesforce 连接", "warning");
+    showSection(1);
+    return;
   }
 
-  // 显示目标section，根据连接状态决定可访问性
-  if (appState.is_connected) {
-    // 连接成功后，可以访问所有功能section
-    const targetSection = document.getElementById(`section-${sectionNumber}`);
-    console.log(`[DEBUG] Looking for section-${sectionNumber}, found:`, !!targetSection);
-    if (targetSection) {
-      targetSection.style.display = "block";
-      targetSection.style.opacity = "1";
-      targetSection.style.pointerEvents = "auto";
-      console.log(`[DEBUG] Section ${sectionNumber} display set to block, opacity=1, pointerEvents=auto`);
-    } else {
-      console.error(`[ERROR] Section ${sectionNumber} not found`);
-    }
-  } else {
-    // 未连接时，只能访问版本信息和多session选择页面
-    console.log(`[DEBUG] Not connected, only allowing section 0 or 6`);
-    if (sectionNumber === 0 || sectionNumber === 6) {
-      const targetSection = document.getElementById(`section-${sectionNumber}`);
-      if (targetSection) {
-        targetSection.style.display = "block";
-        console.log(`[DEBUG] Section ${sectionNumber} (allowed when not connected) display set to block`);
-      } else {
-        console.error(`[ERROR] Section ${sectionNumber} not found`);
-      }
-    } else {
-      console.log(`[DEBUG] Section ${sectionNumber} is NOT allowed when not connected`);
-    }
+  const target = document.getElementById(`section-${sectionNumber}`);
+  if (!target) {
+    console.error(`[ERROR] Section ${sectionNumber} not found`);
+    return;
   }
 
-  // 如果是版本信息页面 (section 6)，加载 README
+  // 懒加载：版本信息 README
   if (sectionNumber === 6 && !appState.readme_loaded) {
-    console.log(`[DEBUG] Loading README for section 6`);
     loadReadme();
   }
 
-  // 如果是 LTS 页面 (section 5)，加载 LTS Summary
+  // 懒加载：LTS Summary
   if (sectionNumber === 5 && !appState.lts_summary_loaded) {
-    console.log(`[DEBUG] Loading LTS Summary for section 5, lts_summary_loaded=${appState.lts_summary_loaded}`);
     loadLTSSummary();
-  } else if (sectionNumber === 5 && appState.lts_summary_loaded) {
-    console.log(`[DEBUG] LTS Summary already loaded, skipping`);
   }
 
-  // 如果是 Schedule Jobs 页面 (section 19)，加载定时任务列表
+  // 懒加载：Schedule Jobs 列表
   if (sectionNumber === 19) {
-    console.log(`[DEBUG] Loading Schedule Jobs for section 19`);
     import('./logic.js').then((logicModule) => {
       if (logicModule.loadScheduleJobs) {
         logicModule.loadScheduleJobs();
       }
     });
   }
-  
-  // 更新侧边栏激活链接
-  updateActiveSidebarLink(sectionNumber);
-  
-  // 更新横向菜单栏
-  updateHorizontalTabsFromSection(sectionNumber);
+
+  // 懒加载：Session 链接 / 连接信息（每次进入都按当前连接状态重新渲染）
+  if (sectionNumber === 22) {
+    import('./session_info.js').then((m) => {
+      if (m.renderSessionInfo) m.renderSessionInfo();
+    });
+  }
+
+  // 切换视图：隐藏首页，显示该功能
+  document.querySelectorAll(".step-section").forEach((section) => {
+    section.classList.remove("active");
+  });
+  target.classList.add("active");
+  enterDetailView(sectionNumber);
 }
 
-// 更新侧边栏激活链接
+// 进入详情页
+function enterDetailView(sectionNumber) {
+  const launcher = document.getElementById("launcher-view");
+  const detail = document.getElementById("detail-view");
+  if (launcher) launcher.style.display = "none";
+  if (detail) detail.style.display = "block";
+
+  // 标题取自该功能卡片的头部标题
+  const target = document.getElementById(`section-${sectionNumber}`);
+  const cardTitle = target ? target.querySelector(".ant-card-head-title") : null;
+  const titleEl = document.getElementById("detail-title");
+  if (titleEl) {
+    titleEl.textContent = cardTitle ? cardTitle.textContent.trim() : "功能";
+  }
+
+  setActiveTile(sectionNumber);
+
+  const pageContent = document.querySelector(".page-content");
+  if (pageContent) pageContent.scrollTop = 0;
+
+  // 通知各模块「已进入某个功能」，布局配置页借此刷新 JSON 编辑器内容
+  window.dispatchEvent(new CustomEvent("nforce:section", { detail: { section: sectionNumber } }));
+}
+
+// 返回首页（功能图标列表）
+export function goHome() {
+  const launcher = document.getElementById("launcher-view");
+  const detail = document.getElementById("detail-view");
+  if (detail) detail.style.display = "none";
+  if (launcher) launcher.style.display = "block";
+
+  document.querySelectorAll(".step-section").forEach((section) => {
+    section.classList.remove("active");
+  });
+  setActiveTile(null);
+
+  const pageContent = document.querySelector(".page-content");
+  if (pageContent) pageContent.scrollTop = 0;
+
+  // 通知首页（用于退出「常用功能」编辑态等收尾动作）
+  window.dispatchEvent(new CustomEvent("nforce:home"));
+}
+
+// 高亮当前进入的功能图标
+function setActiveTile(sectionNumber) {
+  document.querySelectorAll(".tile").forEach((tile) => {
+    const step = parseInt(tile.getAttribute("data-step"));
+    tile.classList.toggle("active", sectionNumber !== null && step === sectionNumber);
+  });
+}
+
+// 兼容旧调用名
 export function updateActiveSidebarLink(stepNumber) {
-  const stepLinks = document.querySelectorAll(".step-link");
-  stepLinks.forEach(link => {
-    const linkStep = parseInt(link.getAttribute("data-step"));
-    if (linkStep === stepNumber) {
-      link.classList.add("active");
-      
-      // 如果链接在子菜单中，展开父菜单
-      const parentSubmenu = link.closest(".nav-submenu");
-      if (parentSubmenu) {
-        const parentItem = parentSubmenu.closest(".nav-item");
-        if (parentItem) {
-          parentItem.classList.add("open");
-        }
-      }
-    } else {
-      link.classList.remove("active");
+  setActiveTile(stepNumber);
+}
+
+// 初始化首页：返回按钮 + 快捷键
+export function initLauncher() {
+  const backBtn = document.getElementById("detail-back");
+  if (backBtn) {
+    backBtn.addEventListener("click", goHome);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const detail = document.getElementById("detail-view");
+    const inDetail = detail && detail.style.display !== "none";
+    if (e.key === "Escape" && inDetail) {
+      goHome();
     }
+  });
+}
+
+// 根据连接状态切换功能section与首页图标的锁定样式
+function refreshSectionLocks() {
+  if (!appState.is_connected) return;
+  document.querySelectorAll(".step-section.needs-connection").forEach((section) => {
+    section.classList.remove("needs-connection");
+  });
+  document.querySelectorAll(".tile.locked").forEach((tile) => {
+    tile.classList.remove("locked");
   });
 }
 
@@ -239,23 +277,11 @@ export function updateUIState() {
       connectionStatusBadge.className = "ant-tag ant-tag-success";
     }
     
-    // 显示统计卡片区域
-    const statsSection = document.getElementById("stats-section");
-    if (statsSection) {
-      statsSection.style.display = "block";
-    }
-    
     // 更新统计数据
     updateStats();
 
-    // 连接成功后，启用所有功能section
-    for (let i = 2; i <= 18; i++) {
-      const section = document.getElementById(`section-${i}`);
-      if (section) {
-        section.style.opacity = "1";
-        section.style.pointerEvents = "auto";
-      }
-    }
+    // 连接成功后，解锁所有功能section
+    refreshSectionLocks();
   } else {
     // 未连接时，更新连接状态徽章为未连接
     const connectionStatusBadge = document.getElementById("connection-status-badge");
@@ -263,28 +289,9 @@ export function updateUIState() {
       connectionStatusBadge.textContent = "未连接";
       connectionStatusBadge.className = "ant-tag";
     }
-    
-    // 隐藏统计卡片区域
-    const statsSection = document.getElementById("stats-section");
-    if (statsSection) {
-      statsSection.style.display = "none";
-    }
-    
-    // 未连接时，禁用所有功能section
-    for (let i = 2; i <= 18; i++) {
-      const section = document.getElementById(`section-${i}`);
-      if (section) {
-        section.style.opacity = "0.5";
-        section.style.pointerEvents = "none";
-      }
-    }
-  }
 
-  // 版本信息始终启用
-  const section6 = document.getElementById("section-6");
-  if (section6) {
-    section6.style.opacity = "1";
-    section6.style.pointerEvents = "auto";
+    // 未连接时，锁定所有功能section
+    refreshSectionLocks();
   }
 
   // 更新当日数据状态
@@ -852,7 +859,7 @@ export function renderT2Data(data) {
 
 // 渲染T-4分析数据
 export function renderT2AnalysisData(data) {
-  t2AnalysisDataHot = renderTable("t2-analysis-data-container","t2-analysis-data-table" , data, hotConfig);
+  t2AnalysisDataHot = renderTable("t2-analysis-data-container","t2-analysis-data-table" , data, t2AnalysisDataHot);
 }
 
 // 渲染T-4分析图表
@@ -1024,11 +1031,15 @@ export function renderT2AnalysisCharts(data) {
   };
   t2AnalysisChartFulfillment.setOption(fulfillmentOption);
 
-  // 监听窗口大小变化
-  window.addEventListener('resize', function() {
+  // 监听窗口大小变化 - 先移除旧的监听器，防止重复注册
+  if (t2AnalysisResizeListener) {
+    window.removeEventListener('resize', t2AnalysisResizeListener);
+  }
+  t2AnalysisResizeListener = function() {
     if (t2AnalysisChartStatus) t2AnalysisChartStatus.resize();
     if (t2AnalysisChartFulfillment) t2AnalysisChartFulfillment.resize();
-  });
+  };
+  window.addEventListener('resize', t2AnalysisResizeListener);
 }
 
 // 渲染最新数据
@@ -1327,11 +1338,15 @@ export function renderAnalysisChart(data) {
     }
   }
   
-  // 监听窗口大小变化
-  window.addEventListener('resize', function() {
+  // 监听窗口大小变化 - 先移除旧的监听器，防止重复注册
+  if (analysisResizeListener) {
+    window.removeEventListener('resize', analysisResizeListener);
+  }
+  analysisResizeListener = function() {
     if (analysisChart) analysisChart.resize();
     if (analysisBarChart) analysisBarChart.resize();
-  });
+  };
+  window.addEventListener('resize', analysisResizeListener);
 }
 
 // 更新文件上传UI
@@ -1349,15 +1364,22 @@ export function updateFileUploadUI(file) {
   // 更新文本显示文件名
   const textContainer = fileUpload.querySelector(".ant-upload-text");
   if (textContainer) {
-    textContainer.innerHTML = `
-      <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">${file.name}</div>
-      <div style="font-size: 0.875rem; color: var(--text-secondary);">
-        ${(file.size / 1024).toFixed(2)} KB
-      </div>
-      <div style="font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
-        点击或拖拽更换文件
-      </div>
-    `;
+    textContainer.innerHTML = '';
+    const nameDiv = document.createElement('div');
+    nameDiv.style.cssText = 'font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;';
+    nameDiv.textContent = file.name;
+    
+    const sizeDiv = document.createElement('div');
+    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
+    
+    const hintDiv = document.createElement('div');
+    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.textContent = '点击或拖拽更换文件';
+    
+    textContainer.appendChild(nameDiv);
+    textContainer.appendChild(sizeDiv);
+    textContainer.appendChild(hintDiv);
   }
   
   // 添加已选择样式
@@ -1379,15 +1401,22 @@ export function updateVVIPFileUploadUI(file) {
   // 更新文本显示文件名
   const textContainer = fileUpload.querySelector(".ant-upload-text");
   if (textContainer) {
-    textContainer.innerHTML = `
-      <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">${file.name}</div>
-      <div style="font-size: 0.875rem; color: var(--text-secondary);">
-        ${(file.size / 1024).toFixed(2)} KB
-      </div>
-      <div style="font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
-        点击或拖拽更换文件
-      </div>
-    `;
+    textContainer.innerHTML = '';
+    const nameDiv = document.createElement('div');
+    nameDiv.style.cssText = 'font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;';
+    nameDiv.textContent = file.name;
+    
+    const sizeDiv = document.createElement('div');
+    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
+    
+    const hintDiv = document.createElement('div');
+    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.textContent = '点击或拖拽更换文件';
+    
+    textContainer.appendChild(nameDiv);
+    textContainer.appendChild(sizeDiv);
+    textContainer.appendChild(hintDiv);
   }
   
   // 添加已选择样式
@@ -1409,15 +1438,22 @@ export function updateT2AnalysisFileUploadUI(file) {
   // 更新文本显示文件名
   const textContainer = fileUpload.querySelector(".ant-upload-text");
   if (textContainer) {
-    textContainer.innerHTML = `
-      <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">${file.name}</div>
-      <div style="font-size: 0.875rem; color: var(--text-secondary);">
-        ${(file.size / 1024).toFixed(2)} KB
-      </div>
-      <div style="font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
-        点击或拖拽更换文件
-      </div>
-    `;
+    textContainer.innerHTML = '';
+    const nameDiv = document.createElement('div');
+    nameDiv.style.cssText = 'font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;';
+    nameDiv.textContent = file.name;
+    
+    const sizeDiv = document.createElement('div');
+    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
+    
+    const hintDiv = document.createElement('div');
+    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.textContent = '点击或拖拽更换文件';
+    
+    textContainer.appendChild(nameDiv);
+    textContainer.appendChild(sizeDiv);
+    textContainer.appendChild(hintDiv);
   }
   
   // 添加已选择样式
@@ -1438,15 +1474,22 @@ export function updateT2RulesFileUploadUI(file) {
   // 更新文本显示文件名
   const textContainer = fileUpload.querySelector(".ant-upload-text");
   if (textContainer) {
-    textContainer.innerHTML = `
-      <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">${file.name}</div>
-      <div style="font-size: 0.875rem; color: var(--text-secondary);">
-        ${(file.size / 1024).toFixed(2)} KB
-      </div>
-      <div style="font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
-        点击或拖拽更换文件
-      </div>
-    `;
+    textContainer.innerHTML = '';
+    const nameDiv = document.createElement('div');
+    nameDiv.style.cssText = 'font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;';
+    nameDiv.textContent = file.name;
+    
+    const sizeDiv = document.createElement('div');
+    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
+    
+    const hintDiv = document.createElement('div');
+    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.textContent = '点击或拖拽更换文件';
+    
+    textContainer.appendChild(nameDiv);
+    textContainer.appendChild(sizeDiv);
+    textContainer.appendChild(hintDiv);
   }
   
   // 添加已选择样式
@@ -1794,17 +1837,22 @@ export function renderMarkdownContent(container, markdownText) {
   let html;
   // 使用 marked 库解析 Markdown (如果可用)
   if (window.marked) {
-    // 配置 marked 选项
+    // 配置 marked 选项 - 安全设置
     marked.setOptions({
       gfm: true, // 启用 GitHub Flavored Markdown
       breaks: true, // 启用换行符转 <br>
-      headerIds: true, // 启用标题 ID
+      headerIds: false, // 禁用标题 ID，防止 ID 冲突
       mangle: false // 禁用标题 ID 混淆
     });
     html = marked.parse(markdownText);
   } else {
     // 降级使用简单的解析器
     html = parseMarkdown(markdownText);
+  }
+  
+  // 使用 DOMPurify 或手动清理 HTML（如果可用）
+  if (window.DOMPurify) {
+    html = window.DOMPurify.sanitize(html);
   }
   
   container.innerHTML = html;
@@ -2314,26 +2362,54 @@ export function showLunchResult(place) {
     container.style.transform = 'scale(0.8)';
     
     setTimeout(() => {
-        let content = '';
+        container.innerHTML = '';
+        
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'text-align: center; padding: 30px; background: #fffbe6; border: 2px dashed #ffe58f; border-radius: 8px; box-shadow: 0 4px 12px rgba(250, 173, 20, 0.15);';
+        
+        const emoji = document.createElement('div');
+        emoji.style.cssText = 'font-size: 48px; margin-bottom: 20px;';
+        emoji.textContent = '🎉';
+        
+        const label = document.createElement('div');
+        label.style.cssText = 'margin-bottom: 10px; color: #8c8c8c;';
+        label.textContent = '今天中午吃这个：';
+        
+        wrapper.appendChild(emoji);
+        wrapper.appendChild(label);
+        
         if (typeof place === 'string') {
-            content = `<h2 style="color: #faad14; margin: 0; font-size: 28px;">${place}</h2>`;
+            const h2 = document.createElement('h2');
+            h2.style.cssText = 'color: #faad14; margin: 0; font-size: 28px;';
+            h2.textContent = place;
+            wrapper.appendChild(h2);
         } else if (typeof place === 'object') {
-            content = `<h2 style="color: #faad14; margin: 0; font-size: 28px;">${place.name || '未知地点'}</h2>`;
+            const h2 = document.createElement('h2');
+            h2.style.cssText = 'color: #faad14; margin: 0; font-size: 28px;';
+            h2.textContent = place.name || '未知地点';
+            wrapper.appendChild(h2);
+            
             if (place.description) {
-                content += `<p style="color: #666; margin-top: 10px; font-size: 16px;">${place.description}</p>`;
+                const p = document.createElement('p');
+                p.style.cssText = 'color: #666; margin-top: 10px; font-size: 16px;';
+                p.textContent = place.description;
+                wrapper.appendChild(p);
             }
+            
             if (place.tags && Array.isArray(place.tags)) {
-                content += `<div style="margin-top: 10px;">${place.tags.map(tag => `<span class="ant-tag ant-tag-orange">${tag}</span>`).join('')}</div>`;
+                const tagsDiv = document.createElement('div');
+                tagsDiv.style.cssText = 'margin-top: 10px;';
+                place.tags.forEach(tag => {
+                    const span = document.createElement('span');
+                    span.className = 'ant-tag ant-tag-orange';
+                    span.textContent = tag;
+                    tagsDiv.appendChild(span);
+                });
+                wrapper.appendChild(tagsDiv);
             }
         }
-
-        container.innerHTML = `
-            <div style="text-align: center; padding: 30px; background: #fffbe6; border: 2px dashed #ffe58f; border-radius: 8px; box-shadow: 0 4px 12px rgba(250, 173, 20, 0.15);">
-                <div style="font-size: 48px; margin-bottom: 20px;">🎉</div>
-                <div style="margin-bottom: 10px; color: #8c8c8c;">今天中午吃这个：</div>
-                ${content}
-            </div>
-        `;
+        
+        container.appendChild(wrapper);
         
         container.style.display = 'block';
         
@@ -2429,96 +2505,7 @@ export function showBulkJobsLoading() {
     if (emptyEl) emptyEl.style.display = "none";
 }
 
-// 更新横向菜单栏
-export function updateHorizontalTabs(activeModule) {
-    const tabsContainer = document.getElementById("horizontal-tabs");
-    const tabsContent = document.getElementById("horizontal-tabs-content");
-    
-    if (!tabsContainer || !tabsContent) return;
-    
-    // 如果没有传入活跃模块，检查当前显示的section
-    if (!activeModule) {
-        const visibleSection = document.querySelector('.step-section[style*="display: block"]');
-        if (visibleSection) {
-            const sectionId = visibleSection.id;
-            // 从 sectionId (如 'section-5') 中提取数字部分
-            const sectionNumber = parseInt(sectionId.replace('section-', ''), 10);
-            // 使用导入的 sectionToModule 映射
-            activeModule = sectionToModule[sectionNumber];
-        }
-    }
-    
-    // 清空内容
-    tabsContent.innerHTML = '';
-    
-    // 如果没有活跃模块，隐藏横向菜单栏
-    if (!activeModule || !submenuConfig[activeModule]) {
-        tabsContainer.style.display = 'none';
-        return;
-    }
-    
-    // 显示横向菜单栏
-    tabsContainer.style.display = 'block';
-    
-    const config = submenuConfig[activeModule];
-    
-    // 添加模块标题
-    const moduleTitle = document.createElement("div");
-    moduleTitle.className = 'horizontal-tab-module-title';
-    moduleTitle.innerHTML = `<i class="${config.icon}"></i> ${config.title}`;
-    tabsContent.appendChild(moduleTitle);
-    
-    // 添加子菜单项
-    config.items.forEach(item => {
-        // 处理分隔线
-        if (item.divider) {
-            const divider = document.createElement("div");
-            divider.className = 'horizontal-tab-divider';
-            tabsContent.appendChild(divider);
-            return;
-        }
-        
-        const tabItem = document.createElement("a");
-        tabItem.href = "#";
-        tabItem.className = 'horizontal-tab-item';
-        tabItem.dataset.step = item.step;
-        tabItem.innerHTML = `<i class="${item.icon}"></i> ${item.text}`;
-        
-        // 检查是否为当前激活的section
-        const currentSection = document.getElementById(`section-${item.step}`);
-        // console.log("currentSection", currentSection);
-        if (currentSection && currentSection.style.display === 'block') {
-          // console.log("currentSection1: ", currentSection);
-            tabItem.classList.add('active');
-        }
-        
-        tabsContent.appendChild(tabItem);
-        // console.log("tabsContent: ", tabsContent);
-    });
-}
-
-// 根据section number更新横向菜单栏
-function updateHorizontalTabsFromSection(sectionNumber) {
-    // 使用导入的 sectionToModule 映射
-    const activeModule = sectionToModule[sectionNumber];
-    updateHorizontalTabs(activeModule);
-}
-
-// 初始化横向菜单栏点击事件
-export function initHorizontalTabsEvents() {
-    const tabsContent = document.getElementById("horizontal-tabs-content");
-    if (!tabsContent) return;
-    
-    tabsContent.addEventListener("click", (e) => {
-        const tabItem = e.target.closest(".horizontal-tab-item");
-        if (tabItem) {
-            const step = parseInt(tabItem.dataset.step);
-            if (step && typeof showSection === 'function') {
-                showSection(step);
-            }
-        }
-    });
-}
+// （v3.1 单页布局）横向菜单栏已移除，分区导航见 showSection / initModuleGroups
 
 // 渲染 Schedule Jobs 列表
 export function renderScheduleJobsData(alarms) {

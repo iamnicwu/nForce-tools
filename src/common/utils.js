@@ -69,27 +69,44 @@ export function showNotification(message, type = "success") {
     icon = Icons.exclamationCircle;
   }
 
-  // Ant Design Alert 结构
-  notification.innerHTML = `
-        <span role="img" aria-label="${type}" class="anticon anticon-${type} ant-alert-icon">
-            ${icon}
-        </span>
-        <div class="ant-alert-content">
-            <div class="ant-alert-message">${type.charAt(0).toUpperCase() + type.slice(1)}</div>
-            <div class="ant-alert-description">${message}</div>
-        </div>
-        <button type="button" class="ant-alert-close-icon" tabindex="0">
-            <span role="img" aria-label="close" class="anticon anticon-close">
-                ${Icons.times}
-            </span>
-        </button>
-    `;
+  // Ant Design Alert 结构 - 使用 DOM API 构建，防止 XSS
+  const iconSpan = document.createElement('span');
+  iconSpan.setAttribute('role', 'img');
+  iconSpan.setAttribute('aria-label', type);
+  iconSpan.className = `anticon anticon-${type} ant-alert-icon`;
+  iconSpan.innerHTML = icon;
+
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'ant-alert-message';
+  messageDiv.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+
+  const descriptionDiv = document.createElement('div');
+  descriptionDiv.className = 'ant-alert-description';
+  descriptionDiv.textContent = message;
+
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'ant-alert-content';
+  contentDiv.appendChild(messageDiv);
+  contentDiv.appendChild(descriptionDiv);
+
+  const closeIconSpan = document.createElement('span');
+  closeIconSpan.setAttribute('role', 'img');
+  closeIconSpan.setAttribute('aria-label', 'close');
+  closeIconSpan.className = 'anticon anticon-close';
+  closeIconSpan.innerHTML = Icons.times;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'ant-alert-close-icon';
+  closeBtn.setAttribute('tabindex', '0');
+  closeBtn.appendChild(closeIconSpan);
+  closeBtn.onclick = () => closeNotification(key);
+
+  notification.appendChild(iconSpan);
+  notification.appendChild(contentDiv);
+  notification.appendChild(closeBtn);
     
-  // 绑定关闭按钮事件
-  const closeBtn = notification.querySelector('.ant-alert-close-icon');
-  if (closeBtn) {
-      closeBtn.onclick = () => closeNotification(key);
-  }
+  // 关闭按钮事件已在上面绑定
 
   container.appendChild(notification);
 
@@ -161,6 +178,19 @@ export function loadingLog(message, type = 'info') {
     } else {
         console.log(`[Loading] ${message}`);
     }
+}
+
+/**
+ * HTML 转义函数，防止 XSS 攻击
+ * @param {string} text - 需要转义的文本
+ * @returns {string} 转义后的安全文本
+ */
+export function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  const str = String(text);
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 /**
@@ -300,12 +330,21 @@ export function parseMarkdown(markdown) {
  */
 export function parseInline(text) {
   if (!text) return '';
+  // 先转义 HTML 特殊字符，防止 XSS
+  text = escapeHtml(text);
   // 粗体
   text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   // 代码
   text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // 链接
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  // 链接 - 只允许 http/https 协议，防止 javascript: 伪协议攻击
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, label, url) => {
+    const safeUrl = url.trim();
+    // 只允许 http/https 协议
+    if (!safeUrl.match(/^https?:\/\//i)) {
+      return `<span>${label}</span>`;
+    }
+    return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  });
   return text;
 }
 

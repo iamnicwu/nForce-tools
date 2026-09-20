@@ -79,9 +79,92 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   });
 });
 
+const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0';
+
+// 版本标记，确认 background.js 已更新
+console.log('nForce background.js loaded - v3.3.0-onedrive');
+
+// 处理 OneDrive API 请求（代理 content script 的 fetch，避免宿主页 CSP 限制）
+async function handleOneDriveApiRequest(request, sendResponse) {
+  try {
+    const { url, method, body, headers } = request;
+
+    const options = {
+      method: method || 'GET',
+      headers: headers || {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    };
+
+    if (body && (method === 'POST' || method === 'PATCH')) {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, options);
+
+    // 处理错误状态码
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      sendResponse({
+        success: false,
+        error: `Graph API error (${response.status}): ${errorData.error?.message || response.statusText}`
+      });
+      return;
+    }
+
+    // 204 No Content
+    if (response.status === 204) {
+      sendResponse({ success: true, data: null });
+      return;
+    }
+
+    const data = await response.json();
+    sendResponse({ success: true, data });
+  } catch (error) {
+    console.error('OneDrive API proxy request failed:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+// 验证消息来源是否合法
+function isValidSender(sender) {
+  // 允许扩展内部页面
+  if (!sender.url && !sender.tab) return false;
+  const validPrefixes = [
+    'chrome-extension://',
+    'moz-extension://',
+    'edge://extension/'
+  ];
+  // 扩展内部页面（popup, options 等）
+  if (sender.url && validPrefixes.some(prefix => sender.url.startsWith(prefix))) {
+    return true;
+  }
+  // Content script：通过 sender.tab.id 确认是本扩展注入的
+  if (sender.tab && sender.tab.id) {
+    return true;
+  }
+  return false;
+}
+
 // 监听来自前端的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Background received message:', message.type);
+  
+  // 验证消息来源
+  if (!isValidSender(sender)) {
+    console.warn('Rejected message from invalid sender:', sender.url);
+    sendResponse({ success: false, error: 'Invalid sender' });
+    return false;
+  }
+  
+  // 验证消息类型
+  const validMessageTypes = ['CREATE_ALARM', 'GET_ALARMS', 'PAUSE_ALARM', 'RESUME_ALARM', 'DELETE_ALARM', 'CLEAR_ALL_ALARMS', 'ONEDRIVE_API_REQUEST'];
+  if (!message.type || !validMessageTypes.includes(message.type)) {
+    console.warn('Unknown or invalid message type:', message.type);
+    sendResponse({ success: false, error: 'Invalid message type' });
+    return false;
+  }
   
   switch (message.type) {
     case 'CREATE_ALARM':
@@ -107,7 +190,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'CLEAR_ALL_ALARMS':
       handleClearAllAlarms(sendResponse);
       return true; // 异步响应
-      
+
+    case 'ONEDRIVE_API_REQUEST':
+      handleOneDriveApiRequest(message.request, sendResponse);
+      return true; // 异步响应
+
     default:
       console.log('Unknown message type:', message.type);
       return false;

@@ -13,88 +13,16 @@
     <script src="lib/js/jszip.min.js"></script>
     <!-- 引入 Ant Design CSS -->
     <link rel="stylesheet" href="lib/css/antd.min.css">
-    <!-- 引入 Marked -->
-    <script src="lib/js/marked.min.js" type="module"></script>
     <!-- 引入自定义CSS -->
     <link rel="stylesheet" href="lib/css/main.css">
 </head>
 <body class="admin-body">
-    <!-- 侧边栏 -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="sidebar-logo">
-                <img src="icons/icon-48.png" alt="Logo" class="sidebar-logo-img">
-                <h1 class="sidebar-title">nForce Tools</h1>
-            </div>
-        </div>
-        
-        <nav class="sidebar-nav">
-            <div class="nav-section">
-                <h3 class="nav-section-title">模块</h3>
-                <ul class="nav-list">
-                    <li class="nav-item" data-module="lts">
-                        <a href="#" class="nav-link step-link" data-step="5">
-                            <i class="fas fa-cubes nav-icon"></i>
-                            <span class="nav-text">LTS</span>
-                        </a>
-                    </li>
-                    <li class="nav-item" data-module="ott">
-                        <a href="#" class="nav-link step-link" data-step="7">
-                            <i class="fas fa-tv nav-icon"></i>
-                            <span class="nav-text">OTT</span>
-                        </a>
-                    </li>
-                    <li class="nav-item" data-module="pcd">
-                        <a href="#" class="nav-link step-link" data-step="8">
-                            <i class="fas fa-laptop-code nav-icon"></i>
-                            <span class="nav-text">PCD</span>
-                        </a>
-                    </li>
-                    <li class="nav-item" data-module="cvp7">
-                        <a href="#" class="nav-link step-link" data-step="11">
-                            <i class="fas fa-plug nav-icon"></i>
-                            <span class="nav-text">CVP7</span>
-                        </a>
-                    </li>
-                    <li class="nav-item" data-module="tools">
-                        <a href="#" class="nav-link">
-                            <i class="fas fa-check-circle nav-icon"></i>
-                            <span class="nav-text">Tools</span>
-                        </a>
-                    </li>
-                    <li class="nav-item" data-module="misc">
-                        <a href="#" class="nav-link step-link" data-step="14">
-                            <i class="fas fa-ellipsis-h nav-icon"></i>
-                            <span class="nav-text">Misc</span>
-                        </a>
-                    </li>
-                    <li class="nav-item" data-module="settings">
-                        <a href="#" class="nav-link step-link" data-step="6">
-                            <i class="fas fa-cog nav-icon"></i>
-                            <span class="nav-text">Settings</span>
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </nav>
-        
-        <div class="sidebar-trigger" id="sidebar-trigger">
-            <i class="fas fa-outdent"></i>
-        </div>
-
-        <div class="sidebar-footer">
-            <p class="sidebar-copyright">nForce Tools v3.0 © 2026</p>
-        </div>
-    </aside>
-    
     <!-- 主内容区 -->
     <div class="main-content">
         <!-- 顶部导航栏 -->
         <header class="top-nav">
             <div class="top-nav-left">
-                <button class="sidebar-toggle-mobile" id="sidebar-toggle-mobile">
-                    <i class="fas fa-bars"></i>
-                </button>
+                <img src="icons/icon-32.png" alt="Logo" class="top-nav-logo">
                 <h1 class="page-title">nForce Tools</h1>
             </div>
             
@@ -107,6 +35,12 @@
                 <div class="env-indicator" id="env-indicator" style="display: none;">
                     <span id="env-badge" class="ant-tag"></span>
                 </div>
+
+                <!-- 设置入口：全局可见。布局配置等设置项都在这个页面里 -->
+                <button type="button" class="nav-settings-btn" id="settings-nav-btn" title="设置">
+                    <i class="fas fa-cog"></i>
+                    <span>设置</span>
+                </button>
                 
                 <!-- 用户头像和信息 -->
                 <div class="user-profile">
@@ -148,76 +82,42 @@
             </div>
         </header>
         
-        <!-- 横向菜单栏 -->
-        <div class="horizontal-tabs" id="horizontal-tabs">
-            <div class="horizontal-tabs-content" id="horizontal-tabs-content">
-                <!-- 动态生成子菜单项 -->
-            </div>
-        </div>
-        
         <!-- 页面内容 -->
         <main class="page-content">
-            <!-- 多 Session 选择页面 -->
-            <div id="section-0" class="ant-card ant-card-bordered step-section" style="display: none;">
-                <div class="ant-card-head">
-                    <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">选择登录环境</div>
-                    </div>
-                </div>
-                <div class="ant-card-body">
-                    <div style="max-width: 700px; margin: 0 auto;">
-                        <div style="text-align: center; margin-bottom: 2rem;">
-                            <div style="width: 80px; height: 80px; background: #e6f7ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
-                                <i class="fas fa-users" style="font-size: 32px; color: #1890ff;"></i>
-                            </div>
-                            <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem;">检测到多个 Salesforce 环境</h3>
-                            <div style="color: var(--text-secondary);">
-                                <p>您在浏览器中打开了多个 Salesforce 环境，请选择要登录的环境：</p>
-                            </div>
-                        </div>
-                        
-                        <!-- Session 列表容器 -->
-                        <div id="multi-session-list" style="margin-top: 1.5rem;">
-                            <!-- 动态生成 session 卡片 -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 显示通知消息 -->
             <div id="notification-container"></div>
-            
-            <!-- 统计卡片区域 - 连接成功后显示 -->
-            <div class="stats-section" id="stats-section" style="display: none;">
-                <!-- ECharts 图表区域 -->
-                <div id="analysis-charts-container" style="display: none;">
-                    <div class="charts-row">
-                        <div class="ant-card ant-card-bordered chart-card">
-                            <div class="ant-card-head">
-                                <div class="ant-card-head-title">数据透视</div>
-                            </div>
-                            <div class="ant-card-body">
-                                <div id="analysis-chart-main" style="width: 100%; height: 400px;"></div>
-                            </div>
-                        </div>
-                        <div class="ant-card ant-card-bordered chart-card">
-                            <div class="ant-card-head">
-                                <div class="ant-card-head-title">Issue 分布</div>
-                            </div>
-                            <div class="ant-card-body">
-                                <div id="analysis-chart-bar" style="width: 100%; height: 400px;"></div>
-                            </div>
-                        </div>
+
+            <!-- ========== 首页：功能图标列表（由 rules/ui_layout.json 驱动） ========== -->
+            <section class="launcher-view" id="launcher-view">
+                <div class="launcher-hero">
+                    <div class="launcher-hero-text">
+                        <h2 class="launcher-hero-title" id="launcher-hero-title">功能中心</h2>
+                        <p class="launcher-hero-subtitle" id="launcher-hero-subtitle">点击图标进入对应功能</p>
                     </div>
                 </div>
-            </div>
-            
+
+                <!-- 常用功能（有序列表，顺序完全由用户自己决定） -->
+                <div id="favorites-host"></div>
+
+                <!-- 其余功能分组（由布局配置渲染） -->
+                <div id="launcher-groups"></div>
+            </section>
+
+            <!-- ========== 详情页：单个功能 ========== -->
+            <section class="detail-view" id="detail-view" style="display: none;">
+                <div class="detail-header">
+                    <button type="button" class="ant-btn detail-back" id="detail-back">
+                        <i class="fas fa-arrow-left"></i>
+                        <span>返回</span>
+                    </button>
+                    <span class="detail-title" id="detail-title">功能</span>
+                </div>
+                <div class="detail-body">
             <!-- 连接设置卡片 -->
             <div id="section-1" class="ant-card ant-card-bordered step-section">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">连接设置</div>
-                        <div class="ant-card-extra"><span id="session-id-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
+                        <div class="ant-card-extra"><span id="session-id-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
@@ -288,13 +188,35 @@
                     </div>
                 </div>
             </div>
-            
+            <!-- Session 链接卡片（连接与环境分组）：展示插件实际使用的 Salesforce 连接信息，可一键复制 -->
+            <div id="section-22" class="unified-card ant-card ant-card-bordered step-section theme-lts needs-connection">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Session 链接</div>
+                        <div class="ant-card-extra">
+                            <button type="button" class="ant-btn ant-btn-primary" id="session-info-copy-all">复制全部</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="session-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>以下内容包含 Salesforce Session ID，等同账号登录凭证：请勿截图外传或粘贴到不可信的地方。Session 失效后需要重新连接。</span>
+                    </div>
+                    <div id="session-info-list" class="session-info-list">
+                        <div class="kv-empty-state">
+                            <i class="fas fa-link"></i>
+                            <p>正在读取 Session 信息...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <!-- 获取当日数据卡片 -->
-            <div id="section-2" class="unified-card ant-card ant-card-bordered step-section theme-lts" style="display: none;">
+            <div id="section-2" class="unified-card ant-card ant-card-bordered step-section theme-lts needs-connection">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">获取当日数据</div>
-                        <div class="ant-card-extra"><span id="daily-data-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
+                        <div class="ant-card-extra"><span id="daily-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
@@ -370,9 +292,8 @@
                     </div>
                 </div>
             </div>
-            
             <!-- 获取报表数据卡片 -->
-            <div id="section-3" class="unified-card ant-card ant-card-bordered step-section theme-lts" style="display: none;">
+            <div id="section-3" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-lts">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">获取报表数据</div>
@@ -426,13 +347,12 @@
                     </div>
                 </div>
             </div>
-            
             <!-- 上传文件卡片 -->
-            <div id="section-4" class="unified-card ant-card ant-card-bordered step-section theme-lts" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-4" class="unified-card ant-card ant-card-bordered step-section theme-lts needs-connection">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">根据上传文件获取数据</div>
-                        <div class="ant-card-extra"><span id="file-upload-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
+                        <div class="ant-card-extra"><span id="file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
@@ -493,9 +413,8 @@
                     </div>
                 </div>
             </div>
-
             <!-- LTS 模块卡片 -->
-            <div id="section-5" class="unified-card ant-card ant-card-bordered step-section theme-lts" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-5" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-lts">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">LTS 模块</div>
@@ -503,7 +422,7 @@
                             <label for="lts-md-upload" class="ant-btn ant-btn-sm" style="cursor: pointer;">
                                 <i class="fas fa-upload"></i> 更新概览
                             </label>
-                            <input type="file" id="lts-md-upload" accept=".md" style="display: none;">
+                            <input type="file" id="lts-md-upload" accept=".md">
                         </div>
                     </div>
                 </div>
@@ -516,13 +435,194 @@
                     </div>
                 </div>
             </div>
+            <!-- 版本信息卡片 -->
+            <div id="section-6" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">项目说明</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div id="readme-content" class="markdown-body" style="padding: 1rem; line-height: 1.6;">
+                        <div style="text-align: center; color: var(--text-secondary);">
+                            <i class="fas fa-spinner fa-spin"></i> 正在加载说明文档...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 布局配置卡片（属于「设置」分组，从首页 设置 → 布局配置 进入） -->
+            <div id="section-20" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">布局配置</div>
+                        <div class="ant-card-extra"><span class="ant-tag">JSON 驱动</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <p class="layout-panel-tip">
+                        调整 <code>groups[].tiles</code> 的顺序即可改变图标排列；删除某个 tile 即可隐藏该功能入口。
+                        <code>favorites.ids</code> 是首页「常用功能」的默认列表，<b>顺序即展示顺序，不随使用频率变化</b>；
+                        平时直接点功能卡片右下角的 <b>☆</b> 加入、点常用功能区右上角「编辑」调序即可，改动会自动保存在本地。
+                    </p>
+                    <textarea class="layout-json-input" id="layout-json-input" spellcheck="false"></textarea>
+                    <div class="layout-actions">
+                        <button type="button" class="ant-btn ant-btn-primary" id="layout-apply-btn">应用并保存</button>
+                        <button type="button" class="ant-btn" id="layout-export-btn">导出 JSON</button>
+                        <button type="button" class="ant-btn" id="layout-reset-btn">恢复默认</button>
+                    </div>
+                </div>
+            </div>
+            <!-- 设置总览卡片（顶部导航齿轮进入；布局配置是其中一项） -->
+            <div id="section-21" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">设置</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="settings-list">
+                        <button type="button" class="settings-row" data-goto="1">
+                            <span class="settings-row-icon" style="--row-accent:#1677ff; --row-tint:#e6f1fb;">
+                                <i class="fas fa-plug"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">连接设置</span>
+                                <span class="settings-row-desc">Session ID · 连接测试 · 用户与组织信息</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                        <button type="button" class="settings-row" data-goto="20">
+                            <span class="settings-row-icon" style="--row-accent:#722ed1; --row-tint:#f0eafc;">
+                                <i class="fas fa-th-large"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">布局配置</span>
+                                <span class="settings-row-desc">首页图标排列 · 分组 · 常用功能默认列表</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                        <button type="button" class="settings-row" data-goto="6">
+                            <span class="settings-row-icon" style="--row-accent:#8c8c8c; --row-tint:#f0f0f2;">
+                                <i class="fas fa-info-circle"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">项目说明</span>
+                                <span class="settings-row-desc">版本信息与使用说明</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- OTT 模块卡片 -->
+            <div id="section-7" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">OTT 模块</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        <i class="fas fa-tv" style="font-size: 3rem; margin-bottom: 1rem; color: var(--theme-color);"></i>
+                        <h3>OTT 功能模块</h3>
+                        <p>此模块正在开发中...</p>
+                    </div>
+                </div>
+            </div>
+            <!-- PCD 模块卡片 -->
+            <div id="section-8" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">PCD 模块</div>
+                        <div class="ant-card-extra"><span id="pcd-daily-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon" style="background: var(--theme-bg);">
+                                <i class="fas fa-laptop-code" style="color: var(--theme-color);"></i>
+                            </div>
+                            <h3 class="section-title">获取 PCD 所有Expired的数据</h3>
+                            <ul class="section-desc">
+                                <li>系统将从 Salesforce 获取 PCD 所有Expired的数据</li>
+                                
+                                <li style="color: #8c8c8c; font-size: 0.9em;">* 此操作可能需要几分钟时间，请耐心等待。</li>
+                            </ul>
+                        </div>
+                        
+                        <form id="pcd-daily-data-form" class="unified-form">
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label for="pcd-daily-soql-query" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">自定义 SOQL 查询</label>
+                                <textarea
+                                    id="pcd-daily-soql-query"
+                                    class="ant-input"
+                                    rows="8"
+                                    style="width: 100%; resize: vertical; font-family: monospace; font-size: 12px;"
+                                >SELECT order.Name,
+          order.OrderNumber,
+          order.Order_Nature__c,
+          order.Service_Request_Date__c,
+          order.Attention__c,
+          FulfillmentRemark__c,
+          order.id,
+          order.Custom_OrderStatus__c,
+          order.Custom_FulfilmentStatus__c,
+          FulfillmentId__c,
+          AppointmentId__c,
+          vlocity_cmt__FulfilmentStatus__c,
+          BRM_Request_Id__c,
+          LOB__c,
+          order.Is_Voluntary__c,
+          order.Self_Return__c
+      FROM OrderItem
+      WHERE
+          (MainProduct__c = TRUE OR Product2.vlocity_cmt__SubType__c = 'NowTV Standalone Starter Offer') AND
+          LOB__c !='' AND
+          order.Attention__c = '' AND
+          order.Service_Request_Date__c <= TODAY AND
+          order.Service_Request_Date__c > 2026-01-01 AND
+          order.Custom_OrderStatus__c NOT IN (
+              'Ready To Submit', 'Superseded', 'Activated',
+              'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')</textarea>
+                                <div style="margin-top: 0.5rem; font-size: 0.85em; color: #8c8c8c;">
+                                    <i class="fas fa-info-circle"></i> 默认查询将获取 PCD Expiry 数据，可根据需要修改查询条件
+                                </div>
+                            </div>
 
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px;">
+                                    <i class="fas fa-cloud-download-alt"></i>
+                                    <span>立即获取数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="pcd-daily-data-actions" class="action-buttons" style="display: none;">
+                            <button type="button" id="export-pcd-daily-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>导出Excel</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-daily-data-container" class="unified-table-wrapper" style="display: none;">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-daily-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <!-- VVIP 模块卡片 -->
-            <div id="section-9" class="unified-card ant-card ant-card-bordered step-section theme-vvip" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-9" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-vvip">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">VVIP</div>
-                        <div class="ant-card-extra"><span id="vvip-file-upload-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
+                        <div class="ant-card-extra"><span id="vvip-file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
@@ -572,13 +672,12 @@
                     </div>
                 </div>
             </div>
-
             <!-- 数据分析 模块卡片 -->
-            <div id="section-10" class="unified-card ant-card ant-card-bordered step-section theme-analysis" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-10" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-analysis">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">数据分析</div>
-                        <div class="ant-card-extra"><span id="analysis-file-upload-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
+                        <div class="ant-card-extra"><span id="analysis-file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
@@ -662,234 +761,32 @@
                             <div id="analysis-data-table" class="data-table"></div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- OTT 模块卡片 -->
-            <div id="section-7" class="unified-card ant-card ant-card-bordered step-section theme-tools" style="display: none; opacity: 0.7; pointer-events: none;">
-                <div class="ant-card-head">
-                    <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">OTT 模块</div>
-                    </div>
-                </div>
-                <div class="ant-card-body">
-                    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        <i class="fas fa-tv" style="font-size: 3rem; margin-bottom: 1rem; color: var(--theme-color);"></i>
-                        <h3>OTT 功能模块</h3>
-                        <p>此模块正在开发中...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- PCD 模块卡片 -->
-            <div id="section-8" class="unified-card ant-card ant-card-bordered step-section theme-pcd" style="display: none; opacity: 0.7; pointer-events: none;">
-                <div class="ant-card-head">
-                    <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">PCD 模块</div>
-                        <div class="ant-card-extra"><span id="pcd-daily-data-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
-                    </div>
-                </div>
-                <div class="ant-card-body">
-                    <div class="section-content">
-                        <div class="section-header">
-                            <div class="section-icon" style="background: var(--theme-bg);">
-                                <i class="fas fa-laptop-code" style="color: var(--theme-color);"></i>
-                            </div>
-                            <h3 class="section-title">获取 PCD 所有Expired的数据</h3>
-                            <ul class="section-desc">
-                                <li>系统将从 Salesforce 获取 PCD 所有Expired的数据</li>
-                                
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 此操作可能需要几分钟时间，请耐心等待。</li>
-                            </ul>
-                        </div>
-                        
-                        <form id="pcd-daily-data-form" class="unified-form">
-                            <div class="form-group" style="margin-bottom: 1rem;">
-                                <label for="pcd-daily-soql-query" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">自定义 SOQL 查询</label>
-                                <textarea
-                                    id="pcd-daily-soql-query"
-                                    class="ant-input"
-                                    rows="8"
-                                    style="width: 100%; resize: vertical; font-family: monospace; font-size: 12px;"
-                                >SELECT order.Name,
-          order.OrderNumber,
-          order.Order_Nature__c,
-          order.Service_Request_Date__c,
-          order.Attention__c,
-          FulfillmentRemark__c,
-          order.id,
-          order.Custom_OrderStatus__c,
-          order.Custom_FulfilmentStatus__c,
-          FulfillmentId__c,
-          AppointmentId__c,
-          vlocity_cmt__FulfilmentStatus__c,
-          BRM_Request_Id__c,
-          LOB__c,
-          order.Is_Voluntary__c,
-          order.Self_Return__c
-      FROM OrderItem
-      WHERE
-          (MainProduct__c = TRUE OR Product2.vlocity_cmt__SubType__c = 'NowTV Standalone Starter Offer') AND
-          LOB__c !='' AND
-          order.Attention__c = '' AND
-          order.Service_Request_Date__c <= TODAY AND
-          order.Service_Request_Date__c > 2026-01-01 AND
-          order.Custom_OrderStatus__c NOT IN (
-              'Ready To Submit', 'Superseded', 'Activated',
-              'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')</textarea>
-                                <div style="margin-top: 0.5rem; font-size: 0.85em; color: #8c8c8c;">
-                                    <i class="fas fa-info-circle"></i> 默认查询将获取 PCD Expiry 数据，可根据需要修改查询条件
+                    <!-- 数据分析图表区域 -->
+                    <div id="analysis-charts-container" style="display: none;">
+                        <div class="charts-row">
+                            <div class="ant-card ant-card-bordered chart-card">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-title">数据透视</div>
+                                </div>
+                                <div class="ant-card-body">
+                                    <div id="analysis-chart-main" style="width: 100%; height: 400px;"></div>
                                 </div>
                             </div>
-
-                            <div class="form-group">
-                                <button type="submit" name="get_pcd_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px;">
-                                    <i class="fas fa-cloud-download-alt"></i>
-                                    <span>立即获取数据</span>
-                                </button>
+                            <div class="ant-card ant-card-bordered chart-card">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-title">Issue 分布</div>
+                                </div>
+                                <div class="ant-card-body">
+                                    <div id="analysis-chart-bar" style="width: 100%; height: 400px;"></div>
+                                </div>
                             </div>
-                        </form>
-                        
-                        <div id="pcd-daily-data-actions" class="action-buttons" style="display: none;">
-                            <button type="button" id="export-pcd-daily-data" class="ant-btn ant-btn-default">
-                                <i class="fas fa-download"></i>
-                                <span>导出Excel</span>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- 数据显示区域 -->
-                    <div id="pcd-daily-data-container" class="unified-table-wrapper" style="display: none;">
-                        <div class="table-container-header">
-                            <h4>数据预览</h4>
-                        </div>
-                        <div class="table-container-body">
-                            <div id="pcd-daily-data-table" class="data-table"></div>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <!-- PCD PID Fallout 模块卡片 -->
-            <div id="section-16" class="unified-card ant-card ant-card-bordered step-section theme-pcd" style="display: none; opacity: 0.7; pointer-events: none;">
-                <div class="ant-card-head">
-                    <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">Data issue - PID fallout</div>
-                        <div class="ant-card-extra"><span id="pcd-pid-fallout-data-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
-                    </div>
-                </div>
-                <div class="ant-card-body">
-                    <div class="section-content">
-                        <div class="section-header">
-                            <div class="section-icon" style="background: var(--theme-bg);">
-                                <i class="fas fa-exclamation-triangle" style="color: var(--theme-color);"></i>
-                            </div>
-                            <h3 class="section-title">PCD PID Fallout</h3>
-                            <ul class="section-desc">
-                                <li>查询存在 Fulfillment Data Issue 的订单项</li>
-                                <li><strong>筛选条件：</strong>
-                                    <ul>
-                                        <li>Fulfillment ID 不为空</li>
-                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
-                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
-                                    </ul>
-                                </li>
-                            </ul>
-                        </div>
-                        
-                        <form id="pcd-pid-fallout-data-form" class="unified-form">
-                            <div class="form-group">
-                                <button type="submit" name="get_pcd_pid_fallout_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px; background-color: var(--theme-color); border-color: var(--theme-color);">
-                                    <i class="fas fa-search"></i>
-                                    <span>查询数据</span>
-                                </button>
-                            </div>
-                        </form>
-                        
-                        <div id="pcd-pid-fallout-data-actions" class="action-buttons" style="display: none;">
-                            <button type="button" id="export-pcd-pid-fallout-data" class="ant-btn ant-btn-default">
-                                <i class="fas fa-download"></i>
-                                <span>下载CSV</span>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- 数据显示区域 -->
-                    <div id="pcd-pid-fallout-data-container" class="unified-table-wrapper" style="display: none;">
-                        <div class="table-container-header">
-                            <h4>数据预览</h4>
-                        </div>
-                        <div class="table-container-body">
-                            <div id="pcd-pid-fallout-data-table" class="data-table"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Data issue - QC issue 模块卡片 -->
-            <div id="section-17" class="unified-card ant-card ant-card-bordered step-section theme-pcd" style="display: none; opacity: 0.7; pointer-events: none;">
-                <div class="ant-card-head">
-                    <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">Data issue - QC issue</div>
-                        <div class="ant-card-extra"><span id="pcd-qc-issue-data-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
-                    </div>
-                </div>
-                <div class="ant-card-body">
-                    <div class="section-content">
-                        <div class="section-header">
-                            <div class="section-icon" style="background: var(--theme-bg);">
-                                <i class="fas fa-search" style="color: var(--theme-color);"></i>
-                            </div>
-                            <h3 class="section-title">PCD QC Issue</h3>
-                            <ul class="section-desc">
-                                <li>查询存在 Fulfillment Data Issue 的订单及其 OrchestrationItem 数据</li>
-                                <li><strong>筛选条件：</strong>
-                                    <ul>
-                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
-                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
-                                        <li>订单状态不为 'Cancelled'</li>
-                                    </ul>
-                                </li>
-                                <li><strong>数据关联：</strong>
-                                    <ul>
-                                        <li>关联查询 OrchestrationItem (callout-noss/callout-opg)</li>
-                                        <li>按 Last_Submitted_Date__c 升序排列</li>
-                                    </ul>
-                                </li>
-                            </ul>
-                        </div>
-                        
-                        <form id="pcd-qc-issue-data-form" class="unified-form">
-                            <div class="form-group">
-                                <button type="submit" name="get_pcd_qc_issue_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px; background-color: var(--theme-color); border-color: var(--theme-color);">
-                                    <i class="fas fa-search"></i>
-                                    <span>查询数据</span>
-                                </button>
-                            </div>
-                        </form>
-                        
-                        <div id="pcd-qc-issue-data-actions" class="action-buttons" style="display: none;">
-                            <button type="button" id="export-pcd-qc-issue-data" class="ant-btn ant-btn-default">
-                                <i class="fas fa-download"></i>
-                                <span>下载CSV</span>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- 数据显示区域 -->
-                    <div id="pcd-qc-issue-data-container" class="unified-table-wrapper" style="display: none;">
-                        <div class="table-container-header">
-                            <h4>数据预览</h4>
-                        </div>
-                        <div class="table-container-body">
-                            <div id="pcd-qc-issue-data-table" class="data-table"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- CVP7 模块卡片 -->
-            <div id="section-11" class="unified-card ant-card ant-card-bordered step-section theme-tools" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-11" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">CVP7 模块</div>
@@ -909,92 +806,8 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Bulk 操作 模块卡片 -->
-            <div id="section-15" class="unified-card ant-card ant-card-bordered step-section theme-tools" style="display: none; opacity: 0.7; pointer-events: none;">
-                <div class="ant-card-head">
-                    <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">Bulk 操作</div>
-                    </div>
-                </div>
-                <div class="ant-card-body">
-                    <div class="section-content">
-                        <div class="section-header">
-                            <div class="section-icon" style="background: var(--theme-bg);">
-                                <i class="fas fa-database" style="color: var(--theme-color);"></i>
-                            </div>
-                            <h3 class="section-title">Bulk 2.0 查询</h3>
-                            <ul class="section-desc">
-                                <li>输入 SOQL 语句创建 Bulk 查询任务，或输入 Job ID 查看进度和结果。</li>
-                            </ul>
-                        </div>
-
-                        <div style="max-width: 800px; margin: 0 auto;">
-                            <div class="form-group" style="margin-bottom: 1.5rem;">
-                                <label for="bulk-soql-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">SOQL 查询语句</label>
-                                <textarea id="bulk-soql-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10000"></textarea>
-                            </div>
-                            <div class="form-group" style="text-align: right; margin-bottom: 2rem;">
-                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary" style="background-color: #2f54eb; border-color: #2f54eb;">
-                                    <i class="fas fa-play"></i> 创建 Bulk 任务
-                                </button>
-                            </div>
-
-                            <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
-                                <span class="ant-divider-inner-text">任务状态查询</span>
-                            </div>
-
-                            <div class="form-group" style="margin-bottom: 1.5rem; display: flex; gap: 10px; align-items: center;">
-                                <input type="text" id="bulk-job-id-input" class="ant-input" placeholder="输入 Job ID (例如: 750xx0000000001AAA)" style="flex: 1;">
-                                <button type="button" id="check-bulk-job-btn" class="ant-btn ant-btn-default">
-                                    <i class="fas fa-sync-alt"></i> 查询状态
-                                </button>
-                                <div id="download-bulk-actions" style="display: none; gap: 10px;">
-                                    <button type="button" id="download-bulk-csv-btn" class="ant-btn ant-btn-primary">
-                                        <i class="fas fa-file-csv"></i> 下载 CSV
-                                    </button>
-                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-primary" style="background-color: #52c41a; border-color: #52c41a;">
-                                        <i class="fas fa-file-archive"></i> 下载 ZIP
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div id="bulk-job-status-container" style="display: none; background: #fafafa; padding: 1rem; border-radius: 4px; border: 1px solid #d9d9d9;">
-                                <h4 style="margin-top: 0; margin-bottom: 1rem;">任务状态</h4>
-                                <div id="bulk-job-status-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 正在运行的 Job 表格 -->
-                    <div style="margin-top: 2rem;">
-                        <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
-                            <span class="ant-divider-inner-text">正在运行的 Bulk Job</span>
-                        </div>
-                        <div id="bulk-jobs-container" style="display: none;">
-                            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
-                                <button type="button" id="refresh-bulk-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm">
-                                    <i class="fas fa-sync-alt"></i> 刷新
-                                </button>
-                            </div>
-                            <div class="unified-table-wrapper" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden;">
-                                <div id="bulk-jobs-table" class="data-table"></div>
-                            </div>
-                        </div>
-                        <div id="bulk-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
-                            <i class="fas fa-check-circle" style="font-size: 24px; color: #52c41a; margin-bottom: 0.5rem;"></i>
-                            <p>当前没有正在运行的 Bulk Job</p>
-                        </div>
-                        <div id="bulk-jobs-loading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                            <i class="fas fa-spinner fa-spin" style="font-size: 24px;"></i>
-                            <p>正在加载 Bulk Job 信息...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- T-4 report 模块卡片 -->
-            <div id="section-12" class="unified-card ant-card ant-card-bordered step-section theme-t2" style="display: none;">
+            <div id="section-12" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-t2">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">Outstanding T-4 connectivity</div>
@@ -1059,13 +872,12 @@
                     </div>
                 </div>
             </div>
-
             <!-- T-4 Outstanding分析 模块卡片 -->
-            <div id="section-13" class="unified-card ant-card ant-card-bordered step-section theme-t2" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-13" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-t2">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">T-4 Outstanding分析</div>
-                        <div class="ant-card-extra"><span id="t2-analysis-file-upload-badge" class="ant-tag ant-tag-success" style="display: none;">已完成</span></div>
+                        <div class="ant-card-extra"><span id="t2-analysis-file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
@@ -1186,9 +998,8 @@
 
                 </div>
             </div>
-            
             <!-- 中午吃乜 模块卡片 -->
-            <div id="section-14" class="unified-card ant-card ant-card-bordered step-section theme-lunch" style="display: none;">
+            <div id="section-14" class="unified-card ant-card ant-card-bordered step-section theme-lunch">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">中午吃乜</div>
@@ -1251,9 +1062,206 @@
                     </div>
                 </div>
             </div>
+            <!-- Bulk 操作 模块卡片 -->
+            <div id="section-15" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Bulk 操作</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon" style="background: var(--theme-bg);">
+                                <i class="fas fa-database" style="color: var(--theme-color);"></i>
+                            </div>
+                            <h3 class="section-title">Bulk 2.0 查询</h3>
+                            <ul class="section-desc">
+                                <li>输入 SOQL 语句创建 Bulk 查询任务，或输入 Job ID 查看进度和结果。</li>
+                            </ul>
+                        </div>
 
+                        <div style="max-width: 800px; margin: 0 auto;">
+                            <div class="form-group" style="margin-bottom: 1.5rem;">
+                                <label for="bulk-soql-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">SOQL 查询语句</label>
+                                <textarea id="bulk-soql-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10000"></textarea>
+                            </div>
+                            <div class="form-group" style="text-align: right; margin-bottom: 2rem;">
+                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary" style="background-color: #2f54eb; border-color: #2f54eb;">
+                                    <i class="fas fa-play"></i> 创建 Bulk 任务
+                                </button>
+                            </div>
+
+                            <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                <span class="ant-divider-inner-text">任务状态查询</span>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 1.5rem; display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="bulk-job-id-input" class="ant-input" placeholder="输入 Job ID (例如: 750xx0000000001AAA)" style="flex: 1;">
+                                <button type="button" id="check-bulk-job-btn" class="ant-btn ant-btn-default">
+                                    <i class="fas fa-sync-alt"></i> 查询状态
+                                </button>
+                                <div id="download-bulk-actions" style="display: none; gap: 10px;">
+                                    <button type="button" id="download-bulk-csv-btn" class="ant-btn ant-btn-primary">
+                                        <i class="fas fa-file-csv"></i> 下载 CSV
+                                    </button>
+                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-primary" style="background-color: #52c41a; border-color: #52c41a;">
+                                        <i class="fas fa-file-archive"></i> 下载 ZIP
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="bulk-job-status-container" style="display: none; background: #fafafa; padding: 1rem; border-radius: 4px; border: 1px solid #d9d9d9;">
+                                <h4 style="margin-top: 0; margin-bottom: 1rem;">任务状态</h4>
+                                <div id="bulk-job-status-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 正在运行的 Job 表格 -->
+                    <div style="margin-top: 2rem;">
+                        <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                            <span class="ant-divider-inner-text">正在运行的 Bulk Job</span>
+                        </div>
+                        <div id="bulk-jobs-container">
+                            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+                                <button type="button" id="refresh-bulk-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm">
+                                    <i class="fas fa-sync-alt"></i> 刷新
+                                </button>
+                            </div>
+                            <div class="unified-table-wrapper" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden;">
+                                <div id="bulk-jobs-table" class="data-table"></div>
+                            </div>
+                        </div>
+                        <div id="bulk-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
+                            <i class="fas fa-check-circle" style="font-size: 24px; color: #52c41a; margin-bottom: 0.5rem;"></i>
+                            <p>当前没有正在运行的 Bulk Job</p>
+                        </div>
+                        <div id="bulk-jobs-loading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 24px;"></i>
+                            <p>正在加载 Bulk Job 信息...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- PCD PID Fallout 模块卡片 -->
+            <div id="section-16" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Data issue - PID fallout</div>
+                        <div class="ant-card-extra"><span id="pcd-pid-fallout-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon" style="background: var(--theme-bg);">
+                                <i class="fas fa-exclamation-triangle" style="color: var(--theme-color);"></i>
+                            </div>
+                            <h3 class="section-title">PCD PID Fallout</h3>
+                            <ul class="section-desc">
+                                <li>查询存在 Fulfillment Data Issue 的订单项</li>
+                                <li><strong>筛选条件：</strong>
+                                    <ul>
+                                        <li>Fulfillment ID 不为空</li>
+                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
+                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <form id="pcd-pid-fallout-data-form" class="unified-form">
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_pid_fallout_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px; background-color: var(--theme-color); border-color: var(--theme-color);">
+                                    <i class="fas fa-search"></i>
+                                    <span>查询数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="pcd-pid-fallout-data-actions" class="action-buttons" style="display: none;">
+                            <button type="button" id="export-pcd-pid-fallout-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>下载CSV</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-pid-fallout-data-container" class="unified-table-wrapper" style="display: none;">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-pid-fallout-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Data issue - QC issue 模块卡片 -->
+            <div id="section-17" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Data issue - QC issue</div>
+                        <div class="ant-card-extra"><span id="pcd-qc-issue-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon" style="background: var(--theme-bg);">
+                                <i class="fas fa-search" style="color: var(--theme-color);"></i>
+                            </div>
+                            <h3 class="section-title">PCD QC Issue</h3>
+                            <ul class="section-desc">
+                                <li>查询存在 Fulfillment Data Issue 的订单及其 OrchestrationItem 数据</li>
+                                <li><strong>筛选条件：</strong>
+                                    <ul>
+                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
+                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
+                                        <li>订单状态不为 'Cancelled'</li>
+                                    </ul>
+                                </li>
+                                <li><strong>数据关联：</strong>
+                                    <ul>
+                                        <li>关联查询 OrchestrationItem (callout-noss/callout-opg)</li>
+                                        <li>按 Last_Submitted_Date__c 升序排列</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <form id="pcd-qc-issue-data-form" class="unified-form">
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_qc_issue_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px; background-color: var(--theme-color); border-color: var(--theme-color);">
+                                    <i class="fas fa-search"></i>
+                                    <span>查询数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="pcd-qc-issue-data-actions" class="action-buttons" style="display: none;">
+                            <button type="button" id="export-pcd-qc-issue-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>下载CSV</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-qc-issue-data-container" class="unified-table-wrapper" style="display: none;">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-qc-issue-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <!-- Execute Anonymous 模块卡片 -->
-            <div id="section-18" class="unified-card ant-card ant-card-bordered step-section theme-tools" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-18" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">Execute Anonymous</div>
@@ -1293,9 +1301,8 @@ System.debug('Hello World');"></textarea>
                     </div>
                 </div>
             </div>
-            
             <!-- Schedule Jobs 模块卡片 -->
-            <div id="section-19" class="unified-card ant-card ant-card-bordered step-section theme-schedule" style="display: none; opacity: 0.7; pointer-events: none;">
+            <div id="section-19" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-schedule">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
                         <div class="ant-card-head-title">Schedule Jobs</div>
@@ -1399,23 +1406,8 @@ System.debug('Hello World');"></textarea>
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- 版本信息卡片 -->
-            <div id="section-6" class="ant-card ant-card-bordered step-section" style="display: none;">
-                <div class="ant-card-head">
-                    <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">项目说明</div>
-                    </div>
                 </div>
-                <div class="ant-card-body">
-                    <div id="readme-content" class="markdown-body" style="padding: 1rem; line-height: 1.6;">
-                        <div style="text-align: center; color: var(--text-secondary);">
-                            <i class="fas fa-spinner fa-spin"></i> 正在加载说明文档...
-                        </div>
-                    </div>
-                </div>
-            </div>
+            </section>
         </main>
     </div>
     
@@ -1428,9 +1420,17 @@ System.debug('Hello World');"></textarea>
                 <p id="loading-count">已获取 <span id="record-count">0</span> 条记录</p>
             </div>
         </div>
+        <!-- 日志显示区域 -->
+        <div id="loading-log" class="loading-log" style="display: none;">
+            <div class="loading-log-header">处理日志</div>
+            <div id="loading-log-content" class="loading-log-content"></div>
+        </div>
     </div>
     
     <!-- 引入自定义JavaScript -->
+    <!-- 保持 type="module"：src/app.js 是原生 ESM，去掉会报
+         "Cannot use import statement outside a module"；
+         而打包产物 dist/app.js 是自包含 IIFE，用 module 方式加载同样正常 -->
     <script src="./app.js" type="module"></script>
 </body>
 </html>

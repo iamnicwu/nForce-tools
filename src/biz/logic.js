@@ -2,9 +2,10 @@ import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
 import { showNotification, loadingLog } from "../common/utils.js";
 import { processExcelFile as processExcelFileUtil, processVVIPExcelFile as processVVIPExcelFileUtil, processAnalysisExcelFile as processAnalysisExcelFileUtil, analyzeData as analyzeDataUtil, analyzeT2Data as analyzeT2DataUtil, exportToExcel, getUniqueOrderCount, readExcelFile, parseSheetData } from "../common/excel_utils.js";
-import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState } from "./ui.js";
+import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState, goHome } from "./ui.js";
 import {applyT2Rules} from "../common/t2rules.js"
 import { DEFAULT_LUNCH_PLACES } from "./ui_config.js";
+import { OneDriveWorkbookService } from "../common/onedrive_service.js";
 
 // 初始化午餐功能
 export function initLunch() {
@@ -105,7 +106,7 @@ export async function autoDetectSession() {
               console.log("自动连接成功");
               appState.session_id = sid;
               appState.is_connected = true;
-              localStorage.setItem("sf_session_id", sid);
+              // Session 信息仅保存在 chrome.storage.local 中，不再使用 localStorage
               
               // 获取用户信息和组织信息
               await fetchUserInfo();
@@ -113,7 +114,7 @@ export async function autoDetectSession() {
               // await fetchLTSAccountCount();
               
               updateUIState();
-              showSection(5);
+              goHome();
               showNotification("已自动连接到Salesforce");
               return;
             }
@@ -140,7 +141,7 @@ export async function autoDetectSession() {
         await fetchOrgInfo();
         
         updateUIState();
-        showSection(5);
+        goHome();
         showNotification("已自动连接到Salesforce (使用保存的Session)");
         return;
       } else {
@@ -194,6 +195,184 @@ export async function fetchOrgInfo() {
   }
 }
 
+/**
+ * 将 JSON 数据转换为二维数组（用于写入 Excel Range）
+ * 第一行为表头，后续为数据行
+ * 自动检测带前导 0 的字符串值（如 Order Number "001234"），在值前加 ' 标记为 Excel 文本格式，防止前导 0 丢失
+ *
+ * @param {Array<Object>} data - JSON 数组
+ * @returns {Array<Array>} 二维数组
+ */
+function jsonTo2DArray(data) {
+  if (!Array.isArray(data) || data.length === 0) {
+    return [];
+  }
+
+  // 提取所有可能的列名（取第一个对象的 keys）
+  const headers = Object.keys(data[0]);
+
+  // 预扫描所有数据，找出需要保留为文本格式的列（包含前导 0 的字符串值）
+  const textColumns = new Set();
+  data.forEach(record => {
+    headers.forEach(header => {
+      const value = record[header];
+      if (typeof value === 'string' && /^0\d+$/.test(value)) {
+        textColumns.add(header);
+      }
+    });
+  });
+
+  if (textColumns.size > 0) {
+    console.log('以下列包含前导 0，将标记为文本格式:', Array.from(textColumns));
+  }
+
+  // 构建二维数组
+  const rows = [headers];
+  data.forEach(record => {
+    const row = headers.map(header => {
+      const value = record[header];
+      // 处理 null/undefined
+      if (value === null || value === undefined) {
+        return '';
+      }
+      // 处理对象/数组（转为 JSON 字符串）
+      if (typeof value === 'object') {
+        return JSON.stringify(value);
+      }
+      // 对带前导 0 的字符串值加 ' 前缀，强制 Excel 识别为文本格式
+      if (textColumns.has(header) && typeof value === 'string') {
+        return "'" + value;
+      }
+      return value;
+    });
+    rows.push(row);
+  });
+
+  return rows;
+}
+
+/**
+ * 将 Report Data 写入 OneDrive Workbook
+ * 自动创建 worksheet "nforce_test" 并分批写入数据，防止超时
+ *
+ * @param {Array<Object>} data - Salesforce report data
+ * @param {Object} options - 写入选项
+ * @param {number} options.batchSize - 每批写入的行数（默认 200）
+ * @param {number} options.batchDelay - 批次间隔毫秒（默认 300）
+ * @param {string} options.worksheetName - 目标 worksheet 名称（默认 "nforce_test"）
+ * @returns {Promise<Object>} 写入结果
+ */
+async function writeReportDataToOneDrive(data, options = {}) {
+  const {
+    batchSize = 200,
+    batchDelay = 300,
+    worksheetName = 'nforce_test'
+  } = options;
+
+  try {
+    console.log(`开始将 ${data.length} 条报表数据写入 OneDrive Workbook (每批 ${batchSize} 行)...`);
+
+    // 创建 OneDrive 服务实例（使用 graph_token.js + ExpiredWorkbook 默认值）
+    const service = new OneDriveWorkbookService();
+
+    // 连接 Workbook
+    const connectResult = await service.connect({ persistChanges: true });
+    console.log('connectResult:', connectResult);
+    if (!connectResult.success) {
+      console.error('连接 OneDrive Workbook 失败:', connectResult.error);
+      return { success: false, error: connectResult.error };
+    }
+
+    console.log('OneDrive Workbook 连接成功');
+
+    // 检查 worksheet 是否已存在，存在则删除
+    const worksheets = await service.getWorksheets();
+    const existingSheet = worksheets.find(sheet => sheet.name === worksheetName);
+
+    if (existingSheet) {
+      console.log(`Worksheet "${worksheetName}" 已存在，删除旧版本...`);
+      await service.deleteWorksheet(worksheetName);
+    }
+
+    // 创建新的 worksheet
+    console.log(`创建 Worksheet "${worksheetName}"...`);
+    await service.createWorksheet(worksheetName);
+
+    // 将数据转换为二维数组（含表头）
+    const excelData = jsonTo2DArray(data);
+
+    if (excelData.length === 0) {
+      console.warn('无数据可写入');
+      await service.disconnect();
+      return { success: true, message: 'No data to write' };
+    }
+
+    const colCount = excelData[0].length;
+    const endCol = columnIndexToLetter(colCount - 1);
+    const headerRow = excelData[0];
+    const dataRows = excelData.slice(1); // 去掉表头
+    const totalDataRows = dataRows.length;
+    const totalBatches = Math.ceil(totalDataRows / batchSize);
+
+    console.log(`总计 ${totalDataRows} 行数据 ${colCount} 列，分 ${totalBatches} 批写入`);
+
+    // 第 1 批：写入表头 + 第一批数据
+    const firstBatch = dataRows.slice(0, batchSize);
+    const firstBatchRange = `A1:${endCol}${firstBatch.length + 1}`;
+    console.log(`批次 1/${totalBatches}: 写入 ${firstBatchRange} (表头 + ${firstBatch.length} 行)...`);
+    await service.updateRangeValues(worksheetName, firstBatchRange, [headerRow, ...firstBatch]);
+
+    // 后续批次：纯数据（从第 2 批开始，起始行偏移 = 1 表头 + 已写入行数）
+    for (let i = 1; i < totalBatches; i++) {
+      const startRow = 1 + i * batchSize; // +1 是表头行
+      const batchData = dataRows.slice(i * batchSize, (i + 1) * batchSize);
+      const endRow = startRow + batchData.length - 1;
+      const batchRange = `A${startRow}:${endCol}${endRow}`;
+
+      console.log(`批次 ${i + 1}/${totalBatches}: 写入 ${batchRange} (${batchData.length} 行)...`);
+      await service.updateRangeValues(worksheetName, batchRange, batchData);
+
+      // 批次间延迟，避免触发 API 限流
+      if (i < totalBatches - 1) {
+        await new Promise(resolve => setTimeout(resolve, batchDelay));
+      }
+    }
+
+    const finalRange = `A1:${endCol}${totalDataRows + 1}`;
+    console.log(`数据写入 OneDrive 成功，Range: ${finalRange}`);
+
+    // 断开连接
+    await service.disconnect();
+
+    return {
+      success: true,
+      message: `成功写入 ${data.length} 条记录到 OneDrive (分 ${totalBatches} 批)`,
+      worksheet: worksheetName,
+      range: finalRange,
+      totalRows: totalDataRows,
+      totalBatches
+    };
+  } catch (error) {
+    console.error('写入 OneDrive 失败:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * 将列索引转换为 Excel 列字母（0 -> A, 25 -> Z, 26 -> AA）
+ * @param {number} index - 列索引（从 0 开始）
+ * @returns {string} 列字母
+ */
+function columnIndexToLetter(index) {
+  let result = '';
+  let num = index;
+  do {
+    result = String.fromCharCode(65 + (num % 26)) + result;
+    num = Math.floor(num / 26) - 1;
+  } while (num >= 0);
+  return result;
+}
+
 export async function getReportData() {
   try {
     console.log("开始获取报表数据");
@@ -235,8 +414,15 @@ export async function getReportData() {
         updateUIState();
         // 更新统计数据
         updateStats();
-        // 不再强制跳转到步骤5，保持在当前步骤
-        showNotification(`报表数据获取成功，共 ${appState.stats.reportRecords} 条记录`);
+
+        // 将报表数据同步写入 OneDrive Workbook
+        const writeResult = await writeReportDataToOneDrive(result.data);
+        if (writeResult.success) {
+          showNotification(`${writeResult.message}，Worksheet: ${writeResult.worksheet}`);
+        } else {
+          showNotification(`报表数据获取成功，共 ${appState.stats.reportRecords} 条记录`);
+        }
+
         console.log("报表数据获取成功");
     }
   } catch (error) {
@@ -1558,7 +1744,14 @@ export async function fetchBulkJobs() {
             if (container) container.style.display = "none";
             if (emptyEl) {
                 emptyEl.style.display = "block";
-                emptyEl.innerHTML = `<i class="fas fa-exclamation-circle" style="font-size: 24px; color: #ff4d4f; margin-bottom: 0.5rem;"></i><p>获取失败: ${result.error}</p>`;
+                emptyEl.innerHTML = '';
+                const icon = document.createElement('i');
+                icon.className = 'fas fa-exclamation-circle';
+                icon.style.cssText = 'font-size: 24px; color: #ff4d4f; margin-bottom: 0.5rem;';
+                const p = document.createElement('p');
+                p.textContent = `获取失败: ${result.error}`;
+                emptyEl.appendChild(icon);
+                emptyEl.appendChild(p);
             }
         }
     } catch (error) {
@@ -1709,8 +1902,14 @@ export async function loadScheduleJobs() {
         if (loadingEl) loadingEl.style.display = "none";
         if (emptyEl) emptyEl.style.display = "block";
         if (emptyEl) {
-            emptyEl.innerHTML = `<i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 1rem; color: #ff4d4f;"></i>
-                                 <p>加载失败: ${error.message || error}</p>`;
+            emptyEl.innerHTML = '';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-exclamation-triangle';
+            icon.style.cssText = 'font-size: 48px; margin-bottom: 1rem; color: #ff4d4f;';
+            const p = document.createElement('p');
+            p.textContent = `加载失败: ${error.message || error}`;
+            emptyEl.appendChild(icon);
+            emptyEl.appendChild(p);
         }
     } finally {
         if (refreshBtn) {
@@ -1967,6 +2166,7 @@ export async function resumeScheduleJob(alarmName) {
 // 监听来自 background 的 alarm 触发消息
 if (typeof chrome !== 'undefined' && chrome.runtime) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        // 只处理 ALARM_TRIGGERED 消息，其他消息类型不干预，交给其他监听器处理
         if (message.type === 'ALARM_TRIGGERED') {
             console.log('Alarm triggered in page:', message.alarm.name);
             showNotification(`定时任务 "${message.alarm.name}" 已触发!`, "info");
@@ -1980,5 +2180,6 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
             });
             document.dispatchEvent(event);
         }
+        // 不调用 sendResponse，不 return true，让消息继续传递给其他监听器
     });
 }

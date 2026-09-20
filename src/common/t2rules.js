@@ -251,6 +251,10 @@ function evaluateStatusRules(ctx, BANDKeywords) {
           log(`[Remark Rule 1.5.2] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
           return "Sales";
         }
+        else if(fulfillRemark.includes("504 Gateway Time-out")){
+          log(`[Remark Rule 1.5.4] INVENTORY FALLOUT + 504 Gateway Time-out -> NORA`);
+          return "NORA";
+        }
         log(`[Status Rule 1.5.3] In Progress + Waiting For Inventory + Remark(UIM) -> UIM`);
         return "UIM";
       }
@@ -346,8 +350,8 @@ function evaluateStatusRules(ctx, BANDKeywords) {
     if(orderNature === 'Termination'){
       if(fulfillStatus === 'In Progress'){
         if (fulfillRemark != null && typeof fulfillRemark == "string" && fulfillRemark.includes("ORDER ABORT")) {
-          log(`[Remark Rule 3.0.0] NORA updated "ORDER ABORT" -> NORA`);
-          return "NORA";
+          log(`[Remark Rule 3.0.0] NORA updated "ORDER ABORT" -> ${orderType}`);
+          return orderType + " - order abort";
         }
         log(`[Status Rule 3.0.1] In Progress + In Progress -> N/A`);
         return "N/A";
@@ -360,6 +364,12 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         return "N/A";
       }
     }
+
+    // 逻辑有问题, 后面再睇
+    if (fulfillStatus === "In Progress - Fulfillment Data Issue") {
+      log(`[Status Rule 3.1.0] In Progress + In Progress - Fulfillment Data Issue -> ${orderType}`);
+      return orderType + " - Data issue";
+    } 
 
     if(orderNature === 'Change Owner' || 
       orderNature === 'Change VAS' || 
@@ -375,9 +385,8 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       return orderType;
     } 
 
-    // 逻辑有问题, 后面再睇
-    if (!fulfillStatus || fulfillStatus === "In Progress - Fulfillment Data Issue" || !fulfillRemark) {
-      log(`[Status Rule 3.1] In Progress + Missing Fulfill/Remark or Data Issue -> ${orderType}`);
+    if (!fulfillStatus || !fulfillRemark) {
+      log(`[Status Rule 3.1] In Progress + Missing Fulfill/Remark -> ${orderType}`);
       return orderType;
     } 
 
@@ -422,6 +431,10 @@ function evaluateStatusRules(ctx, BANDKeywords) {
           log(`[Remark Rule 3.7.4] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
           return "Sales";
         }
+        else if(fulfillRemark.includes("504 Gateway Time-out")){
+          log(`[Remark Rule 3.7.4.1] INVENTORY FALLOUT + 504 Gateway Time-out -> NORA`);
+          return "NORA";
+        }
         log(`[Status Rule 3.7.1] In Progress + Waiting For Inventory + Remark(UIM) -> UIM`);
         return "UIM";
       }
@@ -433,9 +446,17 @@ function evaluateStatusRules(ctx, BANDKeywords) {
         log(`[Remark Rule 3.7.6] OPG updated \"CANCELLED\" -> ${orderType}`);
         return orderType;
       }
-      else if (lob != 'Fixedline'){
+      else if (lob !== "FixedLine"){
+        if(fulfillRemark.includes("Cable assignment issue")){
+          log(`[Remark Rule 3.7.7.1] PCD order + fulfillment status = Inventory Fallout + Cable assignment issue from EOPI`);
+          return "OPS";
+        }
         log(`[Remark Rule 3.7.7] PCD order + fulfillment status = Inventory Fallout + ${lob}`);
         return "BAND";
+      }
+      else if(fulfillRemark.includes("INVENTORY REPLENISHMENT")){
+        log(`[Remark Rule 3.7.8] PCD order + fulfillment status = Waiting For Inventory + INVENTORY REPLENISHMENT`);
+        return "N/A";
       }
 
       log(`[Status Rule 3.7.2] In Progress + Waiting For Inventory -> OPS`);
@@ -449,8 +470,8 @@ function evaluateStatusRules(ctx, BANDKeywords) {
     }
     if(fulfillStatus === "In Progress" || fulfillStatus === "In Progress-Distributed" ){
       if (fulfillRemark.includes("ORDER ABORT")) {
-        log(`[Remark Rule 3.9.0] NORA updated "ORDER ABORT" -> NORA`);
-        return "NORA";
+        log(`[Remark Rule 3.9.0] NORA updated "ORDER ABORT" -> ${orderType}`);
+        return orderType + " - order abort";
       }
       log(`[Status Rule 3.9] In Progress + In Progress -> Sales`);
       return "Sales";
@@ -526,8 +547,8 @@ function evaluateRemarkRules(ctx, m1Criteria) {
     return "LDAP";
   }
   if (firstRemark.includes('NORA updated "ORDER ABORT"')) {
-    log(`[Remark Rule 6.4] First Remark(NORA updated "ORDER ABORT") -> NORA`);
-    return "NORA";
+    log(`[Remark Rule 6.4] First Remark(NORA updated "ORDER ABORT") -> ${orderType}`);
+    return orderType + " - order abort";
   }
   if(firstRemark.includes('VNDP')){
     log(`[Remark Rule 6.5] First Remark(VNDP) -> VNDP`);
@@ -604,9 +625,21 @@ function evaluateRemarkRules(ctx, m1Criteria) {
     }
 
     if (remark.includes("INVENTORY FALLOUT") || remark.includes("Fallout Reason: Cable assignment issue")) {
+
+      if(remark.includes("ADDRESS CHECK IN PROGRESS")){
+        log(`[Remark Rule 7.3.0] INVENTORY FALLOUT + ADDRESS CHECK IN PROGRESS -> F&S`);
+        return "F&S";
+      }
+
       if (remark.includes("OPS")) {
-        log(`[Remark Rule 7.3.1] INVENTORY FALLOUT + OPS -> OPS`);
-        return "OPS";
+        if(fulfillStatus != "Remake Appointment (M1)"){
+          log(`[Remark Rule 7.3.1] INVENTORY FALLOUT + OPS -> OPS`);
+          return "OPS";
+        }
+        else{
+          log(`[Remark Rule 7.3.1.1] INVENTORY FALLOUT + M1 -> N/A`);
+          return "N/A";
+        }
       }
       if (remark.includes("ORA-01403: no data found")) {
         log(`[Remark Rule 7.3.2] INVENTORY FALLOUT + ORA-01403 -> ${orderType}`);

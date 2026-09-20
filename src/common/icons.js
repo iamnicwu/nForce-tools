@@ -87,7 +87,58 @@ export const Icons = {
     laptopCode: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M5.625 3.75a2.625 2.625 0 100 5.25h12.75a2.625 2.625 0 100-5.25H5.625zM3.75 11.25a.75.75 0 000 1.5h16.5a.75.75 0 000-1.5H3.75zM3 15.75a.75.75 0 01.75-.75h16.5a.75.75 0 01.75.75v2.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V16.5a.75.75 0 01.75-.75z" /></svg>`, // 暂时用类似的代替
 
     // 向右箭头 (Chevron Right)
-    chevronRight: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M16.28 11.47a.75.75 0 010 1.06l-7.5 7.5a.75.75 0 01-1.06-1.06L14.69 12 7.72 5.03a.75.75 0 011.06-1.06l7.5 7.5z" clip-rule="evenodd" /></svg>`
+    chevronRight: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M16.28 11.47a.75.75 0 010 1.06l-7.5 7.5a.75.75 0 01-1.06-1.06L14.69 12 7.72 5.03a.75.75 0 011.06-1.06l7.5 7.5z" clip-rule="evenodd" /></svg>`,
+
+    // 向下箭头 (Chevron Down)
+    chevronDown: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M12.53 15.47a.75.75 0 01-1.06 0l-5.25-5.25a.75.75 0 111.06-1.06L12 13.69l4.72-4.72a.75.75 0 111.06 1.06l-5.25 5.25z" clip-rule="evenodd" /></svg>`,
+
+    // 向左箭头 (Arrow Left)
+    arrowLeft: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M11.03 3.97a.75.75 0 010 1.06l-6.22 6.22H21a.75.75 0 010 1.5H4.81l6.22 6.22a.75.75 0 11-1.06 1.06l-7.5-7.5a.75.75 0 010-1.06l7.5-7.5a.75.75 0 011.06 0z" clip-rule="evenodd" /></svg>`,
+
+    // 首页图标 (Home)
+    home: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M2.25 11.87c0-.32.14-.62.38-.82l8.62-7.1a1.16 1.16 0 011.5 0l8.62 7.1c.24.2.38.5.38.82v8.38a1.25 1.25 0 01-1.25 1.25h-4.75a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-2.5a.75.75 0 00-.75.75v4.5a.75.75 0 01-.75.75H5.25A1.25 1.25 0 014 20.25v-8.38z" clip-rule="evenodd" /></svg>`,
+
+    // 星星图标 (Star)
+    star: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z" clip-rule="evenodd" /></svg>`,
+
+    // 折线图图标 (Chart Line)
+    chartLine: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M2.25 3.75a.75.75 0 01.75-.75h.75a.75.75 0 01.75.75v15.5h16.75a.75.75 0 010 1.5H3.75a1.5 1.5 0 01-1.5-1.5V3.75zm17.03 2.47a.75.75 0 010 1.06l-4.97 4.97a.75.75 0 01-1.06 0l-1.72-1.72-3.54 3.54a.75.75 0 11-1.06-1.06l4.07-4.07a.75.75 0 011.06 0l1.72 1.72 3.44-3.44h-1.69a.75.75 0 010-1.5h3.5a.75.75 0 01.53.22l.22.28z" clip-rule="evenodd" /></svg>`,
+
+    // 饼图图标 (Chart Pie)
+    chartPie: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M10.5 4.5a8.25 8.25 0 108.25 8.25H10.5V4.5z" /><path d="M12.75 2.25a.75.75 0 00-.75.75v8.25a.75.75 0 00.75.75h8.25a.75.75 0 00.75-.75 9 9 0 00-9-9z" /></svg>`,
+
+    // 警告三角图标 (Exclamation Triangle)
+    exclamationTriangle: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M9.401 4.155c.917-1.587 3.181-1.587 4.098 0l6.94 12.024c.916 1.587-.217 3.571-2.05 3.571H5.511c-1.832 0-2.965-1.984-2.049-3.571L9.4 4.155zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" /></svg>`,
+
+    // 代码图标 (Code)
+    code: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M8.53 5.47a.75.75 0 010 1.06L3.81 11.25l4.72 4.72a.75.75 0 11-1.06 1.06l-5.25-5.25a.75.75 0 010-1.06l5.25-5.25a.75.75 0 011.06 0zm6.94 0a.75.75 0 011.06 0l5.25 5.25a.75.75 0 010 1.06l-5.25 5.25a.75.75 0 11-1.06-1.06l4.72-4.72-4.72-4.72a.75.75 0 010-1.06zM13.72 3.8a.75.75 0 01.54.91l-2.5 10a.75.75 0 01-1.46-.36l2.5-10a.75.75 0 01.92-.55z" clip-rule="evenodd" /></svg>`,
+
+    // 时钟图标 (Clock)
+    clock: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6a.75.75 0 00.36.64l3.75 2.25a.75.75 0 10.77-1.288l-3.38-2.028V6z" clip-rule="evenodd" /></svg>`,
+
+    // 餐具图标 (Utensils)
+    utensils: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M6.75 2.25a.75.75 0 01.75.75v4.5a1.5 1.5 0 003 0V3a.75.75 0 011.5 0v4.5a3 3 0 01-2.25 2.9v10.35a.75.75 0 01-1.5 0V10.4A3 3 0 016 7.5V3a.75.75 0 01.75-.75z" /><path d="M17.25 2.25a.75.75 0 01.75.75c0 2.2-.53 4.53-1.4 6.4-.44.96-.98 1.83-1.6 2.44v8.91a.75.75 0 01-1.5 0V3a.75.75 0 011.5 0c0 .9.3 2.02.83 3.13.3.65.67 1.3 1.09 1.88.34-1.3.58-2.83.58-4.26h-.75a.75.75 0 010-1.5h1.5z" /></svg>`,
+
+    // 锁图标 (Lock)
+    lock: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3A5.25 5.25 0 0012 1.5zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" /></svg>`,
+
+    // 省略号图标 (Ellipsis H)
+    ellipsisH: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>`,
+
+    // 齿轮图标 (Cog)
+    cog: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.083.5-.375.924-.79 1.2-.415.276-.928.37-1.417.216l-1.017-.33a1.875 1.875 0 00-2.31.918l-.422.732a1.875 1.875 0 00.46 2.385l.806.666c.39.322.61.8.61 1.304s-.22.982-.61 1.304l-.806.666a1.875 1.875 0 00-.46 2.385l.421.732a1.875 1.875 0 002.31.918l1.017-.33c.489-.153 1.002-.06 1.417.216.415.276.707.7.79 1.2l.178 1.072c.151.904.933 1.567 1.85 1.567h.844c.917 0 1.699-.663 1.85-1.567l.178-1.072c.083-.5.375-.924.79-1.2.415-.276.928-.37 1.417-.216l1.017.33a1.875 1.875 0 002.31-.918l.422-.732a1.875 1.875 0 00-.46-2.385l-.807-.666a1.625 1.625 0 010-2.608l.807-.666a1.875 1.875 0 00.46-2.385l-.422-.732a1.875 1.875 0 00-2.31-.918l-1.017.33c-.489.153-1.002.06-1.417-.216-.415-.276-.707-.7-.79-1.2l-.178-1.072a1.875 1.875 0 00-1.85-1.567h-.844zM12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" clip-rule="evenodd" /></svg>`,
+
+    // 九宫格/布局图标 (Th Large)
+    thLarge: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M3 5.25A2.25 2.25 0 015.25 3h3A2.25 2.25 0 0110.5 5.25v3A2.25 2.25 0 018.25 10.5h-3A2.25 2.25 0 013 8.25v-3zm10.5 0A2.25 2.25 0 0115.75 3h3A2.25 2.25 0 0121 5.25v3A2.25 2.25 0 0118.75 10.5h-3A2.25 2.25 0 0113.5 8.25v-3zM3 15.75A2.25 2.25 0 015.25 13.5h3A2.25 2.25 0 0110.5 15.75v3A2.25 2.25 0 018.25 21h-3A2.25 2.25 0 013 18.75v-3zm10.5 0a2.25 2.25 0 012.25-2.25h3a2.25 2.25 0 012.25 2.25v3A2.25 2.25 0 0118.75 21h-3a2.25 2.25 0 01-2.25-2.25v-3z" clip-rule="evenodd" /></svg>`,
+
+    // 链接图标 (Link)
+    link: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.45l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.45l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-1.035-6.037.75.75 0 01-.353-1z" clip-rule="evenodd" /></svg>`,
+
+    // 复制图标 (Copy)
+    copy: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M17.25 3A2.25 2.25 0 0119.5 5.25v10.5A2.25 2.25 0 0117.25 18H8.25A2.25 2.25 0 016 15.75V5.25A2.25 2.25 0 018.25 3h9zm-9 1.5a.75.75 0 00-.75.75v10.5c0 .414.336.75.75.75h9a.75.75 0 00.75-.75V5.25a.75.75 0 00-.75-.75h-9z" clip-rule="evenodd" /><path d="M4.5 6.75a.75.75 0 00-.75.75v11.25a2.25 2.25 0 002.25 2.25H15a.75.75 0 000-1.5H6a.75.75 0 01-.75-.75V7.5a.75.75 0 00-.75-.75z" /></svg>`,
+
+    // 网络节点图标 (Network Wired)
+    networkWired: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M6 3a3 3 0 00-.75 5.904V10.5a1.5 1.5 0 001.5 1.5h3.75V8.904A3.001 3.001 0 0112 3a3 3 0 011.5 5.904V12h3.75a1.5 1.5 0 001.5-1.5V8.904A3.001 3.001 0 0118 3a3 3 0 01.75 5.904V10.5a3 3 0 01-3 3h-3.75v2.096A3.001 3.001 0 0112 21a3 3 0 01-.75-5.904V13.5H7.5a3 3 0 01-3-3V8.904A3.001 3.001 0 016 3z" /></svg>`
 };
 
 // 图标映射表
@@ -115,7 +166,27 @@ export const IconMap = {
     'fa-times': 'times',
     'fa-file-alt': 'fileExcelAlt',
     'fa-database': 'table',
-    'fa-upload': 'cloudUpload'
+    'fa-upload': 'cloudUpload',
+    'fa-file-upload': 'cloudUpload',
+    'fa-home': 'home',
+    'fa-star': 'star',
+    'fa-chart-line': 'chartLine',
+    'fa-chart-pie': 'chartPie',
+    'fa-exclamation-triangle': 'exclamationTriangle',
+    'fa-search': 'search',
+    'fa-code': 'code',
+    'fa-clock': 'clock',
+    'fa-utensils': 'utensils',
+    'fa-lock': 'lock',
+    'fa-ellipsis-h': 'ellipsisH',
+    'fa-cog': 'cog',
+    'fa-th-large': 'thLarge',
+    'fa-link': 'link',
+    'fa-copy': 'copy',
+    'fa-chevron-down': 'chevronDown',
+    'fa-chevron-left': 'arrowLeft',
+    'fa-arrow-left': 'arrowLeft',
+    'fa-network-wired': 'networkWired'
 };
 
 /**

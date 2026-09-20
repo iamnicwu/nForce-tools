@@ -71,9 +71,11 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
         
         debugLog('Calling conn.identity()...');
         const userInfo = await conn.identity();
-        debugLog('User identity retrieved:', userInfo);
-        debugLog('User photos:', userInfo.photos);
-        debugLog('User thumbnail:', userInfo.thumbnail);
+        debugLog('User identity retrieved successfully');
+        // 安全：不输出完整的 userInfo 对象，避免泄露敏感信息
+        debugLog('User:', userInfo.display_name || userInfo.name || userInfo.username);
+        debugLog('User photos available:', !!userInfo.photos);
+        debugLog('User thumbnail available:', !!userInfo.thumbnail);
         
         let orgInfo = null;
         try {
@@ -99,7 +101,8 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
             connection: conn
         };
         
-        debugLog('testConnectionWithUserInfo SUCCESS:', result);
+        debugLog('testConnectionWithUserInfo SUCCESS');
+        // 安全：不输出完整的 result 对象，避免泄露敏感信息
         return result;
     } catch (err) {
         debugError('testConnectionWithUserInfo FAILED:', err);
@@ -381,15 +384,9 @@ async function handleLogin() {
         debugError('chrome.storage.local save failed:', e);
     }
     
-    // Also save to localStorage
-    debugLog('Saving to localStorage...');
-    try {
-        localStorage.setItem('sf_session_id', session.sid);
-        localStorage.setItem('sf_instance_url', session.instanceUrl);
-        debugLog('localStorage saved successfully');
-    } catch (e) {
-        debugError('localStorage save failed:', e);
-    }
+    // Session 信息仅保存在 chrome.storage.local 中，不再存储到 localStorage
+    // localStorage 可被同源脚本访问，存在安全风险
+    debugLog('Session saved to chrome.storage.local only (localStorage removed for security)');
     
     // Show success
     if (loginBtn) {
@@ -471,11 +468,8 @@ if (manualLoginBtn) {
                 orgInfo: result.orgInfo
             });
             
-            // Also save to localStorage
-            localStorage.setItem('sf_session_id', sessionId);
-            if (result.userInfo.instanceUrl) {
-                localStorage.setItem('sf_instance_url', result.userInfo.instanceUrl);
-            }
+            // Session 信息仅保存在 chrome.storage.local 中，不再存储到 localStorage
+            // localStorage 可被同源脚本访问，存在安全风险
             
             if (manualLoginBtn) {
                 manualLoginBtn.innerHTML = '<i class="fas fa-check"></i><span>登录成功！</span>';

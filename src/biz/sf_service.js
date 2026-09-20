@@ -7,16 +7,26 @@ export let globalConn = null;
 export let userInfo = null;
 export let sfConn = {
   connection: null,
-  
+
+  // 最近一次连接失败的原因。
+  // 用于区分「服务端明确判定会话失效（401 / INVALID_SESSION_ID）」
+  // 与「请求根本没能到达服务端（CSP / 网络 / 代理拦截）」，
+  // 前者才可以安全地把界面降级为未连接。
+  lastError: null,
 
   async testConnection(session_id, instanceUrl) {
     try {
       console.log("instanceUrl", instanceUrl);
       let finalInstanceUrl = instanceUrl;
       
-      // 如果没有传入 instanceUrl，尝试从 localStorage 获取
+      // 如果没有传入 instanceUrl，尝试从 chrome.storage.local 获取
       if (!finalInstanceUrl) {
-        finalInstanceUrl = localStorage.getItem("sf_instance_url");
+        try {
+          const stored = await chrome.storage.local.get('sf_instance_url');
+          finalInstanceUrl = stored.sf_instance_url;
+        } catch (e) {
+          console.warn('从 chrome.storage.local 读取 instanceUrl 失败:', e);
+        }
       }
       
       // 如果仍然没有，使用默认的 here2serve 实例
@@ -39,15 +49,22 @@ export let sfConn = {
 
       // Get user identity info
       userInfo = await conn.identity();
-      console.log("abc: ", conn);
-      console.log("User info:", userInfo);
+      // 安全：不输出完整的连接对象和用户信息，避免泄露 session ID 和 access token
+      console.log("Connection established successfully");
+      console.log("User:", userInfo?.display_name || userInfo?.name || userInfo?.username);
       // 保存连接对象
       this.connection = conn;
       globalConn = conn;
+      this.lastError = null;
       return true;
     } catch (err) {
       console.error("Error:", err);
       this.connection = null;
+      this.lastError = {
+        message: err && err.message ? err.message : String(err),
+        errorCode: err && (err.errorCode || err.name) ? String(err.errorCode || err.name) : null,
+        statusCode: err && err.statusCode ? err.statusCode : null
+      };
       return false;
     }
   },
@@ -251,7 +268,7 @@ export let sfConn = {
           MainProduct__c = true AND
           LOB__c ='FixedLine' AND
           order.Service_Request_Date__c <= TODAY AND
-          order.Service_Request_Date__c > 2026-01-01 AND
+          order.Service_Request_Date__c > 2026-03-01 AND
           order.Custom_OrderStatus__c NOT IN (
               'Ready To Submit', 'Superseded', 'Activated',
               'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
@@ -298,6 +315,25 @@ export let sfConn = {
       return { success: false, error: error.message };
     }
   },
+
+  // 验证日期格式，防止 SOQL 注入
+  _validateDate(dateStr) {
+    if (!dateStr) return null;
+    // 只允许 YYYY-MM-DD 格式
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(dateStr)) {
+      console.warn(`日期格式无效: ${dateStr}，已忽略`);
+      return null;
+    }
+    // 验证是否为有效日期
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      console.warn(`日期无效: ${dateStr}，已忽略`);
+      return null;
+    }
+    return dateStr;
+  },
+
   async getDailyData(startDate = null, endDate = null) {
     try {
       if (!this.connection) {
@@ -309,17 +345,21 @@ export let sfConn = {
 
       let dateCondition;
 
-      if (startDate || endDate) {
+      // 验证并清理日期输入，防止 SOQL 注入
+      const validStartDate = this._validateDate(startDate);
+      const validEndDate = this._validateDate(endDate);
+
+      if (validStartDate || validEndDate) {
         // 自定义日期范围逻辑
-        if (startDate && endDate) {
-          dateCondition = `order.Service_Request_Date__c >= ${startDate} AND order.Service_Request_Date__c <= ${endDate}`;
-          console.log(`Fetching data for custom range: ${startDate} to ${endDate}`);
-        } else if (startDate) {
-          dateCondition = `order.Service_Request_Date__c >= ${startDate}`;
-          console.log(`Fetching data from: ${startDate}`);
-        } else if (endDate) {
-          dateCondition = `order.Service_Request_Date__c <= ${endDate}`;
-          console.log(`Fetching data until: ${endDate}`);
+        if (validStartDate && validEndDate) {
+          dateCondition = `order.Service_Request_Date__c >= ${validStartDate} AND order.Service_Request_Date__c <= ${validEndDate}`;
+          console.log(`Fetching data for custom range: ${validStartDate} to ${validEndDate}`);
+        } else if (validStartDate) {
+          dateCondition = `order.Service_Request_Date__c >= ${validStartDate}`;
+          console.log(`Fetching data from: ${validStartDate}`);
+        } else if (validEndDate) {
+          dateCondition = `order.Service_Request_Date__c <= ${validEndDate}`;
+          console.log(`Fetching data until: ${validEndDate}`);
         }
       } else {
         // 默认逻辑
@@ -392,6 +432,8 @@ export let sfConn = {
       return { success: false, error: error.message };
     }
   },
+
+  // 获取数据from 文件
   async getSFData(orderNumbers, onProgress) {
     try {
       if (!this.connection) {
@@ -417,12 +459,36 @@ export let sfConn = {
           orderNum.replace(/'/g, "''")
         );
 
+// SELECT order.Name, OrderId, order.OrderNatureValue__c, vlocity_cmt__OneTimeTotal__c, vlocity_cmt__AssetId__c, 
+//         Resource_Availability__c, Spare_Availability__c,   vlocity_cmt__Product2Id__r.name, Custom_Action__c,  vlocity_cmt__SubscriptionId__c, 
+//         vlocity_cmt__SubscriptionId__r.vlocity_cmt__Status__c, vlocity_cmt__SubscriptionId__r.BillingAccountNo__c, 
+//         vlocity_cmt__SubscriptionId__r.InvoluntaryTerminated__c, order.OrderNumber, order.Order_Nature__c, order.Service_Request_Date__c,
+//         order.Channel_Name__c,order.LOB__c, FulfillmentId__c, order.Self_Return__c, order.Has_Collect__c, order.KeepExistAddrSubscriptionLOB__c, AppointmentDate__c,
+//         AppointmentId__c,order.Attention__c,FulfillmentRemark__c,order.Custom_OrderStatus__c,order.Custom_FulfilmentStatus__c,
+//         FulfillmentDetail__c,order.Is_Voluntary__c,vlocity_cmt__FulfilmentStatus__c,Brm_Feedback_Code__c, 
+//         BRM_Feedback_Error_Log__c, vlocity_cmt__OneTimeCharge__c, BRM_Request_Id__c, order.CreatedBy.name, FulfillmentAction__c, 
+//         OSS_Service_Number__c, order.ServiceNumber__c, order.vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__State__c
+//         FROM OrderItem WHERE
+
+// SELECT Order.Name, Order.OrderNumber,	Order.Order_Nature__c,	
+//         Order.Service_Request_Date__c,	Order.Attention__c,	Order.Id,	Order.Custom_OrderStatus__c,	
+//         Order.Custom_FulfilmentStatus__c,	FulfillmentRemark__c,	FulfillmentId__c,	AppointmentId__c,	
+//         vlocity_cmt__FulfilmentStatus__c,	BRM_Request_Id__c
+//         FROM OrderItem WHERE
+
+
         // 构建SOQL查询，获取订单相关数据
-        const soql = `SELECT Order.Name, Order.OrderNumber, Order.Order_Nature__c,	Order.Service_Request_Date__c,	
-Order.Attention__c,	Order.Id,	Order.Custom_OrderStatus__c, Order.Custom_FulfilmentStatus__c,	
-FulfillmentRemark__c,	FulfillmentId__c,	AppointmentId__c,	vlocity_cmt__FulfilmentStatus__c,	BRM_Request_Id__c
- FROM OrderItem WHERE 
-Order.ordernumber in ('${escapedOrderNumbers.join(
+        const soql = `SELECT order.Name, OrderId, order.OrderNatureValue__c, vlocity_cmt__OneTimeTotal__c, vlocity_cmt__AssetId__c, 
+        Resource_Availability__c, Spare_Availability__c,   vlocity_cmt__Product2Id__r.name, Custom_Action__c,  vlocity_cmt__SubscriptionId__c, 
+        vlocity_cmt__SubscriptionId__r.vlocity_cmt__Status__c, vlocity_cmt__SubscriptionId__r.BillingAccountNo__c, 
+        vlocity_cmt__SubscriptionId__r.InvoluntaryTerminated__c, order.OrderNumber, order.Order_Nature__c, order.Service_Request_Date__c,
+        order.Channel_Name__c,order.LOB__c, FulfillmentId__c, order.Self_Return__c, order.Has_Collect__c, order.KeepExistAddrSubscriptionLOB__c, AppointmentDate__c,
+        AppointmentId__c,order.Attention__c,FulfillmentRemark__c,order.Custom_OrderStatus__c,order.Custom_FulfilmentStatus__c,
+        FulfillmentDetail__c,order.Is_Voluntary__c,vlocity_cmt__FulfilmentStatus__c,Brm_Feedback_Code__c, 
+        BRM_Feedback_Error_Log__c, vlocity_cmt__OneTimeCharge__c, BRM_Request_Id__c, order.CreatedBy.name, FulfillmentAction__c, 
+        OSS_Service_Number__c, order.ServiceNumber__c, order.vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__State__c
+        FROM OrderItem WHERE
+        Order.ordernumber in ('${escapedOrderNumbers.join(
           "','"
         )}')`;
 
@@ -663,12 +729,13 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
 
       let dailyQuery = '';
 
-      // 如果提供了自定义 SOQL 查询，则使用它；否则使用默认查询
+      // 安全警告：不再接受任意自定义 SOQL 查询以防止注入攻击
+      // 如果提供了自定义查询，仅记录日志并忽略，使用默认安全查询
       if (customQuery && customQuery.trim()) {
-        console.log("使用自定义 SOQL 查询:", customQuery);
-        dailyQuery = customQuery;
-      } else {
-        dailyQuery = `SELECT order.Name,
+        console.warn("自定义 SOQL 查询已被禁用以防止注入攻击，使用默认安全查询");
+      }
+
+      dailyQuery = `SELECT order.Name,
           order.OrderNumber,
           order.Order_Nature__c,
           order.Service_Request_Date__c,
@@ -694,7 +761,6 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
           order.Custom_OrderStatus__c NOT IN (
               'Ready To Submit', 'Superseded', 'Activated',
               'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
-      }
 
       const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
       const records = result.records || [];
