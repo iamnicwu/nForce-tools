@@ -104,12 +104,12 @@
 
             <!-- ========== 详情页：单个功能 ========== -->
             <section class="detail-view" id="detail-view" style="display: none;">
-                <div class="detail-header">
+                <!-- 返回按钮不单独占一行：enterDetailView 会把它移入当前功能卡片的头部（见 biz/ui.js） -->
+                <div id="detail-back-host">
                     <button type="button" class="ant-btn detail-back" id="detail-back">
                         <i class="fas fa-arrow-left"></i>
                         <span>返回</span>
                     </button>
-                    <span class="detail-title" id="detail-title">功能</span>
                 </div>
                 <div class="detail-body">
             <!-- 连接设置卡片 -->
@@ -266,7 +266,7 @@
                             </div>
 
                             <div class="form-group">
-                                <button type="submit" name="get_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg);">
+                                <button type="submit" name="get_daily_data" class="ant-btn ant-btn-primary fetch-btn">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取数据</span>
                                 </button>
@@ -321,7 +321,7 @@
                         
                         <form id="report-data-form" class="unified-form">
                             <div class="form-group">
-                                <button type="submit" name="get_report_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg);">
+                                <button type="submit" name="get_report_data" class="ant-btn ant-btn-primary fetch-btn">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取报表</span>
                                 </button>
@@ -390,7 +390,7 @@
                                 <input type="file" id="file" name="file" accept=".xlsx">
                             </div>
                             <div class="action-buttons">
-                                <button type="button" id="get-latest-data-btn" class="ant-btn ant-btn-primary" style="display: none; background-color: var(--success-color); border-color: var(--success-color);">
+                                <button type="button" id="get-latest-data-btn" class="ant-btn ant-btn-primary fetch-btn" style="display: none;">
                                     <i class="fas fa-sync-alt"></i>
                                     <span>获取最新数据</span>
                                 </button>
@@ -591,7 +591,7 @@
                             </div>
 
                             <div class="form-group">
-                                <button type="submit" name="get_pcd_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg);">
+                                <button type="submit" name="get_pcd_daily_data" class="ant-btn ant-btn-primary fetch-btn">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取数据</span>
                                 </button>
@@ -649,7 +649,7 @@
                                 <input type="file" id="vvip-file" name="file" accept=".xlsx">
                             </div>
                             <div class="action-buttons">
-                                <button type="button" id="get-vvip-data-btn" class="ant-btn ant-btn-primary" style="display: none; background-color: var(--theme-color); border-color: var(--theme-color);">
+                                <button type="button" id="get-vvip-data-btn" class="ant-btn ant-btn-primary fetch-btn" style="display: none;">
                                     <i class="fas fa-sync-alt"></i>
                                     <span>获取 PCD/LTS 状态</span>
                                 </button>
@@ -846,7 +846,7 @@
                                 <input type="number" id="t2-days-input" class="ant-input" placeholder="默认: 周五3天，其他2天" min="1" max="30" style="text-align: center;">
                             </div>
                             <div class="form-group">
-                                <button type="submit" name="get_t2_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg); background-color: var(--theme-color); border-color: var(--theme-color);">
+                                <button type="submit" name="get_t2_data" class="ant-btn ant-btn-primary fetch-btn">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取数据</span>
                                 </button>
@@ -1173,7 +1173,7 @@
                         
                         <form id="pcd-pid-fallout-data-form" class="unified-form">
                             <div class="form-group">
-                                <button type="submit" name="get_pcd_pid_fallout_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg); background-color: var(--theme-color); border-color: var(--theme-color);">
+                                <button type="submit" name="get_pcd_pid_fallout_data" class="ant-btn ant-btn-primary fetch-btn">
                                     <i class="fas fa-search"></i>
                                     <span>查询数据</span>
                                 </button>
@@ -1234,7 +1234,7 @@
                         
                         <form id="pcd-qc-issue-data-form" class="unified-form">
                             <div class="form-group">
-                                <button type="submit" name="get_pcd_qc_issue_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg); background-color: var(--theme-color); border-color: var(--theme-color);">
+                                <button type="submit" name="get_pcd_qc_issue_data" class="ant-btn ant-btn-primary fetch-btn">
                                     <i class="fas fa-search"></i>
                                     <span>查询数据</span>
                                 </button>

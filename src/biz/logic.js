@@ -427,6 +427,9 @@ export async function getReportData() {
         }
 
         log.info("报表数据获取成功");
+
+        // 获取成功后直接导出文件，用户无需再点「导出Excel」
+        exportReportData();
     }
   } catch (error) {
     log.error("获取报表数据失败:", error);
@@ -490,6 +493,9 @@ export async function getT2Data() {
         // 不再强制跳转到步骤5，保持在当前步骤
         showNotification(`T-4数据获取成功，共 ${appState.stats.t2Records} 条记录`, "success");
         log.info("T-4数据获取成功");
+
+        // 获取成功后直接导出文件，用户无需再点「导出Excel」
+        exportT2Data();
     }
   } catch (error) {
     log.error("获取T-4数据失败:", error);
@@ -562,6 +568,9 @@ export async function getSalesforceData() {
         }
 
         showNotification(`最新数据获取成功，共 ${result.data.length} 条记录`, "success");
+
+        // 获取成功后直接导出文件，用户无需再点「导出数据」
+        exportLatestData();
     }
   } catch (error) {
     log.error("获取Salesforce数据失败:", error);
@@ -656,6 +665,9 @@ export async function getDailyData() {
         // 不再强制跳转到步骤4，保持在当前步骤
         showNotification(`当日数据获取成功，共 ${result.data.length} 个订单`, "success");
         log.info("当日数据获取成功");
+
+        // 获取成功后直接导出文件，用户无需再点「导出Excel」
+        exportDailyData();
     } else {
       showNotification(`获取当日数据失败: ${result.error}`, "error");
     }
@@ -731,6 +743,9 @@ export async function getPCDDailyData() {
         
         showNotification(`PCD 当日数据获取成功，共 ${result.data.length} 个订单`, "success");
         log.info("PCD 当日数据获取成功");
+
+        // 获取成功后直接导出文件，用户无需再点「导出Excel」
+        exportPCDDailyData();
     } else {
       showNotification(`获取 PCD 当日数据失败: ${result.error}`, "error");
       // 隐藏loading mask
@@ -803,6 +818,9 @@ export async function getPCDPIDFalloutData() {
         
         showNotification(`PCD PID Fallout 数据获取成功，共 ${result.data.length} 条记录`, "success");
         log.info("PCD PID Fallout 数据获取成功");
+
+        // 获取成功后直接导出文件，用户无需再点「下载CSV」
+        exportPCDPIDFalloutData();
     } else {
       showNotification(`获取 PCD PID Fallout 数据失败: ${result.error}`, "error");
       // 隐藏loading mask
@@ -872,6 +890,9 @@ export async function getPCDQCIssueData() {
         
         showNotification(`PCD QC Issue 数据获取成功，共 ${result.data.length} 条记录`, "success");
         log.info("PCD QC Issue 数据获取成功");
+
+        // 获取成功后直接导出文件，用户无需再点「下载CSV」
+        exportPCDQCIssueData();
     } else {
       showNotification(`获取 PCD QC Issue 数据失败: ${result.error}`, "error");
       // 隐藏loading mask
@@ -1282,6 +1303,9 @@ export async function getVVIPData() {
         }
 
         showNotification(`VVIP数据获取成功，共 ${result.data.length} 条记录`, "success");
+
+        // 获取成功后直接导出文件，用户无需再点「导出数据」
+        exportVVIPData();
     }
   } catch (error) {
     log.error("获取VVIP数据失败:", error);
