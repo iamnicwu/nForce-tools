@@ -5,7 +5,8 @@ import { createLogger } from "./common/logger.js";
 
 const log = createLogger("BG");
 
-log.info("Service Worker 已启动（v3.3.0-onedrive）");
+// 版本号唯一来源是 manifest.json，不要在这里硬编码
+log.info(`Service Worker 已启动（v${chrome.runtime.getManifest().version}-onedrive）`);
 
 // Storage key for task configs
 const TASK_CONFIGS_KEY = 'schedule_task_configs';
