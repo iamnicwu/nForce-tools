@@ -1576,6 +1576,27 @@ optgroup {
     min-width: 140px;
 }
 
+/* 「获取数据」主按钮统一样式：所有模块同色（主蓝）同尺寸（通栏 48px）。
+   之前各模块分别写了 ant-btn-lg + 内联 theme-color / success-color，
+   颜色和高度各不相同 —— 统一收敛到这里，禁止再写内联覆盖 */
+.fetch-btn {
+    width: 100%;
+    height: 48px;
+    font-size: var(--fs-lg);
+}
+
+.ant-btn-primary.fetch-btn,
+.ant-btn-primary.fetch-btn:hover,
+.ant-btn-primary.fetch-btn:focus {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.ant-btn-primary.fetch-btn:active {
+    background-color: var(--primary-active);
+    border-color: var(--primary-active);
+}
+
 /* 统一文件上传拖拽区域 */
 .unified-upload-area {
     width: 100%;
@@ -1878,15 +1899,15 @@ optgroup {
     margin: 0 auto;
 }
 
-/* 渐变主视觉 */
+/* 渐变主视觉（紧凑版：减小内边距，把更多空间留给功能磁贴） */
 .launcher-hero {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 22px 26px;
-    margin-bottom: 20px;
-    border-radius: 16px;
+    gap: 12px;
+    padding: 14px 22px;
+    margin-bottom: 14px;
+    border-radius: 14px;
     background: linear-gradient(120deg, var(--accent-blue) 0%, var(--accent-indigo) 52%, var(--accent-purple) 100%);
     box-shadow: 0 6px 18px rgba(22, 119, 255, 0.22);
     color: #fff;
@@ -1897,10 +1918,10 @@ optgroup {
 }
 
 .launcher-hero-title {
-    font-size: var(--fs-2xl);
+    font-size: var(--fs-xl);
     font-weight: 600;
     color: #fff;
-    margin: 0 0 4px;
+    margin: 0 0 2px;
 }
 
 .launcher-hero-subtitle {
@@ -2290,28 +2311,28 @@ optgroup {
     box-shadow: none;
 }
 
-/* 功能分组 */
+/* 功能分组（紧凑版） */
 .launcher-group {
-    padding: 16px 18px;
-    margin-bottom: 18px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
     border-left: 3px solid var(--group-accent, var(--primary-color));
-    border-radius: 14px;
+    border-radius: 12px;
 }
 
 .launcher-group-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
 }
 
 .launcher-group-chip {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 4px 12px;
+    padding: 3px 11px;
     font-size: var(--fs-sm);
     font-weight: 600;
     color: var(--group-accent, var(--primary-color));
@@ -2326,20 +2347,20 @@ optgroup {
 
 .tile-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    gap: 8px;
 }
 
-/* 功能图标磁贴 */
+/* 功能图标磁贴（紧凑版：更小的内边距与图标） */
 .tile {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 13px 14px;
+    gap: 10px;
+    padding: 9px 12px;
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
-    border-radius: 12px;
+    border-radius: 10px;
     text-decoration: none;
     transition: all 0.2s;
 }
@@ -2358,13 +2379,13 @@ optgroup {
 
 .tile-icon {
     flex-shrink: 0;
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: var(--fs-xl);
+    font-size: var(--fs-lg);
     background: var(--tile-tint, var(--accent-blue-tint));
     color: var(--tile-accent, var(--primary-color));
 }
@@ -2372,12 +2393,12 @@ optgroup {
 .tile-text {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
     min-width: 0;
 }
 
 .tile-label {
-    font-size: var(--fs-base);
+    font-size: var(--fs-sm);
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -2530,27 +2551,31 @@ optgroup {
     margin: 0 auto;
 }
 
-.detail-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-    padding: 12px 16px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-radius: 12px;
+/* 返回按钮不再单独占一行（原 .detail-header 已移除）：
+   biz/ui.js 的 enterDetailView 会把 #detail-back 移入当前功能卡片的
+   .ant-card-head-wrapper 里，goHome 时再放回这个隐藏宿主 */
+#detail-back-host {
+    display: none;
 }
 
 .detail-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    flex-shrink: 0;
+    margin-left: -8px; /* 向左吸附卡片内边距，与标题视觉成组 */
+    color: var(--text-secondary);
+    background: transparent;
+    border-color: transparent;
 }
 
-.detail-title {
-    font-size: var(--fs-lg);
-    font-weight: 600;
-    color: var(--text-primary);
+.detail-back:hover,
+.detail-back:focus {
+    color: var(--primary-color);
+    border-color: var(--primary-border);
+    background: var(--primary-bg);
+}
+
+/* 卡片头部容纳返回按钮后，标题与 extra 之间保持间距 */
+.step-section > .ant-card-head .ant-card-head-wrapper {
+    gap: 8px;
 }
 
 @media (max-width: 768px) {
@@ -2566,10 +2591,6 @@ optgroup {
 
     .tile-desc {
         display: none;
-    }
-
-    .detail-title {
-        font-size: var(--fs-lg);
     }
 
     .favorites-hint {

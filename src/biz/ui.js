@@ -146,12 +146,21 @@ function enterDetailView(sectionNumber) {
   if (launcher) launcher.style.display = "none";
   if (detail) detail.style.display = "block";
 
-  // 标题取自该功能卡片的头部标题
+  // 返回按钮并入当前功能卡片头部（不单独占一行）：
+  // #detail-back 从隐藏宿主移入该 section 的 .ant-card-head-wrapper 最前面，
+  // 卡片自身的标题就是页面标题，无需再维护一份 detail-title
   const target = document.getElementById(`section-${sectionNumber}`);
-  const cardTitle = target ? target.querySelector(".ant-card-head-title") : null;
-  const titleEl = document.getElementById("detail-title");
-  if (titleEl) {
-    titleEl.textContent = cardTitle ? cardTitle.textContent.trim() : "功能";
+  const backBtn = document.getElementById("detail-back");
+  const backHost = document.getElementById("detail-back-host");
+  const cardHeadWrapper = target
+    ? target.querySelector(":scope > .ant-card-head > .ant-card-head-wrapper")
+    : null;
+  if (backBtn) {
+    if (cardHeadWrapper && backBtn.parentElement !== cardHeadWrapper) {
+      cardHeadWrapper.insertBefore(backBtn, cardHeadWrapper.firstChild);
+    } else if (backHost && backBtn.parentElement !== backHost) {
+      backHost.appendChild(backBtn);
+    }
   }
 
   setActiveTile(sectionNumber);
@@ -173,6 +182,14 @@ export function goHome() {
   document.querySelectorAll(".step-section").forEach((section) => {
     section.classList.remove("active");
   });
+
+  // 返回按钮放回隐藏宿主，下次进入其他功能时再移入对应卡片
+  const backBtn = document.getElementById("detail-back");
+  const backHost = document.getElementById("detail-back-host");
+  if (backBtn && backHost && backBtn.parentElement !== backHost) {
+    backHost.appendChild(backBtn);
+  }
+
   setActiveTile(null);
 
   const pageContent = document.querySelector(".page-content");
