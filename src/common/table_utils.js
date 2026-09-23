@@ -60,7 +60,7 @@ export function renderTable(containerId, tableId, data) {
     
     // 斑马纹
     if (rowIndex % 2 === 1) {
-      tr.style.backgroundColor = "#fafafa";
+      tr.style.backgroundColor = "var(--bg-tertiary)";
     }
     
     columns.forEach(col => {
@@ -150,7 +150,7 @@ export function renderHtmlTable(container, table, data) {
     
     // 斑马纹
     if (rowIndex % 2 === 1) {
-      tr.style.backgroundColor = "#fafafa";
+      tr.style.backgroundColor = "var(--bg-tertiary)";
     }
     
     columns.forEach(col => {

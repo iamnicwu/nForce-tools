@@ -1,12 +1,12 @@
+import { createLogger } from "../common/logger.js";
+
+const log = createLogger("UI");
 import { appState } from "./state.js";
 import { Icons } from "../common/icons.js";
 import { renderTable } from "../common/table_utils.js";
 import { showNotification, parseMarkdown, escapeHtml } from "../common/utils.js";
 import {
-    DEFAULT_LUNCH_PLACES,
-    DEFAULT_STATS,
-    DEFAULT_USER_INFO,
-    BULK_JOBS_DISPLAY_FIELDS
+    DEFAULT_LUNCH_PLACES
 } from "./ui_config.js";
 
 // 更新午餐 UI 状态
@@ -89,11 +89,11 @@ let t2AnalysisResizeListener = null;
 
 // 显示对应功能（v3.2：从首页进入详情页，一次只显示一个功能）
 export function showSection(sectionNumber) {
-  console.log(`[DEBUG] showSection called with sectionNumber=${sectionNumber}, is_connected=${appState.is_connected}`);
+  log.debug(`showSection called with sectionNumber=${sectionNumber}, is_connected=${appState.is_connected}`);
 
   // 未连接时仅允许访问连接设置(1)、版本信息(6)、布局配置(20)与设置(21)
   if (!appState.is_connected && ![1, 6, 20, 21].includes(sectionNumber)) {
-    console.log(`[DEBUG] Section ${sectionNumber} requires connection`);
+    log.debug(`Section ${sectionNumber} requires connection`);
     showNotification("请先完成 Salesforce 连接", "warning");
     showSection(1);
     return;
@@ -101,7 +101,7 @@ export function showSection(sectionNumber) {
 
   const target = document.getElementById(`section-${sectionNumber}`);
   if (!target) {
-    console.error(`[ERROR] Section ${sectionNumber} not found`);
+    log.error(`[ERROR] Section ${sectionNumber} not found`);
     return;
   }
 
@@ -241,20 +241,6 @@ export function updateUIState() {
       sessionIdBadge.style.display = "inline-block";
       sessionIdBadge.className = "ant-tag ant-tag-success";
     }
-    
-    // 更新Session状态徽章
-    const sessionStatusBadge = document.getElementById("session-status-badge");
-    if (sessionStatusBadge) {
-      sessionStatusBadge.textContent = "已设置";
-      sessionStatusBadge.className = "ant-tag ant-tag-success";
-    }
-  } else {
-    // 更新Session状态徽章为未设置
-    const sessionStatusBadge = document.getElementById("session-status-badge");
-    if (sessionStatusBadge) {
-      sessionStatusBadge.textContent = "未设置";
-      sessionStatusBadge.className = "ant-tag";
-    }
   }
 
   // 更新连接状态
@@ -262,12 +248,6 @@ export function updateUIState() {
     const connectionSuccess = document.getElementById("connection-success");
     if (connectionSuccess) {
       connectionSuccess.style.display = "flex";
-    }
-    
-    const connectionBadge = document.getElementById("connection-badge");
-    if (connectionBadge) {
-      connectionBadge.style.display = "inline-block";
-      connectionBadge.className = "ant-tag ant-tag-success";
     }
     
     // 更新连接状态徽章
@@ -446,23 +426,12 @@ export function updateUIState() {
 
   // 更新T-4分析状态
   if (appState.t2_analysis_data && appState.is_connected) {
-    const t2AnalysisBadge = document.getElementById("t2-analysis-badge");
-    if (t2AnalysisBadge) {
-      t2AnalysisBadge.style.display = "inline-block";
-      t2AnalysisBadge.className = "ant-tag ant-tag-success";
-    }
-
     // 显示导出按钮
     const exportT2AnalysisBtn = document.getElementById("export-t2-analysis-data");
     if (exportT2AnalysisBtn) {
       exportT2AnalysisBtn.style.display = "inline-block";
     }
   } else if (!appState.is_connected) {
-    const t2AnalysisBadge = document.getElementById("t2-analysis-badge");
-    if (t2AnalysisBadge) {
-      t2AnalysisBadge.style.display = "none";
-    }
-
     const exportT2AnalysisBtn = document.getElementById("export-t2-analysis-data");
     if (exportT2AnalysisBtn) {
       exportT2AnalysisBtn.style.display = "none";
@@ -497,20 +466,10 @@ export function updateUIState() {
 
   // 更新文件上传状态
   if (appState.has_file && appState.is_connected) {
-    const fileUploadSuccess = document.getElementById("file-upload-success");
-    if (fileUploadSuccess) {
-      fileUploadSuccess.style.display = "flex";
-    }
-    
     const fileUploadBadge = document.getElementById("file-upload-badge");
     if (fileUploadBadge) {
       fileUploadBadge.style.display = "inline-block";
       fileUploadBadge.className = "ant-tag ant-tag-success";
-    }
-    
-    const orderCount = document.getElementById("order-count");
-    if (orderCount) {
-      orderCount.textContent = appState.order_numbers.length;
     }
 
     // 显示"显示最新数据"按钮
@@ -519,11 +478,6 @@ export function updateUIState() {
       getLatestDataBtn.style.display = "inline-block";
     }
   } else if (!appState.is_connected) {
-    const fileUploadSuccess = document.getElementById("file-upload-success");
-    if (fileUploadSuccess) {
-      fileUploadSuccess.style.display = "none";
-    }
-    
     const fileUploadBadge = document.getElementById("file-upload-badge");
     if (fileUploadBadge) {
       fileUploadBadge.style.display = "none";
@@ -674,10 +628,10 @@ export function updateUserInfo() {
     // 更新头像颜色/环境标识
     if (appState.orgInfo) {
       if (appState.orgInfo.IsSandbox) {
-        avatarEl.style.backgroundColor = "#f39c12"; // 黄色 - UAT/Sandbox
+        avatarEl.style.backgroundColor = "var(--warning-color)"; // 黄色 - UAT/Sandbox
         avatarEl.title = "Sandbox Environment";
       } else {
-        avatarEl.style.backgroundColor = "#e74c3c"; // 红色 - Production
+        avatarEl.style.backgroundColor = "var(--error-color)"; // 红色 - Production
         avatarEl.title = "Production Environment";
       }
     } else {
@@ -735,18 +689,6 @@ export function updateUserInfo() {
   //   userUsernameEl.textContent = appState.userInfo.username || "-";
   // }
   
-  // 更新Session ID显示（只显示部分字符）
-  const sessionIdEl = document.getElementById("user-session-id");
-  if (sessionIdEl) {
-    if (appState.session_id) {
-      // 显示Session ID的前8位和后8位，中间用...代替
-      const shortSessionId = `${appState.session_id.substring(0, 8)}...${appState.session_id.substring(appState.session_id.length - 8)}`;
-      sessionIdEl.textContent = shortSessionId;
-    } else {
-      sessionIdEl.textContent = "未设置";
-    }
-  }
-  
   // 更新连接状态
   const connectionStatusEl = document.getElementById("user-connection-status");
   if (connectionStatusEl) {
@@ -784,42 +726,6 @@ export function updateUserInfo() {
     } else {
       envIndicator.style.display = "none";
     }
-  }
-  
-  // 更新当前步骤
-  const currentStepEl = document.getElementById("user-current-step");
-  if (currentStepEl) {
-    currentStepEl.textContent = appState.current_step || 1;
-  }
-  
-  // 更新当日订单数
-  const dailyOrdersEl = document.getElementById("user-daily-orders");
-  if (dailyOrdersEl) {
-    dailyOrdersEl.textContent = appState.stats.dailyOrders || 0;
-  }
-
-  // 更新 PCD 当日订单数
-  const pcdDailyOrdersEl = document.getElementById("user-pcd-daily-orders");
-  if (pcdDailyOrdersEl) {
-    pcdDailyOrdersEl.textContent = appState.stats.pcdDailyOrders || 0;
-  }
-  
-  // 更新报表记录数
-  const reportRecordsEl = document.getElementById("user-report-records");
-  if (reportRecordsEl) {
-    reportRecordsEl.textContent = appState.stats.reportRecords || 0;
-  }
-
-  // 更新T-4记录数
-  const t2RecordsEl = document.getElementById("user-t2-records");
-  if (t2RecordsEl) {
-    t2RecordsEl.textContent = appState.stats.t2Records || 0;
-  }
-  
-  // 更新上传订单数
-  const uploadedOrdersEl = document.getElementById("user-uploaded-orders");
-  if (uploadedOrdersEl) {
-    uploadedOrdersEl.textContent = appState.stats.uploadedOrders || 0;
   }
 }
 
@@ -1334,7 +1240,7 @@ export function renderAnalysisChart(data) {
           analysisBarChart.dispose();
           analysisBarChart = null;
       }
-      barChartDom.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:#999;">未找到 "Latest Action By" 相关字段</div>';
+      barChartDom.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;height:100%;color:var(--text-secondary);">未找到 "Latest Action By" 相关字段</div>';
     }
   }
   
@@ -1353,12 +1259,11 @@ export function renderAnalysisChart(data) {
 export function updateFileUploadUI(file) {
   const fileUpload = document.querySelector("#file-upload-form .upload-drag-wrapper");
   if (!fileUpload) return;
-  console.log("1");
-  // 更改图标为Excel文件图标
+    // 更改图标为Excel文件图标
   const iconContainer = fileUpload.querySelector(".ant-upload-drag-icon");
   if (iconContainer) {
     iconContainer.innerHTML = Icons.fileExcelAlt;
-    iconContainer.querySelector('svg').style.color = '#107c41';
+    iconContainer.querySelector('svg').style.color = 'var(--brand-excel)';
   }
 
   // 更新文本显示文件名
@@ -1370,11 +1275,11 @@ export function updateFileUploadUI(file) {
     nameDiv.textContent = file.name;
     
     const sizeDiv = document.createElement('div');
-    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.style.cssText = 'font-size: var(--fs-base); color: var(--text-secondary);';
     sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
     
     const hintDiv = document.createElement('div');
-    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.style.cssText = 'font-size: var(--fs-base); color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
     hintDiv.textContent = '点击或拖拽更换文件';
     
     textContainer.appendChild(nameDiv);
@@ -1395,7 +1300,7 @@ export function updateVVIPFileUploadUI(file) {
   const iconContainer = fileUpload.querySelector(".ant-upload-drag-icon");
   if (iconContainer) {
     iconContainer.innerHTML = Icons.fileExcelAlt;
-    iconContainer.querySelector('svg').style.color = '#107c41';
+    iconContainer.querySelector('svg').style.color = 'var(--brand-excel)';
   }
 
   // 更新文本显示文件名
@@ -1407,11 +1312,11 @@ export function updateVVIPFileUploadUI(file) {
     nameDiv.textContent = file.name;
     
     const sizeDiv = document.createElement('div');
-    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.style.cssText = 'font-size: var(--fs-base); color: var(--text-secondary);';
     sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
     
     const hintDiv = document.createElement('div');
-    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.style.cssText = 'font-size: var(--fs-base); color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
     hintDiv.textContent = '点击或拖拽更换文件';
     
     textContainer.appendChild(nameDiv);
@@ -1432,7 +1337,7 @@ export function updateT2AnalysisFileUploadUI(file) {
   const iconContainer = fileUpload.querySelector(".ant-upload-drag-icon");
   if (iconContainer) {
     iconContainer.innerHTML = Icons.fileExcelAlt;
-    iconContainer.querySelector('svg').style.color = '#107c41';
+    iconContainer.querySelector('svg').style.color = 'var(--brand-excel)';
   }
 
   // 更新文本显示文件名
@@ -1444,11 +1349,11 @@ export function updateT2AnalysisFileUploadUI(file) {
     nameDiv.textContent = file.name;
     
     const sizeDiv = document.createElement('div');
-    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.style.cssText = 'font-size: var(--fs-base); color: var(--text-secondary);';
     sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
     
     const hintDiv = document.createElement('div');
-    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.style.cssText = 'font-size: var(--fs-base); color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
     hintDiv.textContent = '点击或拖拽更换文件';
     
     textContainer.appendChild(nameDiv);
@@ -1468,7 +1373,7 @@ export function updateT2RulesFileUploadUI(file) {
   // 更改图标为JSON文件图标
   const iconContainer = fileUpload.querySelector(".ant-upload-drag-icon");
   if (iconContainer) {
-    iconContainer.innerHTML = '<i class="fas fa-file-code" style="font-size: 48px; color: #f39c12;"></i>';
+    iconContainer.innerHTML = '<i class="fas fa-file-code" style="font-size: var(--icon-2xl); color: var(--warning-color);"></i>';
   }
 
   // 更新文本显示文件名
@@ -1480,11 +1385,11 @@ export function updateT2RulesFileUploadUI(file) {
     nameDiv.textContent = file.name;
     
     const sizeDiv = document.createElement('div');
-    sizeDiv.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary);';
+    sizeDiv.style.cssText = 'font-size: var(--fs-base); color: var(--text-secondary);';
     sizeDiv.textContent = `${(file.size / 1024).toFixed(2)} KB`;
     
     const hintDiv = document.createElement('div');
-    hintDiv.style.cssText = 'font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
+    hintDiv.style.cssText = 'font-size: var(--fs-base); color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;';
     hintDiv.textContent = '点击或拖拽更换文件';
     
     textContainer.appendChild(nameDiv);
@@ -1616,7 +1521,7 @@ export function updateAnalysisFileUploadUI(file) {
   const iconContainer = fileUpload.querySelector(".ant-upload-drag-icon");
   if (iconContainer) {
     iconContainer.innerHTML = Icons.fileExcelAlt;
-    iconContainer.querySelector('svg').style.color = '#107c41';
+    iconContainer.querySelector('svg').style.color = 'var(--brand-excel)';
   }
 
   // 更新文本显示文件名
@@ -1624,10 +1529,10 @@ export function updateAnalysisFileUploadUI(file) {
   if (textContainer) {
     textContainer.innerHTML = `
       <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">${file.name}</div>
-      <div style="font-size: 0.875rem; color: var(--text-secondary);">
+      <div style="font-size: var(--fs-base); color: var(--text-secondary);">
         ${(file.size / 1024).toFixed(2)} KB
       </div>
-      <div style="font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
+      <div style="font-size: var(--fs-base); color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
         点击或拖拽更换文件
       </div>
     `;
@@ -2094,31 +1999,31 @@ function addFlowchartStyles() {
       min-width: 120px;
       max-width: 300px;
       text-align: center;
-      font-size: 14px;
+      font-size: var(--fs-base);
       line-height: 1.4;
       box-sizing: border-box;
     }
     
     .flowchart-node-square {
-      background: #e6f7ff;
-      border: 2px solid #1890ff;
+      background: var(--primary-bg);
+      border: 2px solid var(--primary-color);
       border-radius: 4px;
     }
     
     .flowchart-node-round {
-      background: #fff1b8;
-      border: 2px solid #faad14;
+      background: var(--warning-border);
+      border: 2px solid var(--warning-color);
       border-radius: 20px;
     }
     
     .flowchart-node-diamond {
-      background: #f6ffed;
-      border: 2px solid #52c41a;
+      background: var(--success-bg);
+      border: 2px solid var(--success-color);
       border-radius: 4px;
     }
     
     .flowchart-subgraph {
-      border: 2px dashed #8c8c8c;
+      border: 2px dashed var(--text-secondary);
       border-radius: 8px;
       padding: 10px;
       margin: 10px 0;
@@ -2128,10 +2033,10 @@ function addFlowchartStyles() {
     
     .flowchart-subgraph-title {
       font-weight: bold;
-      color: #5c5c5c;
+      color: var(--text-tertiary);
       margin-bottom: 10px;
       padding: 5px 10px;
-      background: #f5f5f5;
+      background: var(--bg-tertiary);
       border-radius: 4px;
     }
     
@@ -2157,42 +2062,42 @@ function addFlowchartStyles() {
       padding: 4px 10px;
       background: rgba(255,255,255,0.8);
       border-radius: 4px;
-      font-size: 12px;
-      color: #5c5c5c;
+      font-size: var(--fs-xs);
+      color: var(--text-tertiary);
     }
     
     .flowchart-edge-from,
     .flowchart-edge-to {
       padding: 4px 8px;
-      background: #f0f0f0;
+      background: var(--border-light);
       border-radius: 4px;
       font-weight: 500;
     }
     
     .flowchart-edge-label {
       padding: 2px 8px;
-      background: #fff1b8;
-      border: 1px solid #faad14;
+      background: var(--warning-border);
+      border: 1px solid var(--warning-color);
       border-radius: 4px;
-      font-size: 11px;
-      color: #5c5c5c;
+      font-size: var(--fs-xs);
+      color: var(--text-tertiary);
     }
     
     .flowchart-arrow {
-      color: #5c5c5c;
+      color: var(--text-tertiary);
       font-weight: bold;
     }
     
     .flowchart-error {
-      color: #ff4d4f;
+      color: var(--error-color);
       padding: 16px;
-      border: 1px solid #ffccc7;
-      background-color: #fff2f0;
+      border: 1px solid var(--error-border);
+      background-color: var(--error-bg);
       border-radius: 4px;
     }
     
     .flowchart-loading {
-      color: #666;
+      color: var(--text-tertiary);
       padding: 20px;
       text-align: center;
     }
@@ -2202,7 +2107,7 @@ function addFlowchartStyles() {
 
 // 处理 Mermaid/流程图代码块 - 使用 CSS/HTML 渲染
 function processMermaidDiagrams(container) {
-  console.log("processMermaidDiagrams: 使用 CSS/HTML 渲染流程图");
+  log.info("processMermaidDiagrams: 使用 CSS/HTML 渲染流程图");
   
   // 添加流程图样式
   addFlowchartStyles();
@@ -2231,7 +2136,7 @@ function processMermaidDiagrams(container) {
 
   if (nodesToProcess.length === 0) return;
 
-  console.log(`processMermaidDiagrams: 发现 ${nodesToProcess.length} 个流程图`);
+  log.info(`processMermaidDiagrams: 发现 ${nodesToProcess.length} 个流程图`);
 
   // 逐个渲染
   nodesToProcess.forEach(({ element, code }) => {
@@ -2256,16 +2161,16 @@ function processMermaidDiagrams(container) {
       div.innerHTML = renderer.render();
       div.style.padding = '';
     } catch (error) {
-      console.error('流程图渲染错误:', error);
+      log.error('流程图渲染错误:', error);
       div.innerHTML = `
-        <div style="text-align: left; color: #ff4d4f; padding: 16px; border: 1px solid #ffccc7; background-color: #fff2f0; border-radius: 4px; width: 100%; overflow: auto;">
+        <div style="text-align: left; color: var(--error-color); padding: 16px; border: 1px solid var(--error-border); background-color: var(--error-bg); border-radius: 4px; width: 100%; overflow: auto;">
           <div style="font-weight: bold; margin-bottom: 8px;">
             <i class="fas fa-exclamation-circle"></i> 流程图渲染失败
           </div>
-          <div style="font-family: monospace; font-size: 12px; margin-bottom: 8px;">${error.message || '未知错误'}</div>
+          <div style="font-family: monospace; font-size: var(--fs-xs); margin-bottom: 8px;">${error.message || '未知错误'}</div>
           <details>
-            <summary style="cursor: pointer; color: #1890ff; font-size: 12px;">查看原始代码</summary>
-            <pre style="margin-top: 8px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+            <summary style="cursor: pointer; color: var(--primary-color); font-size: var(--fs-xs);">查看原始代码</summary>
+            <pre style="margin-top: 8px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 4px; font-size: var(--fs-xs); white-space: pre-wrap;">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
           </details>
         </div>
       `;
@@ -2289,36 +2194,36 @@ async function loadReadme() {
       readmeContainer.innerHTML = '<p style="color: var(--error-color);">加载说明文档失败</p>';
     }
   } catch (error) {
-    console.error('加载README失败:', error);
+    log.error('加载README失败:', error);
     readmeContainer.innerHTML = '<p style="color: var(--error-color);">加载说明文档出错</p>';
   }
 }
 
 // 加载 LTS Fallout Summary
 async function loadLTSSummary() {
-  console.log('[DEBUG] loadLTSSummary called');
+  log.debug('loadLTSSummary 被调用');
   const container = document.getElementById('lts-summary-content');
   if (!container) {
-    console.error('[DEBUG] lts-summary-content container not found');
+    log.error('未找到 #lts-summary-content 容器');
     return;
   }
 
   try {
-    console.log('[DEBUG] Fetching docs/LTS_Fallout_Summary.md');
+    log.debug('正在获取 docs/LTS_Fallout_Summary.md');
     const response = await fetch('docs/LTS_Fallout_Summary.md');
-    console.log('[DEBUG] fetch response ok:', response.ok, 'status:', response.status);
+    log.debug('fetch 响应: ok=', response.ok, 'status=', response.status);
     if (response.ok) {
       const text = await response.text();
       // console.log('[DEBUG] Fetched text length:', text.length);
       renderMarkdownContent(container, text);
       appState.lts_summary_loaded = true;
-      console.log('[DEBUG] LTS Summary loaded successfully, lts_summary_loaded set to true');
+      log.debug('LTS Summary 加载成功');
     } else {
-      console.error('[DEBUG] Failed to fetch LTS Summary, status:', response.status);
+      log.error('获取 LTS Summary 失败，状态码:', response.status);
       container.innerHTML = '<p style="color: var(--error-color);">加载 LTS Fallout Summary 失败</p>';
     }
   } catch (error) {
-    console.error('[DEBUG] Exception loading LTS Fallout Summary:', error);
+    log.error('加载 LTS Fallout Summary 异常:', error);
     container.innerHTML = '<p style="color: var(--error-color);">加载 LTS Fallout Summary 出错</p>';
   }
 }
@@ -2331,7 +2236,7 @@ export function updateLunchFileUploadUI(file) {
   // 更改图标
   const iconContainer = fileUpload.querySelector(".ant-upload-drag-icon");
   if (iconContainer) {
-    iconContainer.innerHTML = '<i class="fas fa-utensils" style="font-size: 48px; color: #faad14;"></i>';
+    iconContainer.innerHTML = '<i class="fas fa-utensils" style="font-size: var(--icon-2xl); color: var(--warning-color);"></i>';
   }
 
   // 更新文本显示文件名
@@ -2339,10 +2244,10 @@ export function updateLunchFileUploadUI(file) {
   if (textContainer) {
     textContainer.innerHTML = `
       <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.5rem;">${file.name}</div>
-      <div style="font-size: 0.875rem; color: var(--text-secondary);">
+      <div style="font-size: var(--fs-base); color: var(--text-secondary);">
         ${(file.size / 1024).toFixed(2)} KB
       </div>
-      <div style="font-size: 0.875rem; color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
+      <div style="font-size: var(--fs-base); color: var(--primary-color); margin-top: 0.5rem; cursor: pointer;">
         点击或拖拽更换文件
       </div>
     `;
@@ -2365,14 +2270,14 @@ export function showLunchResult(place) {
         container.innerHTML = '';
         
         const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'text-align: center; padding: 30px; background: #fffbe6; border: 2px dashed #ffe58f; border-radius: 8px; box-shadow: 0 4px 12px rgba(250, 173, 20, 0.15);';
+        wrapper.style.cssText = 'text-align: center; padding: 30px; background: var(--warning-bg); border: 2px dashed var(--warning-border); border-radius: 8px; box-shadow: 0 4px 12px rgba(250, 173, 20, 0.15);';
         
         const emoji = document.createElement('div');
-        emoji.style.cssText = 'font-size: 48px; margin-bottom: 20px;';
+        emoji.style.cssText = 'font-size: var(--icon-2xl); margin-bottom: 20px;';
         emoji.textContent = '🎉';
         
         const label = document.createElement('div');
-        label.style.cssText = 'margin-bottom: 10px; color: #8c8c8c;';
+        label.style.cssText = 'margin-bottom: 10px; color: var(--text-secondary);';
         label.textContent = '今天中午吃这个：';
         
         wrapper.appendChild(emoji);
@@ -2380,18 +2285,18 @@ export function showLunchResult(place) {
         
         if (typeof place === 'string') {
             const h2 = document.createElement('h2');
-            h2.style.cssText = 'color: #faad14; margin: 0; font-size: 28px;';
+            h2.style.cssText = 'color: var(--warning-color); margin: 0; font-size: var(--fs-3xl);';
             h2.textContent = place;
             wrapper.appendChild(h2);
         } else if (typeof place === 'object') {
             const h2 = document.createElement('h2');
-            h2.style.cssText = 'color: #faad14; margin: 0; font-size: 28px;';
+            h2.style.cssText = 'color: var(--warning-color); margin: 0; font-size: var(--fs-3xl);';
             h2.textContent = place.name || '未知地点';
             wrapper.appendChild(h2);
             
             if (place.description) {
                 const p = document.createElement('p');
-                p.style.cssText = 'color: #666; margin-top: 10px; font-size: 16px;';
+                p.style.cssText = 'color: var(--text-tertiary); margin-top: 10px; font-size: var(--fs-lg);';
                 p.textContent = place.description;
                 wrapper.appendChild(p);
             }
@@ -2529,7 +2434,7 @@ export function renderScheduleJobsData(alarms) {
     alarms.forEach((alarm) => {
         const tr = document.createElement("tr");
         tr.style.cssText = "border-bottom: 1px solid var(--border-color); transition: background 0.2s;";
-        tr.onmouseenter = () => tr.style.background = "#f5f5f5";
+        tr.onmouseenter = () => tr.style.background = "var(--bg-tertiary)";
         tr.onmouseleave = () => tr.style.background = "#fff";
 
         // 统一创建居中单元格
@@ -2561,32 +2466,32 @@ export function renderScheduleJobsData(alarms) {
         // 名称
         const nameTd = makeTd(`
             <span style="display:inline-flex; align-items:center; justify-content:center; gap:8px;">
-                <i class="fas fa-clock" style="color: #2f54eb;"></i>
-                <span style="font-weight: 500; color: #262626;">${alarm.name || 'Unnamed Job'}</span>
+                <i class="fas fa-clock" style="color: var(--accent-indigo);"></i>
+                <span style="font-weight: 500; color: var(--text-primary);">${alarm.name || 'Unnamed Job'}</span>
             </span>
         `);
 
         // 类型
         const typeTd = makeTd(
             isPeriodic
-                ? '<span style="background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">周期</span>'
-                : '<span style="background: #f5f5f5; color: #8c8c8c; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">一次性</span>'
+                ? '<span style="background: var(--primary-bg); color: var(--primary-color); padding: 2px 8px; border-radius: 4px; font-size: var(--fs-xs); display:inline-block;">周期</span>'
+                : '<span style="background: var(--bg-tertiary); color: var(--text-secondary); padding: 2px 8px; border-radius: 4px; font-size: var(--fs-xs); display:inline-block;">一次性</span>'
         );
 
         // 状态
         const statusTd = makeTd(
             isPaused
-                ? '<span style="background: #fff1f0; color: #ff4d4f; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">已暂停</span>'
-                : '<span style="background: #f6ffed; color: #52c41a; padding: 2px 8px; border-radius: 4px; font-size: 12px; display:inline-block;">运行中</span>'
+                ? '<span style="background: var(--error-bg); color: var(--error-color); padding: 2px 8px; border-radius: 4px; font-size: var(--fs-xs); display:inline-block;">已暂停</span>'
+                : '<span style="background: var(--success-bg); color: var(--success-color); padding: 2px 8px; border-radius: 4px; font-size: var(--fs-xs); display:inline-block;">运行中</span>'
         );
 
         // 周期
         const periodTd = makeTd(`${isPeriodic ? (alarm.periodInMinutes + ' 分钟') : '-'}`);
-        periodTd.style.color = '#8c8c8c';
+        periodTd.style.color = 'var(--text-secondary)';
 
         // 下次执行
         const nextTd = makeTd(`
-            <span style="display:inline-flex; align-items:center; justify-content:center; gap:6px; color:#8c8c8c;">
+            <span style="display:inline-flex; align-items:center; justify-content:center; gap:6px; color:var(--text-secondary);">
                 <i class="fas fa-calendar-alt"></i>${nextRunText}
             </span>
         `);

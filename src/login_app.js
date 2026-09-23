@@ -1,5 +1,7 @@
 // login.html JavaScript Logic
 // API Version
+import { createLogger, maskSecret } from "./common/logger.js";
+const log = createLogger("LOGIN");
 const defaultApiVersion = "65.0";
 
 // State
@@ -17,51 +19,39 @@ const manualLoginBtn = document.getElementById('manual-login-btn');
 const sessionIdInput = document.getElementById('session-id');
 const errorMsg = document.getElementById('error-msg');
 
-// Debug logging helper
-function debugLog(...args) {
-    console.log('[nForce Tools Login]', new Date().toISOString(), ...args);
-}
-
-function debugError(...args) {
-    console.error('[nForce Tools Login ERROR]', new Date().toISOString(), ...args);
-}
-
-function debugWarn(...args) {
-    console.warn('[nForce Tools Login WARN]', new Date().toISOString(), ...args);
-}
 
 // Get domain from tab URL
 function getDomain(currentTabUrl) {
-    debugLog('getDomain called with:', currentTabUrl);
+    log.debug('getDomain called with:', currentTabUrl);
     if (currentTabUrl) {
         if (currentTabUrl.includes(".lightning.force.com")) {
             const domain = currentTabUrl.split(".lightning.force.com")[0] + ".my.salesforce.com";
-            debugLog('Lightning domain extracted:', domain);
+            log.debug('Lightning domain extracted:', domain);
             return domain;
         } else if (currentTabUrl.includes(".my.salesforce.com")) {
             const domain = currentTabUrl.split(".my.salesforce.com")[0] + ".my.salesforce.com";
-            debugLog('MySalesforce domain extracted:', domain);
+            log.debug('MySalesforce domain extracted:', domain);
             return domain;
         }
     }
-    debugWarn('Could not extract domain from:', currentTabUrl);
+    log.warn('无法从 URL 提取域名:', currentTabUrl);
     return null;
 }
 
 // Test connection and get user info
 async function testConnectionWithUserInfo(session_id, instanceUrl) {
-    debugLog('testConnectionWithUserInfo called');
-    debugLog('session_id:', session_id ? session_id.substring(0, 20) + '...' : 'null');
-    debugLog('instanceUrl:', instanceUrl);
+    log.debug('testConnectionWithUserInfo called');
+    log.debug('session_id:', session_id ? maskSecret(session_id) : 'null');
+    log.debug('instanceUrl:', instanceUrl);
     
     try {
         // let finalInstanceUrl = instanceUrl || "https://here2serve.my.salesforce.com";
         // if (finalInstanceUrl === "https://here2serve.lightning.force.com") {
         //     finalInstanceUrl = "https://here2serve.my.salesforce.com";
-        //     debugLog('Converted lightning URL to:', finalInstanceUrl);
+        //     log.debug('Converted lightning URL to:', finalInstanceUrl);
         // }
         
-        debugLog('Creating jsforce connection...');
+        log.debug('Creating jsforce connection...');
         const conn = new jsforce.Connection({
             instanceUrl: instanceUrl,
             serverUrl: `${instanceUrl}/services/Soap/u/${defaultApiVersion}`,
@@ -69,24 +59,24 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
             version: defaultApiVersion,
         });
         
-        debugLog('Calling conn.identity()...');
+        log.debug('Calling conn.identity()...');
         const userInfo = await conn.identity();
-        debugLog('User identity retrieved successfully');
+        log.debug('User identity retrieved successfully');
         // 安全：不输出完整的 userInfo 对象，避免泄露敏感信息
-        debugLog('User:', userInfo.display_name || userInfo.name || userInfo.username);
-        debugLog('User photos available:', !!userInfo.photos);
-        debugLog('User thumbnail available:', !!userInfo.thumbnail);
+        log.debug('User:', userInfo.display_name || userInfo.name || userInfo.username);
+        log.debug('User photos available:', !!userInfo.photos);
+        log.debug('User thumbnail available:', !!userInfo.thumbnail);
         
         let orgInfo = null;
         try {
-            debugLog('Querying Organization info...');
+            log.debug('Querying Organization info...');
             const orgResult = await conn.query("SELECT Id, IsSandbox, OrganizationType FROM Organization");
             if (orgResult.records && orgResult.records.length > 0) {
                 orgInfo = orgResult.records[0];
-                debugLog('Organization info:', orgInfo);
+                log.debug('Organization info:', orgInfo);
             }
         } catch (orgErr) {
-            debugWarn('获取组织信息失败:', orgErr);
+            log.warn('获取组织信息失败:', orgErr);
         }
         
         const result = {
@@ -101,21 +91,21 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
             connection: conn
         };
         
-        debugLog('testConnectionWithUserInfo SUCCESS');
+        log.debug('testConnectionWithUserInfo SUCCESS');
         // 安全：不输出完整的 result 对象，避免泄露敏感信息
         return result;
     } catch (err) {
-        debugError('testConnectionWithUserInfo FAILED:', err);
+        log.error('连接测试失败:', err);
         return { success: false, error: err.message };
     }
 }
 
 // Auto detect sessions
 async function autoDetectSession() {
-    debugLog('========== autoDetectSession START ==========');
+    log.debug('========== autoDetectSession START ==========');
     
     try {
-        debugLog('Querying Chrome tabs for Salesforce URLs...');
+        log.debug('Querying Chrome tabs for Salesforce URLs...');
         const tabs = await chrome.tabs.query({
             url: [
                 "https://*.salesforce.com/*",
@@ -124,18 +114,18 @@ async function autoDetectSession() {
             ],
         });
         
-        debugLog('Tabs query result:', tabs);
-        debugLog('Total tabs found:', tabs ? tabs.length : 0);
+        log.debug('Tabs query result:', tabs);
+        log.debug('Total tabs found:', tabs ? tabs.length : 0);
         
         const availableSessions = [];
         // const processedDomains = new Set();
         
         if (tabs && tabs.length > 0) {
-            debugLog(`Processing ${tabs.length} tabs...`);
+            log.debug(`Processing ${tabs.length} tabs...`);
             
             for (const tab of tabs) {
-                debugLog('-----------------------------------');
-                debugLog('Processing tab:', {
+                log.debug('-----------------------------------');
+                log.debug('Processing tab:', {
                     id: tab.id,
                     url: tab.url,
                     title: tab.title
@@ -151,37 +141,37 @@ async function autoDetectSession() {
                     let domainKey = hostname;
                     if (hostname.includes('--')) {
                         domainKey = hostname.split('--')[0];
-                        debugLog('  Domain key (with --):', domainKey);
+                        log.debug('  Domain key (with --):', domainKey);
                     } else {
                         domainKey = hostname.split('.')[0];
-                        debugLog('  Domain key (simple):', domainKey);
+                        log.debug('  Domain key (simple):', domainKey);
                     }
                     
                     
                     
                     // Get cookie URL
                     const cookieUrl = getDomain(tab.url);
-                    debugLog('  Cookie URL:', cookieUrl);
+                    log.debug('  Cookie URL:', cookieUrl);
                     
                     if (!cookieUrl) {
-                        debugWarn('  SKIP: Could not get cookie URL');
+                        log.warn('  SKIP: Could not get cookie URL');
                         continue;
                     }
                     
                     // Get session from cookies
-                    debugLog('  Getting cookies for sid...');
+                    log.debug('  Getting cookies for sid...');
                     const cookies = await chrome.cookies.getAll({ url: cookieUrl, name: "sid" });
-                    debugLog('  Cookies result:', cookies);
+                    log.debug('  Cookies result:', cookies);
                     
                     if (cookies && cookies.length > 0) {
                         const cookieValue = cookies[0].value;
-                        debugLog('  Cookie value (first 50 chars):', cookieValue ? cookieValue.substring(0, 50) + '...' : 'null');
+                        log.debug('  Cookie value (first 50 chars):', cookieValue ? cookieValue.substring(0, 50) + '...' : 'null');
                         const instanceUrl = "https://"+getDomain(cookies[0].domain);
-                        console.log("cookies[0].domain: ", instanceUrl);
+                        log.debug("cookies[0].domain: ", instanceUrl);
                         // Parse session ID from cookie
                         // Cookie format: something!sessionId
                         const parts = cookieValue.split('!');
-                        debugLog('  Cookie split parts:', parts.length);
+                        log.debug('  Cookie split parts:', parts.length);
                         
                         let sid = null;
                         if (parts.length >= 2) {
@@ -190,15 +180,15 @@ async function autoDetectSession() {
                             sid = parts[0];
                         }
                         
-                        debugLog('  Extracted SID:', sid ? sid.substring(0, 20) + '...' : 'null');
+                        log.debug('  Extracted SID:', sid ? sid.substring(0, 20) + '...' : 'null');
                         
-                        console.log("abc instanceUrl: ", instanceUrl);
+                        log.debug("abc instanceUrl: ", instanceUrl);
                         if (sid) {
-                            debugLog('  Testing connection...');
+                            log.debug('  Testing connection...');
                             const connectionResult = await testConnectionWithUserInfo(sid, instanceUrl);
                             
                             if (connectionResult.success) {
-                                debugLog('  Connection SUCCESS!');
+                                log.debug('  Connection SUCCESS!');
                                 availableSessions.push({
                                     sid: sid,
                                     instanceUrl: instanceUrl,
@@ -208,20 +198,20 @@ async function autoDetectSession() {
                                     orgInfo: connectionResult.orgInfo,
                                     connection: connectionResult.connection
                                 });
-                                debugLog('  Session added to availableSessions, total:', availableSessions.length);
+                                log.debug('  Session added to availableSessions, total:', availableSessions.length);
                             } else {
-                                debugWarn('  Connection FAILED');
+                                log.warn('  Connection FAILED');
                             }
                         }
                     } else {
-                        debugWarn('  No cookies found for this tab');
+                        log.warn('  No cookies found for this tab');
                     }
                 } catch (err) {
-                    debugError('  Error processing tab:', err);
+                    log.error('  Error processing tab:', err);
                 }
             }
         } else {
-            debugWarn('No Salesforce tabs found');
+            log.warn('未找到 Salesforce 标签页');
         }
         
         // Deduplicate sessions by sid + instanceUrl combination
@@ -229,18 +219,18 @@ async function autoDetectSession() {
         const deduplicatedSessions = availableSessions.filter(session => {
             const key = `${session.sid}::${session.instanceUrl}`;
             if (seen.has(key)) {
-                debugLog(`  Deduplicating duplicate session: ${session.instanceUrl} (${session.userInfo?.username})`);
+                log.debug(`  Deduplicating duplicate session: ${session.instanceUrl} (${session.userInfo?.username})`);
                 return false;
             }
             seen.add(key);
             return true;
         });
         
-        debugLog('========== autoDetectSession END ==========');
-        debugLog('Total sessions before deduplication:', availableSessions.length);
-        debugLog('Total sessions after deduplication:', deduplicatedSessions.length);
+        log.debug('========== autoDetectSession END ==========');
+        log.debug('Total sessions before deduplication:', availableSessions.length);
+        log.debug('Total sessions after deduplication:', deduplicatedSessions.length);
         deduplicatedSessions.forEach((s, i) => {
-            debugLog(`  Session ${i}:`, {
+            log.debug(`  Session ${i}:`, {
                 instanceUrl: s.instanceUrl,
                 username: s.userInfo?.username,
                 fullName: s.userInfo?.fullName
@@ -249,29 +239,29 @@ async function autoDetectSession() {
         
         return deduplicatedSessions;
     } catch (error) {
-        debugError('autoDetectSession FAILED:', error);
+        log.error('自动检测 Session 失败:', error);
         return [];
     }
 }
 
 // Render session list
 function renderSessionList(sessions) {
-    debugLog('renderSessionList called with', sessions ? sessions.length : 0, 'sessions');
+    log.debug('renderSessionList called with', sessions ? sessions.length : 0, 'sessions');
     
     if (!sessionListContainer) {
-        debugError('sessionListContainer is null!');
+        log.error('未找到 #session-list-container 容器!');
         return;
     }
     
     sessionListContainer.innerHTML = '';
     
     if (!sessions || sessions.length === 0) {
-        debugWarn('No sessions to render');
+        log.warn('没有可渲染的会话');
         return;
     }
     
     sessions.forEach((session, index) => {
-        debugLog('Rendering session', index, ':', session.instanceUrl);
+        log.debug('Rendering session', index, ':', session.instanceUrl);
         
         const card = document.createElement('div');
         card.className = 'session-card';
@@ -289,7 +279,7 @@ function renderSessionList(sessions) {
             envLabel = 'Production';
         }
         
-        debugLog('  Environment:', envLabel, 'IsSandbox:', isSandbox);
+        log.debug('  Environment:', envLabel, 'IsSandbox:', isSandbox);
         
         // Extract domain for display
         let domainDisplay = session.instanceUrl;
@@ -297,14 +287,14 @@ function renderSessionList(sessions) {
             const url = new URL(session.instanceUrl);
             domainDisplay = url.hostname;
         } catch (e) {
-            debugWarn('  Could not parse domain:', e);
+            log.warn('  Could not parse domain:', e);
         }
         
         const userDisplay = session.userInfo?.fullName || session.userInfo?.username || 'Unknown User';
         const emailDisplay = session.userInfo?.email || '-';
         
-        debugLog('  User:', userDisplay);
-        debugLog('  Email:', emailDisplay);
+        log.debug('  User:', userDisplay);
+        log.debug('  Email:', emailDisplay);
         
         card.innerHTML = `
             <span class="session-env ${envClass}">${envLabel}</span>
@@ -314,29 +304,29 @@ function renderSessionList(sessions) {
         `;
         
         card.addEventListener('click', () => {
-            debugLog('Session card clicked, index:', index);
+            log.debug('Session card clicked, index:', index);
             selectSession(index);
         });
         
         sessionListContainer.appendChild(card);
     });
     
-    debugLog('renderSessionList complete');
+    log.debug('renderSessionList complete');
 }
 
 // Select session
 function selectSession(index) {
-    debugLog('selectSession called with index:', index);
+    log.debug('selectSession called with index:', index);
     
     selectedSessionIndex = index;
     
     // Update UI
     const cards = document.querySelectorAll('.session-card');
-    debugLog('Found', cards.length, 'session cards');
+    log.debug('Found', cards.length, 'session cards');
     
     cards.forEach((card, i) => {
         const isSelected = i === index;
-        debugLog('  Card', i, 'selected:', isSelected);
+        log.debug('  Card', i, 'selected:', isSelected);
         card.classList.toggle('selected', isSelected);
     });
     
@@ -345,32 +335,32 @@ function selectSession(index) {
         const session = availableSessions[index];
         const userName = session?.userInfo?.fullName || session?.userInfo?.username || '此环境';
         loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i><span>登录到 ' + userName + '</span>';
-        debugLog('Login button updated, user:', userName);
+        log.debug('Login button updated, user:', userName);
     } else {
-        debugError('loginBtn is null!');
+        log.error('未找到 #login-btn!');
     }
 }
 
 // Handle login
 async function handleLogin() {
-    debugLog('handleLogin called');
-    debugLog('selectedSessionIndex:', selectedSessionIndex);
-    debugLog('availableSessions.length:', availableSessions.length);
+    log.debug('handleLogin called');
+    log.debug('selectedSessionIndex:', selectedSessionIndex);
+    log.debug('availableSessions.length:', availableSessions.length);
     
     if (selectedSessionIndex < 0 || selectedSessionIndex >= availableSessions.length) {
-        debugError('Invalid session index!');
+        log.error('无效的会话索引!');
         return;
     }
     
     const session = availableSessions[selectedSessionIndex];
-    debugLog('Selected session:', {
+    log.debug('Selected session:', {
         instanceUrl: session.instanceUrl,
         username: session.userInfo?.username,
         fullName: session.userInfo?.fullName
     });
     
     // Save to chrome.storage.local
-    debugLog('Saving to chrome.storage.local...');
+    log.debug('Saving to chrome.storage.local...');
     try {
         await chrome.storage.local.set({
             sf_session_id: session.sid,
@@ -379,30 +369,30 @@ async function handleLogin() {
             userInfo: session.userInfo,
             orgInfo: session.orgInfo
         });
-        debugLog('chrome.storage.local saved successfully');
+        log.debug('chrome.storage.local saved successfully');
     } catch (e) {
-        debugError('chrome.storage.local save failed:', e);
+        log.error('写入 chrome.storage.local 失败:', e);
     }
     
     // Session 信息仅保存在 chrome.storage.local 中，不再存储到 localStorage
     // localStorage 可被同源脚本访问，存在安全风险
-    debugLog('Session saved to chrome.storage.local only (localStorage removed for security)');
+    log.debug('Session saved to chrome.storage.local only (localStorage removed for security)');
     
     // Show success
     if (loginBtn) {
         loginBtn.innerHTML = '<i class="fas fa-check"></i><span>登录成功！</span>';
-        loginBtn.style.background = '#52c41a';
-        debugLog('Login button updated to success state');
+        loginBtn.style.background = 'var(--success-color)';
+        log.debug('Login button updated to success state');
     }
     
     // Navigate to index.html after delay
-    debugLog('Scheduling redirect to index.html...');
+    log.debug('Scheduling redirect to index.html...');
     setTimeout(() => {
-        debugLog('Creating new tab with index.html...');
+        log.debug('Creating new tab with index.html...');
         chrome.tabs.create({
             url: chrome.runtime.getURL('index.html')
         }, (tab) => {
-            debugLog('New tab created:', tab);
+            log.debug('New tab created:', tab);
             window.close();
         });
     }, 500);
@@ -410,37 +400,37 @@ async function handleLogin() {
 
 // Show manual login
 if (showManualLogin) {
-    debugLog('showManualLogin button found, adding listener');
+    log.debug('showManualLogin button found, adding listener');
     showManualLogin.addEventListener('click', () => {
-        debugLog('showManualLogin clicked');
+        log.debug('showManualLogin clicked');
         if (manualLoginSection) {
             manualLoginSection.style.display = 'block';
-            debugLog('manualLoginSection shown');
+            log.debug('manualLoginSection shown');
         }
         if (noSession) {
             noSession.style.display = 'none';
-            debugLog('noSession hidden');
+            log.debug('noSession hidden');
         }
     });
 } else {
-    debugWarn('showManualLogin button NOT found');
+    log.warn('未找到 #show-manual-login');
 }
 
 // Manual login
 if (manualLoginBtn) {
-    debugLog('manualLoginBtn found, adding listener');
+    log.debug('manualLoginBtn found, adding listener');
     manualLoginBtn.addEventListener('click', async () => {
-        debugLog('manualLoginBtn clicked');
+        log.debug('manualLoginBtn clicked');
         
         const sessionId = sessionIdInput ? sessionIdInput.value.trim() : '';
-        debugLog('Session ID input:', sessionId ? sessionId.substring(0, 20) + '...' : 'empty');
+        log.debug('Session ID 输入:', sessionId ? maskSecret(sessionId) : 'empty');
         
         if (!sessionId) {
             if (errorMsg) {
                 errorMsg.textContent = '请输入 Session ID';
                 errorMsg.classList.add('show');
             }
-            debugWarn('No session ID entered');
+            log.warn('未输入 Session ID');
             return;
         }
         
@@ -453,11 +443,11 @@ if (manualLoginBtn) {
             manualLoginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>验证中...</span>';
         }
         
-        debugLog('Calling testConnectionWithUserInfo...');
+        log.debug('Calling testConnectionWithUserInfo...');
         const result = await testConnectionWithUserInfo(sessionId);
         
         if (result.success) {
-            debugLog('Manual login SUCCESS');
+            log.debug('Manual login SUCCESS');
             
             // Save to chrome.storage.local
             await chrome.storage.local.set({
@@ -473,7 +463,7 @@ if (manualLoginBtn) {
             
             if (manualLoginBtn) {
                 manualLoginBtn.innerHTML = '<i class="fas fa-check"></i><span>登录成功！</span>';
-                manualLoginBtn.style.background = '#52c41a';
+                manualLoginBtn.style.background = 'var(--success-color)';
             }
             
             setTimeout(() => {
@@ -483,7 +473,7 @@ if (manualLoginBtn) {
                 window.close();
             }, 500);
         } else {
-            debugError('Manual login FAILED');
+            log.error('手动登录失败');
             if (errorMsg) {
                 errorMsg.textContent = 'Session ID 无效或已过期';
                 errorMsg.classList.add('show');
@@ -495,54 +485,54 @@ if (manualLoginBtn) {
         }
     });
 } else {
-    debugWarn('manualLoginBtn NOT found');
+    log.warn('未找到 #manual-login-btn');
 }
 
 // Login button click
 if (loginBtn) {
-    debugLog('loginBtn found, adding listener');
+    log.debug('loginBtn found, adding listener');
     loginBtn.addEventListener('click', handleLogin);
 } else {
-    debugError('loginBtn is null!');
+    log.error('未找到 #login-btn!');
 }
 
 // Initialize
 async function init() {
-    debugLog('========================================');
-    debugLog('nForce Tools Login Page Initializing...');
-    debugLog('========================================');
+    log.debug('========================================');
+    log.debug('nForce Tools Login Page Initializing...');
+    log.debug('========================================');
     
-    debugLog('Checking DOM elements...');
-    debugLog('  loadingState:', loadingState ? 'found' : 'NULL');
-    debugLog('  sessionListContainer:', sessionListContainer ? 'found' : 'NULL');
-    debugLog('  loginBtn:', loginBtn ? 'found' : 'NULL');
-    debugLog('  noSession:', noSession ? 'found' : 'NULL');
-    debugLog('  showManualLogin:', showManualLogin ? 'found' : 'NULL');
-    debugLog('  manualLoginSection:', manualLoginSection ? 'found' : 'NULL');
-    debugLog('  manualLoginBtn:', manualLoginBtn ? 'found' : 'NULL');
-    debugLog('  sessionIdInput:', sessionIdInput ? 'found' : 'NULL');
-    debugLog('  errorMsg:', errorMsg ? 'found' : 'NULL');
+    log.debug('Checking DOM elements...');
+    log.debug('  loadingState:', loadingState ? 'found' : 'NULL');
+    log.debug('  sessionListContainer:', sessionListContainer ? 'found' : 'NULL');
+    log.debug('  loginBtn:', loginBtn ? 'found' : 'NULL');
+    log.debug('  noSession:', noSession ? 'found' : 'NULL');
+    log.debug('  showManualLogin:', showManualLogin ? 'found' : 'NULL');
+    log.debug('  manualLoginSection:', manualLoginSection ? 'found' : 'NULL');
+    log.debug('  manualLoginBtn:', manualLoginBtn ? 'found' : 'NULL');
+    log.debug('  sessionIdInput:', sessionIdInput ? 'found' : 'NULL');
+    log.debug('  errorMsg:', errorMsg ? 'found' : 'NULL');
     
-    debugLog('Calling autoDetectSession()...');
+    log.debug('Calling autoDetectSession()...');
     const sessions = await autoDetectSession();
     availableSessions = sessions;
     
-    debugLog('autoDetectSession returned, sessions count:', sessions ? sessions.length : 0);
+    log.debug('autoDetectSession returned, sessions count:', sessions ? sessions.length : 0);
     
     // Hide loading state
     if (loadingState) {
         loadingState.style.display = 'none';
-        debugLog('Loading state hidden');
+        log.debug('Loading state hidden');
     } else {
-        debugError('loadingState is null, cannot hide');
+        log.error('未找到 #loading-state，无法隐藏');
     }
     
     if (sessions && sessions.length > 0) {
-        debugLog('Sessions available, sessions count:', sessions.length);
+        log.debug('Sessions available, sessions count:', sessions.length);
         
         if (sessions.length === 1) {
             // Auto login when only one session found
-            debugLog('Single session found, auto-logging in...');
+            log.debug('Single session found, auto-logging in...');
             availableSessions = sessions;
             selectedSessionIndex = 0;
             
@@ -550,45 +540,45 @@ async function init() {
             await handleLogin();
         } else {
             // Multiple sessions - show selection list
-            debugLog('Multiple sessions, showing selection list...');
+            log.debug('Multiple sessions, showing selection list...');
             
             renderSessionList(sessions);
             
             if (sessionListContainer) {
                 sessionListContainer.style.display = 'block';
             }
-            debugLog('Session list displayed');
+            log.debug('Session list displayed');
         }
     } else {
         // No sessions found
-        debugWarn('No sessions found, showing noSession UI');
+        log.warn('未发现可用会话，显示无会话提示');
         
         if (noSession) {
             noSession.style.display = 'block';
-            debugLog('noSession shown');
+            log.debug('noSession shown');
         }
         
         if (loginBtn) {
             loginBtn.style.display = 'none';
-            debugLog('loginBtn hidden');
+            log.debug('loginBtn hidden');
         }
     }
     
-    debugLog('========================================');
-    debugLog('Initialization complete');
-    debugLog('========================================');
+    log.debug('========================================');
+    log.debug('Initialization complete');
+    log.debug('========================================');
 }
 
 // Start initialization when DOM is ready
-debugLog('Script loaded, checking document.readyState:', document.readyState);
+log.debug('Script loaded, checking document.readyState:', document.readyState);
 
 if (document.readyState === 'loading') {
-    debugLog('Document still loading, waiting for DOMContentLoaded...');
+    log.debug('Document still loading, waiting for DOMContentLoaded...');
     document.addEventListener('DOMContentLoaded', () => {
-        debugLog('DOMContentLoaded fired');
+        log.debug('DOMContentLoaded fired');
         init();
     });
 } else {
-    debugLog('Document already loaded, calling init() directly');
+    log.debug('Document already loaded, calling init() directly');
     init();
 }

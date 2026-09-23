@@ -3,6 +3,9 @@
  * @param {string} message - 通知内容
  * @param {string} type - 通知类型 (success, error, info)
  */
+import { createLogger } from "./logger.js";
+
+const log = createLogger("UTIL");
 import { Icons } from "./icons.js";
 
 /**
@@ -14,12 +17,22 @@ import { Icons } from "./icons.js";
 const activeNotifications = new Map();
 const MAX_NOTIFICATIONS = 3;
 
+// 通知标题：原来直接渲染英文类型名（"Success"/"Error"…），与中文正文中英混排。
+const TYPE_LABELS = {
+  success: "成功",
+  error: "错误",
+  warning: "警告",
+  info: "提示"
+};
+
 export function showNotification(message, type = "success") {
   const container = document.getElementById("notification-container");
   if (!container) {
-    console.error("Notification container not found");
+    log.error("未找到通知容器");
     return;
   }
+
+  const label = TYPE_LABELS[type] || type;
 
   // 创建唯一键
   const key = `${type}:${message}`;
@@ -72,13 +85,13 @@ export function showNotification(message, type = "success") {
   // Ant Design Alert 结构 - 使用 DOM API 构建，防止 XSS
   const iconSpan = document.createElement('span');
   iconSpan.setAttribute('role', 'img');
-  iconSpan.setAttribute('aria-label', type);
+  iconSpan.setAttribute('aria-label', label);
   iconSpan.className = `anticon anticon-${type} ant-alert-icon`;
   iconSpan.innerHTML = icon;
 
   const messageDiv = document.createElement('div');
   messageDiv.className = 'ant-alert-message';
-  messageDiv.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+  messageDiv.textContent = label;
 
   const descriptionDiv = document.createElement('div');
   descriptionDiv.className = 'ant-alert-description';
@@ -172,11 +185,11 @@ export function loadingLog(message, type = 'info') {
     
     // 同时输出到console
     if (type === 'error') {
-        console.error(`[Loading] ${message}`);
+        log.error(message);
     } else if (type === 'warning') {
-        console.warn(`[Loading] ${message}`);
+        log.warn(message);
     } else {
-        console.log(`[Loading] ${message}`);
+        log.info(`${message}`);
     }
 }
 
@@ -413,10 +426,10 @@ export function remove_duplicates(records) {
         record["Order.OrderNumber"] !== null
     );
 
-    console.log("数据中包含 hasOrderNumber 列:", hasOrderNumber);
+    log.debug("数据中包含 hasOrderNumber 列:", hasOrderNumber);
 
     if (!hasOrderNumber) {
-      console.warn("数据中缺少 'Order.OrderNumber' 列，跳过去重。");
+      log.warn("数据中缺少 'Order.OrderNumber' 列，跳过去重。");
       return records;
     }
 
@@ -434,8 +447,8 @@ export function remove_duplicates(records) {
         record["Order.OrderNumber"] === null ||
         record["Order.OrderNumber"] === ""
     );
-    console.log(`有效 OrderNumber 记录数：${validRecords.length}`);
-    console.log(`无效 OrderNumber 记录数：${invalidRecords.length}`);
+    log.info(`有效 OrderNumber 记录数：${validRecords.length}`);
+    log.info(`无效 OrderNumber 记录数：${invalidRecords.length}`);
 
     if (validRecords.length === 0) {
       return records;
@@ -501,12 +514,12 @@ export function remove_duplicates(records) {
     // 合并无效 OrderNumber 的记录 (这些记录不参与去重，直接保留)
     const finalResult = [...cleanedUniqueRecords, ...invalidRecords];
 
-    console.log(
+    log.info(
       `去重完成：原始记录 ${records.length} 条，去重后 ${finalResult.length} 条，移除了 ${duplicateCount} 条重复记录`
     );
     return finalResult;
   } catch (error) {
-    console.error(`去重过程出错: ${error.message}`, error);
+    log.error(`去重过程出错: ${error.message}`, error);
     return records;
   }
 }

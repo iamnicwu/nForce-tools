@@ -1,8 +1,11 @@
 
 // Service Worker for nForce Tools
 // 使用 Chrome Alarm API 管理定时任务
+import { createLogger } from "./common/logger.js";
 
-console.log('nForce Tools Service Worker Started');
+const log = createLogger("BG");
+
+log.info("Service Worker 已启动（v3.3.0-onedrive）");
 
 // Storage key for task configs
 const TASK_CONFIGS_KEY = 'schedule_task_configs';
@@ -16,7 +19,7 @@ async function getTaskConfigs() {
     const result = await chrome.storage.local.get(TASK_CONFIGS_KEY);
     return result[TASK_CONFIGS_KEY] || {};
   } catch (error) {
-    console.error('Error getting task configs:', error);
+    log.error("读取任务配置失败:", error);
     return {};
   }
 }
@@ -26,7 +29,7 @@ async function saveTaskConfigs(configs) {
   try {
     await chrome.storage.local.set({ [TASK_CONFIGS_KEY]: configs });
   } catch (error) {
-    console.error('Error saving task configs:', error);
+    log.error("保存任务配置失败:", error);
   }
 }
 
@@ -36,7 +39,7 @@ async function getPausedTasks() {
     const result = await chrome.storage.local.get(PAUSED_TASKS_KEY);
     return result[PAUSED_TASKS_KEY] || {};
   } catch (error) {
-    console.error('Error getting paused tasks:', error);
+    log.error("读取暂停任务列表失败:", error);
     return {};
   }
 }
@@ -46,24 +49,24 @@ async function savePausedTasks(pausedTasks) {
   try {
     await chrome.storage.local.set({ [PAUSED_TASKS_KEY]: pausedTasks });
   } catch (error) {
-    console.error('Error saving paused tasks:', error);
+    log.error("保存暂停任务列表失败:", error);
   }
 }
 
 // 监听扩展安装
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('nForce Tools Extension Installed');
+  log.info("扩展已安装");
 });
 
 // 监听 alarm 触发
 chrome.alarms.onAlarm.addListener((alarm) => {
-  console.log('Alarm triggered:', alarm.name);
+  log.info("Alarm 触发:", alarm.name);
   
   // 异步获取任务配置
   getTaskConfigs().then((configs) => {
     const config = configs[alarm.name];
     if (config) {
-      console.log('Task config found:', config);
+      log.debug("找到任务配置:", config);
       
       // 发送消息给前端页面
       chrome.runtime.sendMessage({
@@ -71,18 +74,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         alarm: alarm,
         config: config
       }).catch(err => {
-        console.log('No active page to send message:', err.message);
+        log.debug("无活动页面可接收消息:", err.message);
       });
     } else {
-      console.log('No task config found for alarm:', alarm.name);
+      log.debug("未找到该 Alarm 的任务配置:", alarm.name);
     }
   });
 });
 
 const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0';
-
-// 版本标记，确认 background.js 已更新
-console.log('nForce background.js loaded - v3.3.0-onedrive');
 
 // 处理 OneDrive API 请求（代理 content script 的 fetch，避免宿主页 CSP 限制）
 async function handleOneDriveApiRequest(request, sendResponse) {
@@ -122,7 +122,7 @@ async function handleOneDriveApiRequest(request, sendResponse) {
     const data = await response.json();
     sendResponse({ success: true, data });
   } catch (error) {
-    console.error('OneDrive API proxy request failed:', error);
+    log.error("OneDrive API 代理请求失败:", error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -149,11 +149,11 @@ function isValidSender(sender) {
 
 // 监听来自前端的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Background received message:', message.type);
+  log.debug("收到页面消息:", message.type);
   
   // 验证消息来源
   if (!isValidSender(sender)) {
-    console.warn('Rejected message from invalid sender:', sender.url);
+    log.warn("拒绝来自非法来源的消息:", sender.url);
     sendResponse({ success: false, error: 'Invalid sender' });
     return false;
   }
@@ -161,7 +161,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 验证消息类型
   const validMessageTypes = ['CREATE_ALARM', 'GET_ALARMS', 'PAUSE_ALARM', 'RESUME_ALARM', 'DELETE_ALARM', 'CLEAR_ALL_ALARMS', 'ONEDRIVE_API_REQUEST'];
   if (!message.type || !validMessageTypes.includes(message.type)) {
-    console.warn('Unknown or invalid message type:', message.type);
+    log.warn("未知或无效的消息类型:", message.type);
     sendResponse({ success: false, error: 'Invalid message type' });
     return false;
   }
@@ -196,7 +196,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true; // 异步响应
 
     default:
-      console.log('Unknown message type:', message.type);
+      log.debug("未处理的消息类型:", message.type);
       return false;
   }
 });
@@ -224,11 +224,11 @@ async function handleCreateAlarm(data, sendResponse) {
     
     await chrome.alarms.create(name, alarmInfo);
     
-    console.log('Alarm created:', name, alarmInfo);
+    log.info("Alarm 已创建:", name, alarmInfo);
     
     sendResponse({ success: true, alarmName: name });
   } catch (error) {
-    console.error('Error creating alarm:', error);
+    log.error("创建 Alarm 失败:", error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -269,11 +269,11 @@ async function handleGetAlarms(sendResponse) {
     
     const allAlarms = [...alarmsWithConfig, ...pausedAlarmList];
     
-    console.log('All alarms (including paused):', allAlarms);
+    log.debug("全部 Alarm（含暂停）:", allAlarms);
     
     sendResponse({ success: true, alarms: allAlarms });
   } catch (error) {
-    console.error('Error getting alarms:', error);
+    log.error("获取 Alarm 列表失败:", error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -305,11 +305,11 @@ async function handlePauseAlarm(alarmName, sendResponse) {
     // 清除 alarm
     await chrome.alarms.clear(alarmName);
     
-    console.log('Alarm paused:', alarmName);
+    log.info("Alarm 已暂停:", alarmName);
     
     sendResponse({ success: true, alarmName: alarmName });
   } catch (error) {
-    console.error('Error pausing alarm:', error);
+    log.error("暂停 Alarm 失败:", error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -347,11 +347,11 @@ async function handleResumeAlarm(alarmName, sendResponse) {
     delete pausedTasks[alarmName];
     await savePausedTasks(pausedTasks);
     
-    console.log('Alarm resumed:', alarmName, 'with delay:', delayInMinutes, 'minutes');
+    log.info(`Alarm 已恢复: ${alarmName}，延迟 ${delayInMinutes} 分钟`);
     
     sendResponse({ success: true, alarmName: alarmName, newDelay: delayInMinutes });
   } catch (error) {
-    console.error('Error resuming alarm:', error);
+    log.error("恢复 Alarm 失败:", error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -371,11 +371,11 @@ async function handleDeleteAlarm(alarmName, sendResponse) {
     delete pausedTasks[alarmName];
     await savePausedTasks(pausedTasks);
     
-    console.log('Alarm deleted:', alarmName);
+    log.info("Alarm 已删除:", alarmName);
     
     sendResponse({ success: true, alarmName: alarmName });
   } catch (error) {
-    console.error('Error deleting alarm:', error);
+    log.error("删除 Alarm 失败:", error);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -389,11 +389,11 @@ async function handleClearAllAlarms(sendResponse) {
     await chrome.storage.local.remove(TASK_CONFIGS_KEY);
     await chrome.storage.local.remove(PAUSED_TASKS_KEY);
     
-    console.log('All alarms cleared');
+    log.info("已清除全部 Alarm");
     
     sendResponse({ success: true });
   } catch (error) {
-    console.error('Error clearing alarms:', error);
+    log.error("清除 Alarm 失败:", error);
     sendResponse({ success: false, error: error.message });
   }
 }

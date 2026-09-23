@@ -1,4 +1,11 @@
 .history
 .sfdx
 .node_modules
+build
+.workbuddy
 dist
+dist_backup_before_inspector_tools
+.DS_Store
+src.zip
+plans
+tools

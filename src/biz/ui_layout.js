@@ -8,6 +8,9 @@
  *   rules/ui_layout.json 里的 favorites.ids 只是「默认列表」（首次使用或点「恢复默认」时采用）
  * - 支持在界面内直接编辑并保存布局 JSON（存 chrome.storage.local）
  */
+import { createLogger } from "../common/logger.js";
+
+const log = createLogger("LAYOUT");
 import { appState } from "./state.js";
 import { showSection } from "./ui.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
@@ -28,19 +31,22 @@ const LAYOUT_SECTION = 20;
 
 // 需要连接 Salesforce 才能使用的功能
 const CONNECTION_REQUIRED_STEPS = new Set([
-  2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 22
+  2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26
 ]);
 
-// 配色表：tint 用于图标底色，accent 用于强调色，soft 用于磁贴悬浮底色
+// 配色表：tint 用于图标底色，accent 用于强调色，soft 用于磁贴悬浮底色。
+// 色值统一指向 main.css :root 里的 --accent-* 令牌（自定义属性可以链式代入，
+// 所以这里写 var(--accent-blue) 会解析成 :root 里的实际色值）。
+// 以前这是独立于 main.css .theme-* 与 index.html --row-accent 的第三份重复色板。
 const PALETTE = {
-  blue:   { tint: "#e6f1fb", accent: "#1677ff", soft: "#f2f8ff" },
-  purple: { tint: "#f0eafc", accent: "#722ed1", soft: "#f8f3ff" },
-  orange: { tint: "#fdeee4", accent: "#fa541c", soft: "#fff5ee" },
-  pink:   { tint: "#fce8f1", accent: "#eb2f96", soft: "#fff2f8" },
-  amber:  { tint: "#fdf3dd", accent: "#d48806", soft: "#fffaf0" },
-  green:  { tint: "#e9f6e5", accent: "#52c41a", soft: "#f4fbf1" },
-  teal:   { tint: "#e0f5f1", accent: "#13a8a8", soft: "#effbf9" },
-  gray:   { tint: "#f0f0f2", accent: "#8c8c8c", soft: "#fafafa" }
+  blue:   { tint: "var(--accent-blue-tint)", accent: "var(--accent-blue)", soft: "var(--accent-blue-soft)" },
+  purple: { tint: "var(--accent-purple-tint)", accent: "var(--accent-purple)", soft: "var(--accent-purple-soft)" },
+  orange: { tint: "var(--accent-volcano-tint)", accent: "var(--accent-volcano)", soft: "var(--accent-volcano-soft)" },
+  pink:   { tint: "var(--accent-pink-tint)", accent: "var(--accent-pink)", soft: "var(--accent-pink-soft)" },
+  amber:  { tint: "var(--accent-amber-tint)", accent: "var(--accent-amber)", soft: "var(--accent-amber-soft)" },
+  green:  { tint: "var(--accent-green-tint)", accent: "var(--accent-green)", soft: "var(--accent-green-soft)" },
+  teal:   { tint: "var(--accent-teal-tint)", accent: "var(--accent-teal)", soft: "var(--accent-teal-soft)" },
+  gray:   { tint: "var(--accent-gray-tint)", accent: "var(--accent-gray)", soft: "var(--accent-gray-soft)" }
 };
 
 let currentLayout = null;
@@ -201,7 +207,7 @@ export async function loadUiLayout() {
       );
       return mergeWithDefault(storedLayout, baseLayout);
     } catch (e) {
-      console.warn("[UI Layout] 已保存的布局配置无效，回退到默认配置", e);
+      log.warn("已保存的布局配置无效，回退到默认配置", e);
     }
   }
 
@@ -297,7 +303,7 @@ async function resetFavorites() {
   userFavoriteIds = null;
   await renderLauncher();
   refreshLayoutEditor();
-  showNotification("常用功能已恢复默认");
+  showNotification("常用功能已恢复默认", "success");
 }
 
 // ---------- 渲染 ----------
@@ -490,9 +496,9 @@ async function applyLayoutFromPanel() {
     await renderLauncher();
     // 回写规范化后的配置（补齐默认值 / 统一缩进），方便用户继续微调
     refreshLayoutEditor();
-    showNotification("布局已应用并保存");
+    showNotification("布局已应用并保存", "success");
   } catch (e) {
-    console.error("[UI Layout] 配置解析失败", e);
+    log.error("配置解析失败", e);
     showNotification(`布局配置有误：${e.message}`, "error");
   }
 }
@@ -507,7 +513,7 @@ async function resetLayout() {
   buildTileIndex();
   await renderLauncher();
   refreshLayoutEditor();
-  showNotification("已恢复默认布局");
+  showNotification("已恢复默认布局", "success");
 }
 
 function exportLayout() {
@@ -518,7 +524,7 @@ function exportLayout() {
   a.download = "ui_layout.json";
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showNotification("布局 JSON 已导出");
+  showNotification("布局 JSON 已导出", "success");
 }
 
 // ---------- 初始化 ----------

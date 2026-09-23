@@ -8,6 +8,9 @@
  * 安全提示：Session ID 等同于账号登录凭证，页面顶部有醒目提示；
  * 默认以掩码展示，点「显示」可查看明文，复制按钮始终复制真实值。
  */
+import { createLogger } from "../common/logger.js";
+
+const log = createLogger("SESSION");
 import { appState } from "./state.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
 
@@ -37,7 +40,7 @@ async function copyText(text) {
   }
   try {
     await navigator.clipboard.writeText(text);
-    showNotification("已复制到剪贴板");
+    showNotification("已复制到剪贴板", "success");
     return true;
   } catch (e) {
     // 兜底：clipboard API 不可用时用临时 textarea + execCommand
@@ -54,7 +57,7 @@ async function copyText(text) {
       showNotification(ok ? "已复制到剪贴板" : "复制失败，请手动选中复制", ok ? "success" : "error");
       return ok;
     } catch (err) {
-      console.error("[Session Info] 复制失败:", err);
+      log.error("复制失败:", err);
       showNotification("复制失败，请手动选中复制", "error");
       return false;
     }

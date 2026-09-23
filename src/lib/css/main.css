@@ -1,16 +1,114 @@
-/* CSS变量定义 - 适配 Ant Design */
+/* ============================================================
+   设计令牌（Design Tokens）—— 全站唯一入口
+   规则：新代码一律写 var(--xxx)，不要再出现硬编码 hex / 字号 / 字族。
+   tools/check-ui.mjs 的样式守卫会检查这些约束，防止回退。
+   ============================================================ */
 :root {
-    --primary-color: #1890ff; /* Ant Design 默认蓝色 */
+    /* --- 主色阶（Ant Design 蓝，全站唯一主色）--- */
+    --primary-color: #1890ff;
     --primary-hover: #40a9ff;
+    --primary-active: #096dd9;
+    --primary-bg: #e6f7ff;
+    --primary-border: #91d5ff;
+
+    /* --- 语义色 --- */
     --success-color: #52c41a;
+    --success-bg: #f6ffed;
+    --success-border: #b7eb8f;
     --error-color: #ff4d4f;
+    --error-strong: #cf1322; /* 更深一档的红：环境徽标、负数单元格 */
+    --error-bg: #fff2f0;
+    --error-border: #ffccc7;
     --warning-color: #faad14;
+    --warning-bg: #fffbe6;
+    --warning-border: #ffe58f;
+    --info-color: #1890ff;
+
+    /* --- 文字色（四档。原来散落着 #8c8c8c / #999 / #666 / #5c5c5c / #888 /
+           #9ca3af / #6b7280 / #bfbfbf / #333 / #262626 / #1f2937 共 11 种写法）--- */
     --text-primary: rgba(0, 0, 0, 0.85);
+    --text-tertiary: rgba(0, 0, 0, 0.65);
     --text-secondary: rgba(0, 0, 0, 0.45);
     --text-light: rgba(0, 0, 0, 0.25);
+    --text-inverse: #ffffff;
+
+    /* --- 背景 / 边框 --- */
     --bg-primary: #ffffff;
     --bg-secondary: #edf1f7; /* 页面底色：轻蓝灰，避免全白单调 */
+    --bg-tertiary: #fafafa;  /* 卡片内浅底 */
     --border-color: #d9d9d9;
+    --border-light: #f0f0f0;
+
+    /* --- 强调色。原来同一套色板在 3 个地方各写了一遍：
+           biz/ui_layout.js 的 group 色板、main.css 的 .theme-*、index.html 的 --row-accent。
+           这里收成唯一来源。 --- */
+    --accent-blue: #1677ff;
+    --accent-blue-tint: #e6f1fb;
+    --accent-blue-soft: #f2f8ff;
+    --accent-indigo: #2f54eb;
+    --accent-indigo-hover: #1d39c4;
+    --accent-indigo-tint: #f0f5ff;
+    --accent-indigo-soft: #eef2ff;
+    --accent-indigo-border: rgba(47, 84, 235, 0.3);
+    --accent-indigo-border-soft: #dbe6ff;
+    --accent-indigo-ring: rgba(47, 84, 235, 0.16);
+    --accent-purple: #722ed1;
+    --accent-purple-tint: #f0eafc;
+    --accent-purple-soft: #f8f3ff;
+    --accent-volcano: #fa541c;
+    --accent-volcano-tint: #fdeee4;
+    --accent-volcano-soft: #fff5ee;
+    --accent-volcano-bg: #fff2e8;
+    --accent-pink: #eb2f96;
+    --accent-pink-tint: #fce8f1;
+    --accent-pink-soft: #fff2f8;
+    --accent-amber: #d48806;
+    --accent-amber-strong: #ad6800; /* 警告浅底上的可读深黄文字 */
+    --accent-amber-tint: #fdf3dd;
+    --accent-amber-soft: #fffaf0;
+    --accent-orange: #fa8c16;
+    --accent-orange-tint: #fff7e6;
+    --accent-green: #52c41a;
+    --accent-green-tint: #e9f6e5;
+    --accent-green-soft: #f4fbf1;
+    --accent-teal: #13a8a8;
+    --accent-teal-tint: #e0f5f1;
+    --accent-teal-soft: #effbf9;
+    --accent-gray: var(--text-secondary);
+    --accent-gray-tint: #f0f0f2;
+    --accent-gray-soft: var(--bg-tertiary);
+    --brand-navy: #001529; /* 品牌深蓝：登录页头部 / 渐变起点 */
+    --brand-excel: #107c41; /* Excel 品牌绿：文件图标 */
+    --code-bg: #1e1e1e;     /* 深色代码块：Anonymous 执行结果 */
+    --code-fg: #d4d4d4;
+
+    /* --- 字族。body 必须显式引用 --font-sans，
+           不要再"由 Ant Design 接管"（antd 升级/替换不应改变全站字体）--- */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "Noto Sans", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+        "Liberation Mono", monospace;
+
+    /* --- 字号刻度（文字）。原来有 27 种取值，收敛成 8 档 --- */
+    --fs-xs: 12px;   /* 辅助文字、徽标、密集表格 */
+    --fs-sm: 13px;   /* 次要说明 */
+    --fs-base: 14px; /* 正文（默认） */
+    --fs-lg: 16px;   /* 强调正文、区块小标题 */
+    --fs-xl: 18px;   /* 三级标题 */
+    --fs-2xl: 20px;  /* 二级标题 / 首页 hero */
+    --fs-3xl: 24px;  /* 一级标题 */
+    --fs-4xl: 30px;  /* 页面主标题 */
+
+    /* --- 尺寸刻度：仅用于图标（<i> / <svg> 的 font-size）---
+           原来图标尺寸混在 font-size 里，分不清是"字大"还是"图标大" --- */
+    --icon-sm: 15px;
+    --icon-md: 18px;
+    --icon-lg: 24px;
+    --icon-xl: 32px;
+    --icon-2xl: 48px;
+
+    /* --- 阴影 / 圆角 / 动效 --- */
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
@@ -31,12 +129,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #d1d5db;
+    background: var(--border-color);
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+    background: var(--text-secondary);
 }
 
 /* SVG 图标样式 */
@@ -55,9 +153,18 @@
 /* 基础样式重置 - 移除与 Ant Design 冲突的部分 */
 body {
     background-color: var(--bg-secondary);
-    /* font-family 由 Ant Design 接管 */
+    font-family: var(--font-sans);
     color: var(--text-primary);
     line-height: 1.5715;
+}
+
+/* 表单控件默认不继承字族（浏览器 UA 样式会回退到 Arial），必须显式声明 */
+button,
+input,
+select,
+textarea,
+optgroup {
+    font-family: inherit;
 }
 
 /* 管理后台样式 */
@@ -96,7 +203,7 @@ body {
 }
 
 .page-title {
-    font-size: 1.25rem;
+    font-size: var(--fs-2xl);
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
@@ -120,7 +227,7 @@ body {
 
 .env-indicator .ant-tag {
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     padding: 2px 8px;
 }
 
@@ -130,9 +237,9 @@ body {
     align-items: center;
     gap: 6px;
     padding: 5px 12px;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: var(--text-primary);
-    background: #f2f5fa;
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     cursor: pointer;
@@ -147,14 +254,14 @@ body {
 .nav-settings-btn:hover {
     color: var(--primary-color);
     border-color: var(--primary-color);
-    background: #e9f1ff;
+    background: var(--primary-bg);
 }
 
 /* 自定义 Ant Design 标签颜色 */
 .ant-tag-error {
     color: #fff !important;
-    background-color: #ff4d4f !important;
-    border-color: #ff4d4f !important;
+    background-color: var(--error-color) !important;
+    border-color: var(--error-color) !important;
 }
 
 .text-success {
@@ -190,7 +297,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.25rem;
+    font-size: var(--fs-2xl);
     transition: all 0.2s ease-in-out;
     box-shadow: var(--shadow-sm);
 }
@@ -224,7 +331,7 @@ body {
 
 .user-menu-header h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: var(--fs-lg);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -246,13 +353,13 @@ body {
 }
 
 .user-info-item .label {
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
     font-weight: 500;
     color: var(--text-secondary);
 }
 
 .user-info-item .value {
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
     font-weight: 600;
     color: var(--text-primary);
     word-break: break-all;
@@ -286,23 +393,32 @@ body {
 }
 
 .page-header .icon {
-    font-size: 2rem;
+    font-size: var(--icon-xl);
     color: var(--primary-color);
 }
 
 .page-header .title {
-    font-size: 1.875rem;
+    font-size: var(--fs-4xl);
     font-weight: 700;
     color: var(--text-primary);
 }
 
 .page-header .subtitle {
-    font-size: 1rem;
+    font-size: var(--fs-lg);
     color: var(--text-secondary);
     margin-top: 0.25rem;
 }
 
-/* 通知消息容器 */
+/* ============================================================
+   提示与错误呈现
+   全站只有两个组件，共用同一套语义色令牌：
+     · .ant-alert-*   —— 瞬时 toast，由 showNotification() 动态生成，3 秒自动消失
+     · .notification  —— 常驻内嵌提示（页面内，不自动消失），目前用于「连接失败」横幅
+   以前 .notification.error 走的是 Tailwind 色板，和 antd 色板的 toast 红得不一样；
+   现在两者都用 --error-* 令牌。.success-message 同理已收敛到 --success-*。
+   ============================================================ */
+
+/* 通知消息容器（toast 专用，顶部居中） */
 #notification-container {
     position: fixed;
     top: 24px;
@@ -317,8 +433,8 @@ body {
     pointer-events: none; /* 容器不阻挡点击 */
 }
 
-/* 通知消息 */
-.notification, .ant-alert {
+/* toast 外形 */
+.ant-alert {
     pointer-events: auto; /* 消息本身可以点击 */
     padding: 10px 16px;
     border-radius: var(--radius-md);
@@ -329,42 +445,41 @@ body {
     animation: slideDown 0.3s ease-out;
     box-shadow: 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
     min-width: 300px;
-    background-color: #fff; /* 确保有背景色 */
+    background-color: var(--bg-primary);
     border: 1px solid var(--border-color);
 }
 
-.notification.success {
-    background-color: #d1fae5;
-    color: #065f46;
-    border-left: 4px solid var(--success-color);
+/* 常驻内嵌提示：外形与 toast 一致，但去掉浮动和自动消失 */
+.notification {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
 }
 
 .notification.error {
-    background-color: #fee2e2;
-    color: #991b1b;
+    background-color: var(--error-bg);
+    color: var(--error-color);
+    border-color: var(--error-border);
     border-left: 4px solid var(--error-color);
 }
 
 .notification .icon {
-    font-size: 1.25rem;
+    font-size: var(--icon-md);
 }
 
 .notification .content {
     flex: 1;
 }
 
-.notification .close-btn {
-    background: none;
-    border: none;
-    font-size: 1.25rem;
-    cursor: pointer;
+.notification .content h3 {
+    margin: 0;
+    font-size: var(--fs-base);
+    font-weight: 500;
     color: inherit;
-    opacity: 0.7;
-    transition: opacity var(--transition);
-}
-
-.notification .close-btn:hover {
-    opacity: 1;
 }
 
 /* Tab导航样式 */
@@ -385,14 +500,14 @@ body {
     border-radius: var(--radius-sm);
     background-color: var(--bg-secondary);
     color: var(--text-secondary);
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease-in-out;
 }
 
 .tab-btn:hover {
-    background-color: #e5e7eb;
+    background-color: var(--border-light);
     color: var(--text-primary);
 }
 
@@ -438,7 +553,7 @@ body {
 
 .ant-card-head-title {
     font-weight: 600;
-    font-size: 16px;
+    font-size: var(--fs-lg);
     padding: 16px 0;
 }
 
@@ -457,7 +572,7 @@ body {
     padding: 0.5rem 0.75rem 0.5rem 2.5rem;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
     transition: var(--transition);
     width: 250px;
     background-color: var(--bg-secondary);
@@ -474,7 +589,7 @@ body {
     position: absolute;
     left: 0.75rem;
     color: var(--text-light);
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
 }
 
 /* 响应式设计 */
@@ -495,7 +610,7 @@ body {
 
 @media (max-width: 768px) {
     .page-title {
-        font-size: 1rem;
+        font-size: var(--fs-lg);
     }
     
     .top-nav {
@@ -557,7 +672,7 @@ body {
 }
 
 .card-title {
-    font-size: 1.25rem;
+    font-size: var(--fs-2xl);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -570,7 +685,7 @@ body {
 
 .form-label {
     display: block;
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
     font-weight: 500;
     color: var(--text-primary);
     margin-bottom: 0.5rem;
@@ -581,7 +696,7 @@ body {
     padding: 0.75rem;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    font-size: 1rem;
+    font-size: var(--fs-lg);
     transition: var(--transition);
     background-color: var(--bg-primary);
 }
@@ -605,7 +720,7 @@ body {
 .ant-btn-lg {
     height: 40px;
     padding: 6.4px 15px;
-    font-size: 16px;
+    font-size: var(--fs-lg);
     border-radius: 2px;
 }
 
@@ -639,7 +754,7 @@ body {
 }
 
 .file-upload .icon {
-    font-size: 3rem;
+    font-size: var(--icon-2xl);
     color: var(--text-light);
     margin-bottom: 1rem;
     transition: var(--transition);
@@ -652,7 +767,7 @@ body {
 }
 
 .file-upload .text {
-    font-size: 1.125rem;
+    font-size: var(--fs-xl);
     color: var(--text-secondary);
     margin-bottom: 1rem;
 }
@@ -665,15 +780,18 @@ body {
 }
 
 .form-help {
-    font-size: 0.75rem;
+    font-size: var(--fs-xs);
     color: var(--text-light);
     margin-top: 0.5rem;
 }
 
-/* 成功提示 */
+/* 成功提示：与 .notification.error 对称的常驻内嵌提示。
+   以前这里用 Tailwind 色板（#d1fae5 / #065f46），和整个 antd 色板不一致。 */
 .success-message {
-    background-color: #d1fae5;
-    color: #065f46;
+    background-color: var(--success-bg);
+    color: var(--success-color);
+    border: 1px solid var(--success-border);
+    border-left: 4px solid var(--success-color);
     padding: 1rem;
     border-radius: var(--radius-md);
     margin-top: 1rem;
@@ -683,7 +801,7 @@ body {
 }
 
 .success-message .icon {
-    font-size: 1.25rem;
+    font-size: var(--fs-2xl);
 }
 
 /* 动画 */
@@ -786,12 +904,12 @@ body {
 .loading-text h3 {
     margin-bottom: 0.5rem;
     color: var(--text-primary);
-    font-size: 1.25rem;
+    font-size: var(--fs-2xl);
 }
 
 .loading-text p {
     color: var(--text-secondary);
-    font-size: 1rem;
+    font-size: var(--fs-lg);
 }
 
 .loading-text #record-count {
@@ -815,7 +933,7 @@ body {
     padding: 0.5rem 1rem;
     background-color: var(--bg-tertiary);
     border-bottom: 1px solid var(--border-color);
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -824,8 +942,8 @@ body {
     padding: 0.75rem;
     max-height: 150px;
     overflow-y: auto;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
     line-height: 1.5;
     color: var(--text-secondary);
 }
@@ -840,20 +958,20 @@ body {
 }
 
 .loading-log-content .log-entry.success {
-    color: #52c41a;
+    color: var(--success-color);
 }
 
 .loading-log-content .log-entry.error {
-    color: #ff4d4f;
+    color: var(--error-color);
 }
 
 .loading-log-content .log-entry.warning {
-    color: #faad14;
+    color: var(--warning-color);
 }
 
 /* Markdown 样式 */
 .markdown-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: inherit;
     color: var(--text-primary);
 }
 
@@ -868,23 +986,23 @@ body {
 }
 
 .markdown-body h1 {
-    font-size: 2rem;
+    font-size: var(--fs-4xl);
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 0.5rem;
 }
 
 .markdown-body h2 {
-    font-size: 1.5rem;
+    font-size: var(--fs-3xl);
     border-bottom: 1px solid var(--border-color);
     padding-bottom: 0.5rem;
 }
 
 .markdown-body h3 {
-    font-size: 1.25rem;
+    font-size: var(--fs-2xl);
 }
 
 .markdown-body h4 {
-    font-size: 1rem;
+    font-size: var(--fs-lg);
 }
 
 .markdown-body p {
@@ -902,7 +1020,7 @@ body {
 }
 
 .markdown-body code {
-    font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+    font-family: var(--font-mono);
     background-color: rgba(175, 184, 193, 0.2);
     padding: 0.2em 0.4em;
     border-radius: 6px;
@@ -910,7 +1028,7 @@ body {
 }
 
 .markdown-body pre {
-    background-color: #f6f8fa;
+    background-color: var(--bg-tertiary);
     border-radius: 6px;
     padding: 16px;
     overflow: auto;
@@ -959,7 +1077,7 @@ body {
 }
 
 .markdown-body tr:nth-child(2n) {
-    background-color: #f6f8fa;
+    background-color: var(--bg-tertiary);
 }
 
 .markdown-body img {
@@ -974,7 +1092,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 8px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-light);
     background-color: #fff;
     transition: background-color 0.3s;
     cursor: move;
@@ -982,12 +1100,12 @@ body {
 
 .rule-item.dragging {
     opacity: 0.5;
-    background-color: #e6f7ff;
-    border: 2px dashed #1890ff;
+    background-color: var(--primary-bg);
+    border: 2px dashed var(--primary-color);
 }
 
 .rule-item.over {
-    border-top: 2px solid #1890ff;
+    border-top: 2px solid var(--primary-color);
 }
 
 .rule-item:last-child {
@@ -995,11 +1113,11 @@ body {
 }
 
 .rule-item:hover {
-    background-color: #fafafa;
+    background-color: var(--bg-tertiary);
 }
 
 .rule-name {
-    font-size: 14px;
+    font-size: var(--fs-base);
     color: var(--text-primary);
     flex: 1;
     white-space: nowrap;
@@ -1025,11 +1143,11 @@ body {
 
 .rule-action-btn:hover {
     color: var(--primary-color);
-    background-color: #e6f7ff;
+    background-color: var(--primary-bg);
 }
 
 .rule-action-btn:disabled {
-    color: #d9d9d9;
+    color: var(--border-color);
     cursor: not-allowed;
     background-color: transparent;
 }
@@ -1094,7 +1212,7 @@ body {
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: var(--fs-base);
 }
 
 /* Ant Design Table 样式 */
@@ -1102,11 +1220,11 @@ body {
     width: 100%;
     border-collapse: collapse;
     background-color: var(--bg-primary);
-    font-size: 14px;
+    font-size: var(--fs-base);
 }
 
 .ant-table-thead > tr > th {
-    background-color: #fafafa;
+    background-color: var(--bg-tertiary);
     color: var(--text-primary);
     font-weight: 600;
     padding: 12px 8px;
@@ -1126,11 +1244,11 @@ body {
 }
 
 .ant-table-tbody > tr:nth-child(even) {
-    background-color: #fafafa;
+    background-color: var(--bg-tertiary);
 }
 
 .ant-table-tbody > tr:hover {
-    background-color: #f5f5f5;
+    background-color: var(--bg-tertiary);
 }
 
 .ant-table-bordered {
@@ -1171,7 +1289,7 @@ body {
 }
 
 #schedule-jobs-table thead th {
-    background-color: #fafafa;
+    background-color: var(--bg-tertiary);
     color: var(--text-primary);
     font-weight: 600;
     white-space: nowrap;
@@ -1184,7 +1302,7 @@ body {
 }
 
 #schedule-jobs-table tbody tr:hover {
-    background-color: #f5f5f5;
+    background-color: var(--bg-tertiary);
 }
 
 /* 避免不同字体/行高导致的垂直对不齐 */
@@ -1194,7 +1312,7 @@ body {
 #schedule-jobs-table tr,
 #schedule-jobs-table th,
 #schedule-jobs-table td {
-    font-size: 14px;
+    font-size: var(--fs-base);
 }
 
 /* 表格操作按钮区域 */
@@ -1213,7 +1331,7 @@ body {
 /* CSS 图表样式 (替代 echarts) */
 .css-chart-title {
     text-align: center;
-    font-size: 16px;
+    font-size: var(--fs-lg);
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 1rem;
@@ -1253,7 +1371,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
+    font-size: var(--fs-3xl);
     font-weight: 700;
     color: var(--text-primary);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
@@ -1271,7 +1389,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: var(--text-secondary);
 }
 
@@ -1306,7 +1424,7 @@ body {
 }
 
 .css-chart-bar-value {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 4px;
@@ -1331,7 +1449,7 @@ body {
 }
 
 .css-chart-bar-label {
-    font-size: 11px;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
     margin-top: 8px;
     text-align: center;
@@ -1351,8 +1469,8 @@ body {
     justify-content: center;
     align-items: center;
     height: 200px;
-    color: #999;
-    font-size: 14px;
+    color: var(--text-secondary);
+    font-size: var(--fs-base);
 }
 
 @media (max-width: 768px) {
@@ -1401,11 +1519,11 @@ body {
 }
 
 .section-icon i {
-    font-size: 32px;
+    font-size: var(--icon-xl);
 }
 
 .section-title {
-    font-size: 1.25rem;
+    font-size: var(--fs-2xl);
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 0.5rem;
@@ -1483,7 +1601,7 @@ body {
 }
 
 .upload-drag-wrapper .upload-icon {
-    font-size: 48px;
+    font-size: var(--icon-2xl);
     color: var(--text-light);
     margin-bottom: 1rem;
     transition: var(--transition);
@@ -1495,13 +1613,13 @@ body {
 }
 
 .upload-drag-wrapper .upload-text {
-    font-size: 1rem;
+    font-size: var(--fs-lg);
     color: var(--text-secondary);
     margin-bottom: 0.5rem;
 }
 
 .upload-drag-wrapper .upload-hint {
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
     color: var(--text-light);
 }
 
@@ -1569,7 +1687,7 @@ body {
 }
 
 .unified-form .ant-checkbox-wrapper {
-    font-size: 0.875rem;
+    font-size: var(--fs-base);
 }
 
 /* 日期选择器容器 */
@@ -1587,7 +1705,7 @@ body {
 .date-range-container .date-field label {
     display: block;
     text-align: left;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
     margin-bottom: 4px;
 }
@@ -1597,14 +1715,14 @@ body {
 }
 
 /* 统一模块颜色主题 */
-.theme-lts { --theme-color: #1890ff; --theme-bg: #e6f7ff; }
-.theme-pcd { --theme-color: #1890ff; --theme-bg: #e6f7ff; }
-.theme-vvip { --theme-color: #faad14; --theme-bg: #fffbe6; }
-.theme-analysis { --theme-color: #722ed1; --theme-bg: #f9f0ff; }
-.theme-t2 { --theme-color: #fa8c16; --theme-bg: #fff7e6; }
-.theme-tools { --theme-color: #2f54eb; --theme-bg: #f0f5ff; }
-.theme-lunch { --theme-color: #eb2f96; --theme-bg: #fff0f6; }
-.theme-schedule { --theme-color: #52c41a; --theme-bg: #f6ffed; }
+.theme-lts { --theme-color: var(--primary-color); --theme-bg: var(--primary-bg); }
+.theme-pcd { --theme-color: var(--primary-color); --theme-bg: var(--primary-bg); }
+.theme-vvip { --theme-color: var(--warning-color); --theme-bg: var(--warning-bg); }
+.theme-analysis { --theme-color: var(--accent-purple); --theme-bg: var(--accent-purple-tint); }
+.theme-t2 { --theme-color: var(--accent-orange); --theme-bg: var(--accent-orange-tint); }
+.theme-tools { --theme-color: var(--accent-indigo); --theme-bg: var(--accent-indigo-tint); }
+.theme-lunch { --theme-color: var(--accent-pink); --theme-bg: var(--accent-pink-soft); }
+.theme-schedule { --theme-color: var(--success-color); --theme-bg: var(--success-bg); }
 
 /* 模块图标样式 */
 .module-icon {
@@ -1618,7 +1736,7 @@ body {
 }
 
 .module-icon i {
-    font-size: 32px;
+    font-size: var(--icon-xl);
 }
 
 /* 统一卡片样式 */
@@ -1634,7 +1752,7 @@ body {
 
 .unified-card .ant-card-head-title {
     font-weight: 600;
-    font-size: 16px;
+    font-size: var(--fs-lg);
     padding: 16px 0;
 }
 
@@ -1650,7 +1768,7 @@ body {
 }
 
 .empty-state i {
-    font-size: 48px;
+    font-size: var(--icon-2xl);
     margin-bottom: 1rem;
     color: var(--text-light);
 }
@@ -1667,7 +1785,7 @@ body {
 }
 
 .loading-state i {
-    font-size: 24px;
+    font-size: var(--fs-3xl);
     margin-bottom: 0.5rem;
 }
 
@@ -1678,7 +1796,7 @@ body {
 }
 
 .success-state i {
-    font-size: 48px;
+    font-size: var(--icon-2xl);
     color: var(--success-color);
     margin-bottom: 1rem;
 }
@@ -1700,7 +1818,7 @@ body {
     }
     
     .section-icon i {
-        font-size: 24px;
+        font-size: var(--fs-3xl);
     }
     
     .action-buttons {
@@ -1745,11 +1863,11 @@ body {
 .step-section.needs-connection .ant-card-head-wrapper::after {
     content: "需连接";
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     line-height: 20px;
     padding: 0 8px;
     border-radius: 4px;
-    background-color: #fafafa;
+    background-color: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
 }
@@ -1769,7 +1887,7 @@ body {
     padding: 22px 26px;
     margin-bottom: 20px;
     border-radius: 16px;
-    background: linear-gradient(120deg, #1677ff 0%, #4c5bd4 52%, #722ed1 100%);
+    background: linear-gradient(120deg, var(--accent-blue) 0%, var(--accent-indigo) 52%, var(--accent-purple) 100%);
     box-shadow: 0 6px 18px rgba(22, 119, 255, 0.22);
     color: #fff;
 }
@@ -1779,14 +1897,14 @@ body {
 }
 
 .launcher-hero-title {
-    font-size: 21px;
+    font-size: var(--fs-2xl);
     font-weight: 600;
     color: #fff;
     margin: 0 0 4px;
 }
 
 .launcher-hero-subtitle {
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: rgba(255, 255, 255, 0.86);
     margin: 0;
 }
@@ -1794,7 +1912,7 @@ body {
 /* 布局配置（作为「设置 → 布局配置」功能页，见 #section-20） */
 .layout-panel-tip {
     margin: 0 0 10px;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     line-height: 1.7;
     color: var(--text-secondary);
 }
@@ -1802,21 +1920,21 @@ body {
 .layout-panel-tip code {
     padding: 1px 5px;
     margin: 0 2px;
-    font-size: 11px;
-    background: #f2f5fa;
+    font-size: var(--fs-xs);
+    background: var(--bg-secondary);
     border-radius: 4px;
-    color: #4c5bd4;
+    color: var(--accent-indigo);
 }
 
 .layout-json-input {
     width: 100%;
     height: 320px;
     padding: 12px;
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
     line-height: 1.6;
     color: var(--text-primary);
-    background: #fafbfd;
+    background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 10px;
     resize: vertical;
@@ -1871,10 +1989,10 @@ body {
     justify-content: center;
     width: 42px;
     height: 42px;
-    font-size: 18px;
+    font-size: var(--fs-xl);
     border-radius: 11px;
-    background: var(--row-tint, #e6f1fb);
-    color: var(--row-accent, #1677ff);
+    background: var(--row-tint, var(--accent-blue-tint));
+    color: var(--row-accent, var(--accent-blue));
 }
 
 .settings-row-text {
@@ -1886,19 +2004,19 @@ body {
 }
 
 .settings-row-label {
-    font-size: 14px;
+    font-size: var(--fs-base);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .settings-row-desc {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
 }
 
 .settings-row-arrow {
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: var(--text-secondary);
 }
 
@@ -1909,11 +2027,11 @@ body {
     gap: 8px;
     margin-bottom: 16px;
     padding: 10px 14px;
-    font-size: 12.5px;
+    font-size: var(--fs-sm);
     line-height: 1.6;
-    color: #ad6800;
-    background: #fffbe6;
-    border: 1px solid #ffe58f;
+    color: var(--accent-amber-strong);
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
     border-radius: 10px;
 }
 
@@ -1921,8 +2039,8 @@ body {
 .session-warning i {
     flex-shrink: 0;
     margin-top: 2px;
-    font-size: 14px;
-    color: #faad14;
+    font-size: var(--fs-base);
+    color: var(--warning-color);
 }
 
 .kv-group {
@@ -1931,7 +2049,7 @@ body {
 
 .kv-group-title {
     margin-bottom: 8px;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -1962,22 +2080,22 @@ body {
 .kv-label {
     flex-shrink: 0;
     width: 150px;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: var(--text-secondary);
 }
 
 .kv-value {
     flex: 1;
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     line-height: 1.5;
     color: var(--text-primary);
     word-break: break-all;
 }
 
 .kv-value.mono {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
 }
 
 .kv-value[data-masked="1"] {
@@ -2002,9 +2120,9 @@ body {
     gap: 5px;
     padding: 4px 10px;
     font-family: inherit;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--text-primary);
-    background: #f2f5fa;
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: pointer;
@@ -2014,13 +2132,13 @@ body {
 .kv-btn:hover {
     color: var(--primary-color);
     border-color: var(--primary-color);
-    background: #e9f1ff;
+    background: var(--primary-bg);
 }
 
 .kv-btn-primary {
     color: var(--primary-color);
-    border-color: #91caff;
-    background: #e9f1ff;
+    border-color: var(--primary-border);
+    background: var(--primary-bg);
 }
 
 .kv-empty-state {
@@ -2031,18 +2149,18 @@ body {
 
 .kv-empty-state .svg-icon,
 .kv-empty-state i {
-    font-size: 32px;
-    color: #bfbfbf;
+    font-size: var(--icon-xl);
+    color: var(--text-light);
 }
 
 .kv-empty-state p {
     margin: 8px 0 0;
-    font-size: 13px;
+    font-size: var(--fs-sm);
 }
 
 .kv-empty-hint {
-    font-size: 12px;
-    color: #bfbfbf;
+    font-size: var(--fs-xs);
+    color: var(--text-light);
 }
 
 @media (max-width: 768px) {
@@ -2060,8 +2178,8 @@ body {
     margin-bottom: 20px;
     padding: 16px 18px;
     border-radius: 14px;
-    background: linear-gradient(135deg, #eef4ff 0%, #f7f0ff 100%);
-    border: 1px solid #dbe6ff;
+    background: linear-gradient(135deg, var(--accent-indigo-soft) 0%, var(--accent-purple-soft) 100%);
+    border: 1px solid var(--accent-indigo-border-soft);
 }
 
 .favorites-head {
@@ -2079,16 +2197,16 @@ body {
 }
 
 .fav-count {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
 }
 
 /* 常用功能区头部的「编辑 / 完成 / 恢复默认」按钮 */
 .fav-head-btn {
     padding: 4px 12px;
-    font-size: 12px;
+    font-size: var(--fs-xs);
     line-height: 1.5;
-    color: #2b4acb;
+    color: var(--accent-indigo);
     background: #fff;
     border: 1px solid rgba(76, 91, 212, 0.3);
     border-radius: 999px;
@@ -2097,20 +2215,20 @@ body {
 }
 
 .fav-head-btn:hover {
-    background: #eef2ff;
-    border-color: #4c5bd4;
+    background: var(--accent-indigo-soft);
+    border-color: var(--accent-indigo);
 }
 
 .fav-head-btn-primary {
     color: #fff;
-    background: #4c5bd4;
-    border-color: #4c5bd4;
+    background: var(--accent-indigo);
+    border-color: var(--accent-indigo);
 }
 
 .fav-head-btn-primary:hover {
     color: #fff;
-    background: #3b48b8;
-    border-color: #3b48b8;
+    background: var(--accent-indigo-hover);
+    border-color: var(--accent-indigo-hover);
 }
 
 .favorites-section.is-editing {
@@ -2118,19 +2236,19 @@ body {
 }
 
 .favorites-hint {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
     margin: 0 0 12px;
 }
 
 .favorites-hint b {
-    color: #4c5bd4;
+    color: var(--accent-indigo);
 }
 
 /* 常用功能为空时的引导 */
 .favorites-empty {
     padding: 20px 18px;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     color: var(--text-secondary);
     text-align: center;
     background: rgba(255, 255, 255, 0.72);
@@ -2139,21 +2257,21 @@ body {
 }
 
 .favorites-empty-star {
-    color: #faad14;
-    font-size: 15px;
+    color: var(--warning-color);
+    font-size: var(--fs-lg);
 }
 
 .favorites-title {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 14px;
+    font-size: var(--fs-base);
     font-weight: 600;
-    color: #2b4acb;
+    color: var(--accent-indigo);
 }
 
 .favorites-title i {
-    color: #faad14;
+    color: var(--warning-color);
 }
 
 .favorites-grid .tile {
@@ -2177,7 +2295,7 @@ body {
     padding: 16px 18px;
     margin-bottom: 18px;
     background: var(--bg-primary);
-    border: 1px solid #e9ecf2;
+    border: 1px solid var(--border-light);
     border-left: 3px solid var(--group-accent, var(--primary-color));
     border-radius: 14px;
 }
@@ -2194,15 +2312,15 @@ body {
     align-items: center;
     gap: 7px;
     padding: 4px 12px;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     font-weight: 600;
     color: var(--group-accent, var(--primary-color));
-    background: var(--group-tint, #e6f1fb);
+    background: var(--group-tint, var(--accent-blue-tint));
     border-radius: 999px;
 }
 
 .launcher-group-count {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--text-light);
 }
 
@@ -2220,14 +2338,14 @@ body {
     gap: 12px;
     padding: 13px 14px;
     background: var(--bg-primary);
-    border: 1px solid #e9ecf2;
+    border: 1px solid var(--border-light);
     border-radius: 12px;
     text-decoration: none;
     transition: all 0.2s;
 }
 
 .tile:hover {
-    background: var(--tile-soft, #f7faff);
+    background: var(--tile-soft, var(--accent-blue-soft));
     border-color: var(--tile-accent, var(--primary-color));
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(15, 35, 95, 0.1);
@@ -2235,7 +2353,7 @@ body {
 
 .tile.active {
     border-color: var(--tile-accent, var(--primary-color));
-    background: var(--tile-soft, #f7faff);
+    background: var(--tile-soft, var(--accent-blue-soft));
 }
 
 .tile-icon {
@@ -2246,8 +2364,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    background: var(--tile-tint, #e6f1fb);
+    font-size: var(--fs-xl);
+    background: var(--tile-tint, var(--accent-blue-tint));
     color: var(--tile-accent, var(--primary-color));
 }
 
@@ -2259,7 +2377,7 @@ body {
 }
 
 .tile-label {
-    font-size: 14px;
+    font-size: var(--fs-base);
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -2268,7 +2386,7 @@ body {
 }
 
 .tile-desc {
-    font-size: 12px;
+    font-size: var(--fs-xs);
     color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
@@ -2304,9 +2422,9 @@ body {
     justify-content: center;
     width: 22px;
     height: 22px;
-    font-size: 15px;
+    font-size: var(--fs-lg);
     line-height: 1;
-    color: #c3c8d6;
+    color: var(--text-light);
     background: rgba(255, 255, 255, 0.92);
     border-radius: 50%;
     transform: translateY(-50%);
@@ -2321,14 +2439,14 @@ body {
 }
 
 .tile-fav-btn:hover {
-    color: #faad14;
+    color: var(--warning-color);
     background: #fff;
     box-shadow: 0 2px 6px rgba(15, 35, 95, 0.16);
 }
 
 .tile-fav-btn.is-on {
     opacity: 1;
-    color: #faad14;
+    color: var(--warning-color);
 }
 
 /* 常用功能区「编辑态」：← → 调序、× 移出 */
@@ -2349,9 +2467,9 @@ body {
     justify-content: center;
     width: 26px;
     height: 24px;
-    font-size: 13px;
+    font-size: var(--fs-sm);
     line-height: 1;
-    color: #2b4acb;
+    color: var(--accent-indigo);
     background: #fff;
     border: 1px solid rgba(76, 91, 212, 0.3);
     border-radius: 6px;
@@ -2361,8 +2479,8 @@ body {
 }
 
 .tile-edit-btn:hover {
-    background: #eef2ff;
-    border-color: #4c5bd4;
+    background: var(--accent-indigo-soft);
+    border-color: var(--accent-indigo);
 }
 
 .tile-edit-btn.is-disabled {
@@ -2377,13 +2495,13 @@ body {
 
 .tile-edit-remove {
     margin-left: auto;
-    color: #d4380d;
+    color: var(--accent-volcano);
     border-color: rgba(212, 56, 13, 0.3);
 }
 
 .tile-edit-remove:hover {
-    background: #fff2e8;
-    border-color: #d4380d;
+    background: var(--accent-volcano-bg);
+    border-color: var(--accent-volcano);
 }
 
 /* 锁图标：replaceIcons 会把 <i> 替换成 <svg>（类名丢失），
@@ -2419,7 +2537,7 @@ body {
     margin-bottom: 16px;
     padding: 12px 16px;
     background: var(--bg-primary);
-    border: 1px solid #e9ecf2;
+    border: 1px solid var(--border-light);
     border-radius: 12px;
 }
 
@@ -2430,7 +2548,7 @@ body {
 }
 
 .detail-title {
-    font-size: 16px;
+    font-size: var(--fs-lg);
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -2451,7 +2569,7 @@ body {
     }
 
     .detail-title {
-        font-size: 15px;
+        font-size: var(--fs-lg);
     }
 
     .favorites-hint {

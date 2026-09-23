@@ -1,9 +1,32 @@
+import { createLogger } from "./common/logger.js";
+
+const log = createLogger("APP");
 import { sfConn } from "./biz/sf_service.js";
 import { showNotification } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
+import { $, on } from "./common/dom.js";
 import { appState } from "./biz/state.js";
 import { OneDriveWorkbookService } from "./common/onedrive_service.js";
 import { initUiLayout, renderLauncher } from "./biz/ui_layout.js";
+import {
+  initInspectorTools,
+  loadSoqlFields,
+  runSoqlQuery,
+  exportSoqlResults,
+  handleImportFileChange,
+  handleImportObjectChange,
+  renderImportMapping,
+  runDataImport,
+  loadMetadataTypes,
+  listMetadataMembers,
+  retrieveMetadataPackage,
+  loadEventChannels,
+  onEventTypeChange,
+  subscribeEventChannel,
+  unsubscribeEventChannel,
+  clearEventLog,
+  exportEventLog
+} from "./biz/inspector_tools.js";
 // marked 以 ES Module 形式发布（不挂在 window 上），这里显式引入并暴露给
 // ui.js 的 renderMarkdownContent 使用，否则 README / LTS 概览会退化成简易解析器
 import { marked } from "./lib/js/marked.min.js";
@@ -72,7 +95,7 @@ async function validateStoredSession() {
     const isConnected = await sfConn.testConnection(appState.session_id, appState.instance_url);
     return isConnected;
   } catch (e) {
-    console.warn('Session 验证失败:', e);
+    log.warn('Session 验证失败:', e);
     return false;
   }
 }
@@ -130,7 +153,7 @@ async function initApp() {
       appState.orgInfo = stored.orgInfo;
     }
   } catch (e) {
-    console.warn('从 chrome.storage.local 读取登录状态失败:', e);
+    log.warn('从 chrome.storage.local 读取登录状态失败:', e);
   }
 
   // ===== 先把界面完整渲染出来：任何情况下都不能白屏 =====
@@ -143,6 +166,9 @@ async function initApp() {
   // 初始化首页交互（返回按钮 / Esc 快捷键）
   initLauncher();
 
+  // 初始化 Inspector 移植功能模块（section-23 ~ 26 的懒加载与事件）
+  initInspectorTools();
+
   // 更新UI状态（连接徽标 / 统计数据 / 锁定状态）
   updateUIState();
 
@@ -150,7 +176,7 @@ async function initApp() {
   try {
     await initUiLayout();
   } catch (e) {
-    console.error("首页布局渲染失败:", e);
+    log.error("首页布局渲染失败:", e);
     showNotification(`首页布局渲染失败：${e.message || e}`, "error");
     renderLauncherErrorHint(e);
   }
@@ -162,7 +188,14 @@ async function initApp() {
   }
 
   // 绑定事件
-  bindEvents();
+  // 兜底：bindEvents 内部已统一改用 dom.js 的 on()（元素缺失只会 warn 不会抛），
+  // 这里再包一层，保证将来任何一处绑定出错都不会让整页变成「看着正常但点不动」。
+  try {
+    bindEvents();
+  } catch (e) {
+    log.error("事件绑定过程中出现异常，部分功能可能不可用：", e);
+    showNotification("部分界面事件绑定失败，请打开控制台查看详情", "error");
+  }
 
   // ===== 最后再尝试恢复 Salesforce 会话：只做「尽力而为」，绝不影响首页展示 =====
   // 重要：这里失败时不能把界面降级为「未连接」。
@@ -172,60 +205,60 @@ async function initApp() {
   if (appState.is_connected && appState.session_id && appState.instance_url) {
     const isValid = await validateStoredSession();
     if (isValid) {
-      console.log("已恢复 Salesforce 会话");
+      log.info("已恢复 Salesforce 会话");
       // 补齐用户 / 组织信息（失败不影响功能）
       try {
         await fetchUserInfo();
         await fetchOrgInfo();
       } catch (e) {
-        console.warn("获取用户/组织信息失败（不影响功能）:", e);
+        log.warn("获取用户/组织信息失败（不影响功能）:", e);
       }
       updateUIState();
       try {
         await renderLauncher();
       } catch (e) {
-        console.warn('刷新首页图标状态失败:', e);
+        log.warn('刷新首页图标状态失败:', e);
       }
     } else if (isSessionAuthFailure()) {
       // 只有服务端明确返回「会话无效」时才降级
-      console.warn("Salesforce 会话已失效，降级为未连接状态（保留 session ID 便于重试）");
+      log.warn("Salesforce 会话已失效，降级为未连接状态（保留 session ID 便于重试）");
       appState.is_connected = false;
       // 只清除连接标记，保留 session_id / instance_url 以便用户直接重试
       try {
         await chrome.storage.local.set({ is_connected: false });
       } catch (e) {
-        console.warn('更新连接状态失败:', e);
+        log.warn('更新连接状态失败:', e);
       }
       updateUIState();
       try {
         await renderLauncher();
       } catch (e) {
-        console.warn('刷新首页图标状态失败:', e);
+        log.warn('刷新首页图标状态失败:', e);
       }
       showNotification("Salesforce 会话已失效，请在「连接设置」重新测试连接或重新登录", "error");
     } else {
       // 无法判定会话失效（多为请求被拦截）：保留已连接状态，仅记录日志
-      console.warn("启动时会话校验未通过（可能是网络/CSP 限制），保留已连接状态。原因:", sfConn.lastError);
+      log.warn("启动时会话校验未通过（可能是网络/CSP 限制），保留已连接状态。原因:", sfConn.lastError);
     }
   }
 }
 
 // 首页渲染失败时的兜底提示，避免出现空白页面
 function renderLauncherErrorHint(error) {
-  const host = document.getElementById("launcher-groups");
+  const host = $("launcher-groups");
   if (!host) return;
   host.innerHTML = `
     <section class="launcher-group">
       <div class="launcher-group-head">
         <span class="launcher-group-chip">首页加载失败</span>
       </div>
-      <p style="margin:0 0 12px; color: var(--text-secondary); font-size: 13px;">
+      <p style="margin:0 0 12px; color: var(--text-secondary); font-size: var(--fs-sm);">
         功能列表加载失败：${error && error.message ? error.message : error}。
         可点击上方「布局配置」检查 JSON，或点「恢复默认」后重试。
       </p>
       <button type="button" class="ant-btn ant-btn-primary" id="launcher-retry-btn">重新加载首页</button>
     </section>`;
-  const retry = document.getElementById("launcher-retry-btn");
+  const retry = $("launcher-retry-btn");
   if (retry) {
     retry.addEventListener("click", () => window.location.reload());
   }
@@ -234,19 +267,17 @@ function renderLauncherErrorHint(error) {
 // 绑定事件
 function bindEvents() {
   // Session ID表单提交
-  document
-    .getElementById("session-id-form")
-    .addEventListener("submit", function (e) {
+  on("session-id-form", "submit", function (e) {
       e.preventDefault();
-      const sessionId = document.getElementById("session_id").value.trim();
+      const sessionId = $("session_id").value.trim();
 
       if (sessionId) {
         appState.session_id = sessionId;
         updateUIState();
-        showNotification("Session ID已成功保存");
+        showNotification("Session ID已成功保存", "success");
 
         // 自动触发连接测试
-        const testConnectionForm = document.getElementById("test-connection-form");
+        const testConnectionForm = $("test-connection-form");
         if (testConnectionForm) {
           testConnectionForm.dispatchEvent(new Event('submit'));
         }
@@ -256,14 +287,12 @@ function bindEvents() {
     });
 
   // 测试连接表单提交
-  document
-    .getElementById("test-connection-form")
-    .addEventListener("submit", async function (e) {
+  on("test-connection-form", "submit", async function (e) {
       e.preventDefault();
-      const statusElement = document.getElementById("connection-status");
-      const successElement = document.getElementById("connection-success");
-      const errorElement = document.getElementById("connection-error");
-      const infoElement = document.getElementById("connection-info");
+      const statusElement = $("connection-status");
+      const successElement = $("connection-success");
+      const errorElement = $("connection-error");
+      const infoElement = $("connection-info");
 
       statusElement.innerHTML =
         `${Icons.spinner} 正在测试连接...`;
@@ -278,11 +307,11 @@ function bindEvents() {
 
           statusElement.innerHTML =
             `${Icons.checkCircle} 连接成功`;
-          statusElement.style.color = "#52c41a"; // Ant Design success color
+          statusElement.style.color = "var(--success-color)"; // Ant Design success color
           successElement.style.display = "flex";
           errorElement.style.display = "none";
           infoElement.style.display = "none";
-          console.log("获取用户信息");
+          log.debug("获取用户信息");
           // 获取用户信息
           await fetchUserInfo();
           // 获取组织信息
@@ -295,7 +324,7 @@ function bindEvents() {
 
           // 连接成功后回到功能中心，所有功能图标解锁
           goHome();
-          showNotification("Salesforce连接成功，可点击图标进入功能");
+          showNotification("Salesforce连接成功，可点击图标进入功能", "success");
         } else {
           // 连接失败
           throw new Error("Connection failed");
@@ -306,7 +335,7 @@ function bindEvents() {
 
         statusElement.innerHTML =
           `${Icons.timesCircle} 连接失败`;
-        statusElement.style.color = "#ff4d4f"; // Ant Design error color
+        statusElement.style.color = "var(--error-color)"; // Ant Design error color
         successElement.style.display = "none";
         errorElement.style.display = "flex";
         infoElement.style.display = "block";
@@ -321,14 +350,12 @@ function bindEvents() {
     });
 
   // 获取当日数据表单提交
-  document
-    .getElementById("daily-data-form")
-    .addEventListener("submit", function (e) {
+  on("daily-data-form", "submit", function (e) {
       e.preventDefault();
 
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -341,14 +368,12 @@ function bindEvents() {
     });
 
   // 获取 PCD 当日数据表单提交
-  document
-    .getElementById("pcd-daily-data-form")
-    .addEventListener("submit", function (e) {
+  on("pcd-daily-data-form", "submit", function (e) {
       e.preventDefault();
 
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -361,14 +386,12 @@ function bindEvents() {
     });
 
   // 获取 PCD PID Fallout 数据表单提交
-  document
-    .getElementById("pcd-pid-fallout-data-form")
-    .addEventListener("submit", function (e) {
+  on("pcd-pid-fallout-data-form", "submit", function (e) {
       e.preventDefault();
 
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -381,14 +404,12 @@ function bindEvents() {
     });
 
   // 获取 PCD QC Issue 数据表单提交
-  document
-    .getElementById("pcd-qc-issue-data-form")
-    .addEventListener("submit", function (e) {
+  on("pcd-qc-issue-data-form", "submit", function (e) {
       e.preventDefault();
 
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -401,21 +422,10 @@ function bindEvents() {
     });
 
   // 自定义日期复选框变化事件
-  const dailyCustomDateCheckbox = document.getElementById("daily-custom-date-checkbox");
+  const dailyCustomDateCheckbox = $("daily-custom-date-checkbox");
   if (dailyCustomDateCheckbox) {
     dailyCustomDateCheckbox.addEventListener("change", function(e) {
-      const container = document.getElementById("daily-custom-date-container");
-      if (container) {
-        container.style.display = e.target.checked ? "block" : "none";
-      }
-    });
-  }
-
-  // PCD 自定义日期复选框变化事件
-  const pcdDailyCustomDateCheckbox = document.getElementById("pcd-daily-custom-date-checkbox");
-  if (pcdDailyCustomDateCheckbox) {
-    pcdDailyCustomDateCheckbox.addEventListener("change", function(e) {
-      const container = document.getElementById("pcd-daily-custom-date-container");
+      const container = $("daily-custom-date-container");
       if (container) {
         container.style.display = e.target.checked ? "block" : "none";
       }
@@ -423,14 +433,12 @@ function bindEvents() {
   }
 
   // 获取报表数据表单提交
-  document
-    .getElementById("report-data-form")
-    .addEventListener("submit", function (e) {
+  on("report-data-form", "submit", function (e) {
       e.preventDefault();
 
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -443,14 +451,12 @@ function bindEvents() {
     });
 
   // 获取T-4数据表单提交
-  document
-    .getElementById("t2-data-form")
-    .addEventListener("submit", function (e) {
+  on("t2-data-form", "submit", function (e) {
       e.preventDefault();
 
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -463,44 +469,36 @@ function bindEvents() {
     });
 
     // 文件上传表单提交
-  document
-    .getElementById("file-upload-form")
-    .addEventListener("submit", function (e) {
+  on("file-upload-form", "submit", function (e) {
       e.preventDefault();
-      const fileInput = document.getElementById("file");
+      const fileInput = $("file");
       const file = fileInput.files[0];
 
       processExcelFile(file);
     });
 
   // VVIP文件上传表单提交
-  document
-    .getElementById("vvip-file-upload-form")
-    .addEventListener("submit", function (e) {
+  on("vvip-file-upload-form", "submit", function (e) {
       e.preventDefault();
-      const fileInput = document.getElementById("vvip-file");
+      const fileInput = $("vvip-file");
       const file = fileInput.files[0];
 
       processVVIPExcelFile(file);
     });
 
   // 数据分析文件上传表单提交
-  document
-    .getElementById("analysis-file-upload-form")
-    .addEventListener("submit", function (e) {
+  on("analysis-file-upload-form", "submit", function (e) {
       e.preventDefault();
-      const fileInput = document.getElementById("analysis-file");
+      const fileInput = $("analysis-file");
       const file = fileInput.files[0];
 
       processAnalysisExcelFile(file);
     });
 
   // T-4 分析文件上传表单提交
-  document
-    .getElementById("t2-analysis-file-upload-form")
-    .addEventListener("submit", function (e) {
+  on("t2-analysis-file-upload-form", "submit", function (e) {
       e.preventDefault();
-      const fileInput = document.getElementById("t2-analysis-file");
+      const fileInput = $("t2-analysis-file");
       const file = fileInput.files[0];
 
       processT2AnalysisExcelFile(file);
@@ -512,7 +510,7 @@ function bindEvents() {
   // 侧边栏 / 横向菜单事件已移除
 
   // 顶部导航「设置」入口 + 设置页内的各项跳转
-  const settingsNavBtn = document.getElementById("settings-nav-btn");
+  const settingsNavBtn = $("settings-nav-btn");
   if (settingsNavBtn) {
     settingsNavBtn.addEventListener("click", () => showSection(21));
   }
@@ -524,66 +522,66 @@ function bindEvents() {
   });
 
   // 导出当日数据按钮点击事件
-  const exportDailyDataBtn = document.getElementById("export-daily-data");
+  const exportDailyDataBtn = $("export-daily-data");
   if (exportDailyDataBtn) {
     exportDailyDataBtn.addEventListener("click", exportDailyData);
   }
 
   // 导出 PCD 当日数据按钮点击事件
-  const exportPCDDailyDataBtn = document.getElementById("export-pcd-daily-data");
+  const exportPCDDailyDataBtn = $("export-pcd-daily-data");
   if (exportPCDDailyDataBtn) {
     exportPCDDailyDataBtn.addEventListener("click", exportPCDDailyData);
   }
 
   // 导出 PCD PID Fallout 数据按钮点击事件
-  const exportPCDPIDFalloutDataBtn = document.getElementById("export-pcd-pid-fallout-data");
+  const exportPCDPIDFalloutDataBtn = $("export-pcd-pid-fallout-data");
   if (exportPCDPIDFalloutDataBtn) {
     exportPCDPIDFalloutDataBtn.addEventListener("click", exportPCDPIDFalloutData);
   }
 
   // 导出 PCD QC Issue 数据按钮点击事件
-  const exportPCDQCIssueDataBtn = document.getElementById("export-pcd-qc-issue-data");
+  const exportPCDQCIssueDataBtn = $("export-pcd-qc-issue-data");
   if (exportPCDQCIssueDataBtn) {
     exportPCDQCIssueDataBtn.addEventListener("click", exportPCDQCIssueData);
   }
 
   // 导出报表数据按钮点击事件
-  const exportReportDataBtn = document.getElementById("export-report-data");
+  const exportReportDataBtn = $("export-report-data");
   if (exportReportDataBtn) {
     exportReportDataBtn.addEventListener("click", exportReportData);
   }
 
   // 导出T-4数据按钮点击事件
-  const exportT2DataBtn = document.getElementById("export-t2-data");
+  const exportT2DataBtn = $("export-t2-data");
   if (exportT2DataBtn) {
     exportT2DataBtn.addEventListener("click", exportT2Data);
   }
 
   // 导出最新数据按钮点击事件
-  const exportLatestDataBtn = document.getElementById("export-latest-data");
+  const exportLatestDataBtn = $("export-latest-data");
   if (exportLatestDataBtn) {
     exportLatestDataBtn.addEventListener("click", exportLatestData);
   }
 
   // 导出VVIP数据按钮点击事件
-  const exportVVIPDataBtn = document.getElementById("export-vvip-data");
+  const exportVVIPDataBtn = $("export-vvip-data");
   if (exportVVIPDataBtn) {
     exportVVIPDataBtn.addEventListener("click", exportVVIPData);
   }
 
   // 导出数据分析数据按钮点击事件
-  const exportAnalysisDataBtn = document.getElementById("export-analysis-data");
+  const exportAnalysisDataBtn = $("export-analysis-data");
   if (exportAnalysisDataBtn) {
     exportAnalysisDataBtn.addEventListener("click", exportAnalysisData);
   }
 
   // "显示最新数据"按钮点击事件
-  const getLatestDataBtn = document.getElementById("get-latest-data-btn");
+  const getLatestDataBtn = $("get-latest-data-btn");
   if (getLatestDataBtn) {
     getLatestDataBtn.addEventListener("click", function() {
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -597,12 +595,12 @@ function bindEvents() {
   }
 
   // "获取 PCD/LTS 状态"按钮点击事件
-  const getVVIPDataBtn = document.getElementById("get-vvip-data-btn");
+  const getVVIPDataBtn = $("get-vvip-data-btn");
   if (getVVIPDataBtn) {
     getVVIPDataBtn.addEventListener("click", function() {
       // 显示loading mask
-      const loadingMask = document.getElementById("loading-mask");
-      const recordCountSpan = document.getElementById("record-count");
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
 
       if (loadingMask && recordCountSpan) {
         loadingMask.style.display = "flex";
@@ -617,25 +615,25 @@ function bindEvents() {
 
 
   // "开始分析"按钮点击事件
-  const analyzeDataBtn = document.getElementById("analyze-data-btn");
+  const analyzeDataBtn = $("analyze-data-btn");
   if (analyzeDataBtn) {
     analyzeDataBtn.addEventListener("click", analyzeData);
   }
 
   // "T-4 开始分析"按钮点击事件
-  const analyzeT2DataBtn = document.getElementById("analyze-t2-data-btn");
+  const analyzeT2DataBtn = $("analyze-t2-data-btn");
   if (analyzeT2DataBtn) {
     analyzeT2DataBtn.addEventListener("click", analyzeT2Data);
   }
 
   // 导出T-4分析数据按钮点击事件
-  const exportT2AnalysisDataBtn = document.getElementById("export-t2-analysis-data");
+  const exportT2AnalysisDataBtn = $("export-t2-analysis-data");
   if (exportT2AnalysisDataBtn) {
     exportT2AnalysisDataBtn.addEventListener("click", exportT2AnalysisData);
   }
 
   // LTS MD 文件上传处理
-  const ltsMdUpload = document.getElementById("lts-md-upload");
+  const ltsMdUpload = $("lts-md-upload");
   if (ltsMdUpload) {
     ltsMdUpload.addEventListener("change", function(e) {
       if (this.files.length > 0) {
@@ -651,13 +649,13 @@ function bindEvents() {
         reader.onload = function(e) {
           try {
             const content = e.target.result;
-            const container = document.getElementById('lts-summary-content');
+            const container = $('lts-summary-content');
             if (container) {
               renderMarkdownContent(container, content);
               showNotification("LTS 概览已更新", "success");
             }
           } catch (error) {
-            console.error("读取MD文件失败:", error);
+            log.error("读取MD文件失败:", error);
             showNotification("读取文件失败", "error");
           }
         };
@@ -910,7 +908,7 @@ function bindEvents() {
   }
 
   // 规则文件上传处理
-  const rulesFileInput = document.getElementById("rules-file");
+  const rulesFileInput = $("rules-file");
   if (rulesFileInput) {
     rulesFileInput.addEventListener("change", function(e) {
       if (this.files.length > 0) {
@@ -929,8 +927,8 @@ function bindEvents() {
             appState.custom_rules = rules;
             
             // 更新UI显示
-            const infoDiv = document.getElementById("rules-file-info");
-            const nameSpan = document.getElementById("rules-file-name");
+            const infoDiv = $("rules-file-info");
+            const nameSpan = $("rules-file-name");
             if (infoDiv && nameSpan) {
               nameSpan.textContent = `已加载规则: ${file.name}`;
               infoDiv.style.display = "flex";
@@ -941,12 +939,12 @@ function bindEvents() {
             
             showNotification("规则文件加载成功", "success");
           } catch (error) {
-            console.error("解析规则文件失败:", error);
+            log.error("解析规则文件失败:", error);
             showNotification("解析规则文件失败，请检查JSON格式", "error");
             appState.custom_rules = null;
             
             // 清空规则列表
-            const rulesListContainer = document.getElementById("rules-list-container");
+            const rulesListContainer = $("rules-list-container");
             if (rulesListContainer) {
               rulesListContainer.style.display = "none";
             }
@@ -958,7 +956,7 @@ function bindEvents() {
   }
 
   // T-4 规则文件上传处理
-  const t2RulesFileInput = document.getElementById("t2-rules-file");
+  const t2RulesFileInput = $("t2-rules-file");
   if (t2RulesFileInput) {
     t2RulesFileInput.addEventListener("change", function(e) {
       if (this.files.length > 0) {
@@ -969,7 +967,7 @@ function bindEvents() {
   }
 
   // 午餐文件上传处理
-  const lunchFileInput = document.getElementById("lunch-file");
+  const lunchFileInput = $("lunch-file");
   if (lunchFileInput) {
     lunchFileInput.addEventListener("change", function(e) {
       if (this.files.length > 0) {
@@ -1024,55 +1022,104 @@ function bindEvents() {
   }
 
   // 摇一摇按钮点击事件
-  const shakeBtn = document.getElementById("shake-lunch-btn");
+  const shakeBtn = $("shake-lunch-btn");
   if (shakeBtn) {
       shakeBtn.addEventListener("click", shakeLunch);
   }
 
   // Bulk 操作按钮事件
-  const createBulkJobBtn = document.getElementById("create-bulk-job-btn");
+  const createBulkJobBtn = $("create-bulk-job-btn");
   if (createBulkJobBtn) {
     createBulkJobBtn.addEventListener("click", handleCreateBulkJob);
   }
 
-  const checkBulkJobBtn = document.getElementById("check-bulk-job-btn");
+  const checkBulkJobBtn = $("check-bulk-job-btn");
   if (checkBulkJobBtn) {
     checkBulkJobBtn.addEventListener("click", handleCheckBulkJob);
   }
 
-  const downloadBulkCsvBtn = document.getElementById("download-bulk-csv-btn");
+  const downloadBulkCsvBtn = $("download-bulk-csv-btn");
   if (downloadBulkCsvBtn) {
     downloadBulkCsvBtn.addEventListener("click", () => handleDownloadBulkResult('csv'));
   }
 
-  const downloadBulkZipBtn = document.getElementById("download-bulk-zip-btn");
+  const downloadBulkZipBtn = $("download-bulk-zip-btn");
   if (downloadBulkZipBtn) {
     downloadBulkZipBtn.addEventListener("click", () => handleDownloadBulkResult('zip'));
   }
 
   // Execute Anonymous 按钮事件
-  const executeAnonymousBtn = document.getElementById("execute-anonymous-btn");
+  const executeAnonymousBtn = $("execute-anonymous-btn");
   if (executeAnonymousBtn) {
     executeAnonymousBtn.addEventListener("click", executeAnonymousCode);
   }
 
   // Schedule Jobs 刷新按钮事件
-  const refreshScheduleJobsBtn = document.getElementById("refresh-schedule-jobs-btn");
+  const refreshScheduleJobsBtn = $("refresh-schedule-jobs-btn");
   if (refreshScheduleJobsBtn) {
     refreshScheduleJobsBtn.addEventListener("click", loadScheduleJobs);
   }
 
   // Schedule Jobs 创建按钮事件
-  const createScheduleJobBtn = document.getElementById("create-schedule-job-btn");
+  const createScheduleJobBtn = $("create-schedule-job-btn");
   if (createScheduleJobBtn) {
     createScheduleJobBtn.addEventListener("click", createScheduleJob);
   }
 
   // Schedule Jobs 清除所有按钮事件
-  const clearAllScheduleJobsBtn = document.getElementById("clear-all-schedule-jobs-btn");
+  const clearAllScheduleJobsBtn = $("clear-all-schedule-jobs-btn");
   if (clearAllScheduleJobsBtn) {
     clearAllScheduleJobsBtn.addEventListener("click", clearAllScheduleJobs);
   }
+
+  // ===== Inspector 移植功能（section-23 ~ 26）=====
+
+  // section-23 SOQL 数据导出
+  const soqlObjectInput = $("soql-object-input");
+  if (soqlObjectInput) soqlObjectInput.addEventListener("change", loadSoqlFields);
+  const runSoqlBtn = $("run-soql-btn");
+  if (runSoqlBtn) runSoqlBtn.addEventListener("click", runSoqlQuery);
+  const exportSoqlXlsxBtn = $("export-soql-xlsx-btn");
+  if (exportSoqlXlsxBtn) exportSoqlXlsxBtn.addEventListener("click", () => exportSoqlResults("xlsx"));
+  const exportSoqlCsvBtn = $("export-soql-csv-btn");
+  if (exportSoqlCsvBtn) exportSoqlCsvBtn.addEventListener("click", () => exportSoqlResults("csv"));
+  const soqlHistorySelect = $("soql-history-select");
+  if (soqlHistorySelect) {
+    soqlHistorySelect.addEventListener("change", function () {
+      const queryInput = $("soql-query-input");
+      if (queryInput && this.value) queryInput.value = this.value;
+    });
+  }
+
+  // section-24 批量数据导入
+  const importFileInput = $("import-file-input");
+  if (importFileInput) importFileInput.addEventListener("change", function () { handleImportFileChange(this); });
+  const importObjectInput = $("import-object-input");
+  if (importObjectInput) importObjectInput.addEventListener("change", handleImportObjectChange);
+  const runImportBtn = $("run-import-btn");
+  if (runImportBtn) runImportBtn.addEventListener("click", runDataImport);
+
+  // section-25 Metadata 工具
+  const loadMetadataTypesBtn = $("load-metadata-types-btn");
+  if (loadMetadataTypesBtn) loadMetadataTypesBtn.addEventListener("click", loadMetadataTypes);
+  const listMetadataMembersBtn = $("list-metadata-members-btn");
+  if (listMetadataMembersBtn) listMetadataMembersBtn.addEventListener("click", listMetadataMembers);
+  const metadataRetrieveBtn = $("metadata-retrieve-btn");
+  if (metadataRetrieveBtn) metadataRetrieveBtn.addEventListener("click", retrieveMetadataPackage);
+
+  // section-26 事件监听
+  const eventTypeSelect = $("event-type-select");
+  if (eventTypeSelect) eventTypeSelect.addEventListener("change", onEventTypeChange);
+  const eventReloadChannelsBtn = $("event-reload-channels-btn");
+  if (eventReloadChannelsBtn) eventReloadChannelsBtn.addEventListener("click", loadEventChannels);
+  const eventSubscribeBtn = $("event-subscribe-btn");
+  if (eventSubscribeBtn) eventSubscribeBtn.addEventListener("click", subscribeEventChannel);
+  const eventUnsubscribeBtn = $("event-unsubscribe-btn");
+  if (eventUnsubscribeBtn) eventUnsubscribeBtn.addEventListener("click", unsubscribeEventChannel);
+  const eventClearBtn = $("event-clear-btn");
+  if (eventClearBtn) eventClearBtn.addEventListener("click", clearEventLog);
+  const eventExportBtn = $("event-export-btn");
+  if (eventExportBtn) eventExportBtn.addEventListener("click", exportEventLog);
 
   // 绑定重新初始化事件
   const pageHeader = document.querySelector(".page-header");
@@ -1107,8 +1154,8 @@ function bindEvents() {
   });
   
   // 绑定头像点击事件，显示/隐藏用户信息下拉菜单
-  const avatarContainer = document.getElementById("avatar-container");
-  const userMenu = document.getElementById("user-menu");
+  const avatarContainer = $("avatar-container");
+  const userMenu = $("user-menu");
   
   if (avatarContainer && userMenu) {
     avatarContainer.addEventListener("click", function (e) {
@@ -1163,19 +1210,19 @@ window.resumeScheduleJob = resumeScheduleJob;
  *   });
  */
 window.testOneDrive = async function() {
-  console.log('===== OneDrive Workbook 连接测试 =====');
+  log.info('===== OneDrive Workbook 连接测试 =====');
 
   const service = new OneDriveWorkbookService();
   const result = await service.testConnection();
 
-  console.log('测试结果:', result);
+  log.debug('测试结果:', result);
 
   if (result.success) {
     showNotification(result.message, 'success');
-    console.log('Worksheet 列表:', result.worksheets.map(w => w.name));
+    log.debug('Worksheet 列表:', result.worksheets.map(w => w.name));
   } else {
     showNotification(result.message, 'error');
-    console.error('测试失败详情:', result);
+    log.error('测试失败详情:', result);
   }
 
   return result;
@@ -1190,15 +1237,15 @@ window.listOneDriveFiles = async function(limit = 10) {
   try {
     const files = await service.listRecentFiles(limit);
     const excelFiles = files.filter(f => f.name.endsWith('.xlsx'));
-    console.log('===== OneDrive 最近 Excel 文件 =====');
+    log.info('===== OneDrive 最近 Excel 文件 =====');
     excelFiles.forEach((f, i) => {
-      console.log(`${i + 1}. ${f.name}`);
-      console.log(`   ID: ${f.id}`);
-      console.log(`   URL: ${f.webUrl}`);
+      log.info(`${i + 1}. ${f.name}`);
+      log.info(`   ID: ${f.id}`);
+      log.info(`   URL: ${f.webUrl}`);
     });
     return excelFiles;
   } catch (error) {
-    console.error('列出文件失败:', error);
+    log.error('列出文件失败:', error);
     showNotification('列出文件失败: ' + error.message, 'error');
     return [];
   }
@@ -1212,15 +1259,15 @@ window.searchOneDriveWorkbook = async function(fileName) {
   const service = new OneDriveWorkbookService();
   try {
     const files = await service.searchWorkbookByName(fileName);
-    console.log(`===== 搜索 "${fileName}" 结果 =====`);
+    log.info(`===== 搜索 "${fileName}" 结果 =====`);
     files.forEach((f, i) => {
-      console.log(`${i + 1}. ${f.name}`);
-      console.log(`   ID: ${f.id}`);
-      console.log(`   Path: ${f.path}`);
+      log.info(`${i + 1}. ${f.name}`);
+      log.info(`   ID: ${f.id}`);
+      log.info(`   Path: ${f.path}`);
     });
     return files;
   } catch (error) {
-    console.error('搜索失败:', error);
+    log.error('搜索失败:', error);
     showNotification('搜索失败: ' + error.message, 'error');
     return [];
   }
@@ -1228,7 +1275,7 @@ window.searchOneDriveWorkbook = async function(fileName) {
 
 // 全局错误处理：捕获未处理的Promise拒绝
 window.addEventListener('unhandledrejection', function(event) {
-  console.error('Unhandled Promise Rejection:', event.reason);
+  log.error('未处理的 Promise 拒绝:', event.reason);
   showNotification(`发生未处理的错误：${event.reason.message || event.reason}`, 'error');
   
   // 隐藏所有可能的loading mask
@@ -1240,7 +1287,7 @@ window.addEventListener('unhandledrejection', function(event) {
 
 // 全局错误处理：捕获未处理的错误
 window.addEventListener('error', function(event) {
-  console.error('Global Error:', event.error);
+  log.error('全局未捕获异常:', event.error);
   showNotification(`发生全局错误：${event.error.message || event.error}`, 'error');
   
   // 隐藏所有可能的loading mask
