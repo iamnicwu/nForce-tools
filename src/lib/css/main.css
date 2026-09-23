@@ -202,13 +202,6 @@ optgroup {
     gap: 1rem;
 }
 
-.page-title {
-    font-size: var(--fs-2xl);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-}
-
 .top-nav-right {
     display: flex;
     align-items: center;
@@ -609,10 +602,6 @@ optgroup {
 }
 
 @media (max-width: 768px) {
-    .page-title {
-        font-size: var(--fs-lg);
-    }
-    
     .top-nav {
         padding: 0 16px;
     }
@@ -1871,8 +1860,16 @@ optgroup {
 
 /* 顶栏 Logo */
 .top-nav-logo {
-    width: 32px;
-    height: 32px;
+    display: block;
+    height: 40px;
+    width: auto;
+    flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+    .top-nav-logo {
+        height: 34px;
+    }
 }
 
 /* 未连接锁定状态 */
