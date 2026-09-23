@@ -1,4 +1,7 @@
 // 全局状态管理 - 使用 Proxy 封装，提供变更追踪和只读保护
+import { createLogger } from "../common/logger.js";
+
+const log = createLogger("STATE");
 const _appState = {
   session_id: null,
   instance_url: null,
@@ -86,7 +89,7 @@ function _notifyStateChange(key, newValue, oldValue) {
     try {
       callback(key, newValue, oldValue);
     } catch (e) {
-      console.error('State listener error:', e);
+      log.error('状态监听器执行失败:', e);
     }
   });
 }
@@ -121,5 +124,5 @@ export function clearDataCache(keys = null) {
       _appState[key] = null;
     }
   });
-  console.log('Data cache cleared:', dataKeys);
+  log.info('数据缓存已清除:', dataKeys);
 }

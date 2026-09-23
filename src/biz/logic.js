@@ -1,3 +1,6 @@
+import { createLogger, maskSecret } from "../common/logger.js";
+
+const log = createLogger("LOGIC");
 import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
 import { showNotification, loadingLog } from "../common/utils.js";
@@ -11,7 +14,7 @@ import { OneDriveWorkbookService } from "../common/onedrive_service.js";
 export function initLunch() {
   if (!appState.lunch_places || appState.lunch_places.length === 0) {
     appState.lunch_places = [...DEFAULT_LUNCH_PLACES];
-    console.log("已加载默认午餐地点");
+    log.info("已加载默认午餐地点");
   }
   updateLunchUIState();
 }
@@ -23,12 +26,12 @@ async function loadDefaultT2Rules() {
     if (response.ok) {
       const rules = await response.json();
       appState.t2_default_rules = rules;
-      console.log('默认 T-4 规则加载成功:', rules);
+      log.debug('默认 T-4 规则加载成功:', rules);
     } else {
-      console.error('加载默认 T-4 规则失败:', response.statusText);
+      log.error('加载默认 T-4 规则失败:', response.statusText);
     }
   } catch (error) {
-    console.error('加载默认 T-4 规则出错:', error);
+    log.error('加载默认 T-4 规则出错:', error);
   }
 }
 
@@ -52,7 +55,7 @@ export async function autoDetectSession() {
   if (appState.is_connected) return;
 
   try {
-    console.log("开始自动检测Salesforce Session...");
+    log.info("开始自动检测Salesforce Session...");
     const tabs = await chrome.tabs.query({
       url: [
         "https://*.salesforce.com/*",
@@ -62,7 +65,7 @@ export async function autoDetectSession() {
     });
     
     if (tabs.length > 0) {
-      console.log(`找到 ${tabs.length} 个Salesforce标签页`);
+      log.info(`找到 ${tabs.length} 个Salesforce标签页`);
       
       const processedDomains = new Set();
 
@@ -85,25 +88,25 @@ export async function autoDetectSession() {
 
           // 如果该域名已经检测过，则跳过
           if (processedDomains.has(domainKey)) {
-            console.log(`Domain Key ${domainKey} (from ${instanceUrl}) 已经检测过，跳过`);
+            log.info(`Domain Key ${domainKey} (from ${instanceUrl}) 已经检测过，跳过`);
             continue;
           }
           processedDomains.add(domainKey);
 
           // 尝试从cookie获取session id
           const cookies = await chrome.cookies.getAll({ url: getDomain(tab.url), name: "sid" });
-          console.log("Cookies:", cookies);
+          log.debug("Cookie 名称:", cookies.map(c => `${c.name}@${c.domain}`));
           if (cookies.length > 0) {
             const sid = cookies[0].value.split("!")[1];
-            console.log("从Cookie中找到Session ID");
-            console.log("Session ID:", sid);
-            console.log("Instance URL:", instanceUrl);
+            log.info("从Cookie中找到Session ID");
+            log.debug("Session ID:", maskSecret(sid));
+            log.debug("Instance URL:", instanceUrl);
 
             // 尝试连接
             const isConnected = await sfConn.testConnection(sid, instanceUrl);
             
             if (isConnected) {
-              console.log("自动连接成功");
+              log.info("自动连接成功");
               appState.session_id = sid;
               appState.is_connected = true;
               // Session 信息仅保存在 chrome.storage.local 中，不再使用 localStorage
@@ -115,25 +118,25 @@ export async function autoDetectSession() {
               
               updateUIState();
               goHome();
-              showNotification("已自动连接到Salesforce");
+              showNotification("已自动连接到Salesforce", "success");
               return;
             }
           }
         } catch (err) {
-          console.error("处理标签页时出错:", err);
+          log.error("处理标签页时出错:", err);
         }
       }
     } else {
-      console.log("未找到Salesforce标签页");
+      log.info("未找到Salesforce标签页");
     }
 
     // 如果上面的逻辑没有成功连接，且有保存的 Session ID，尝试使用保存的 Session ID
     if (!appState.is_connected && appState.session_id) {
-      console.log("尝试使用保存的 Session ID 连接...");
+      log.info("尝试使用保存的 Session ID 连接...");
       const isConnected = await sfConn.testConnection(appState.session_id);
       
       if (isConnected) {
-        console.log("使用保存的 Session ID 连接成功");
+        log.info("使用保存的 Session ID 连接成功");
         appState.is_connected = true;
         
         // 获取用户信息和组织信息
@@ -142,14 +145,14 @@ export async function autoDetectSession() {
         
         updateUIState();
         goHome();
-        showNotification("已自动连接到Salesforce (使用保存的Session)");
+        showNotification("已自动连接到Salesforce (使用保存的Session)", "success");
         return;
       } else {
-        console.log("使用保存的 Session ID 连接失败");
+        log.info("使用保存的 Session ID 连接失败");
       }
     }
   } catch (error) {
-    console.error("自动检测Session失败:", error);
+    log.error("自动检测Session失败:", error);
   }
 }
 
@@ -158,7 +161,7 @@ export async function fetchUserInfo() {
   try {
     if (appState.is_connected && sfConn.connection) {
       const result = await sfConn.getUserInfo();
-      console.log('获取用户信息成功:', result);
+      log.info('获取用户信息成功:', result);
       if (result.success) {
         const userInfo = result.userInfo;
         // 更新应用状态
@@ -169,13 +172,13 @@ export async function fetchUserInfo() {
           thumbnail: userInfo.photos?.thumbnail || userInfo.photos?.[0]?.thumbnail || userInfo.thumbnail || userInfo.photos?.picture || ''
         };
 
-        console.log(appState.userInfo);
+        log.debug(appState.userInfo);
         // 更新UI
         // updateUserInfo(); // updateUIState 会调用
       }
     }
   } catch (error) {
-    console.error('获取用户信息失败:', error);
+    log.error('获取用户信息失败:', error);
   }
 }
 
@@ -184,14 +187,14 @@ export async function fetchOrgInfo() {
   try {
     if (appState.is_connected && sfConn.connection) {
       const result = await sfConn.getOrgInfo();
-      console.log('获取组织信息成功:', result);
+      log.info('获取组织信息成功:', result);
       if (result.success) {
         appState.orgInfo = result.orgInfo;
         // updateUserInfo(); // updateUIState 会调用
       }
     }
   } catch (error) {
-    console.error('获取组织信息失败:', error);
+    log.error('获取组织信息失败:', error);
   }
 }
 
@@ -223,7 +226,7 @@ function jsonTo2DArray(data) {
   });
 
   if (textColumns.size > 0) {
-    console.log('以下列包含前导 0，将标记为文本格式:', Array.from(textColumns));
+    log.info('以下列包含前导 0，将标记为文本格式:', Array.from(textColumns));
   }
 
   // 构建二维数组
@@ -270,39 +273,39 @@ async function writeReportDataToOneDrive(data, options = {}) {
   } = options;
 
   try {
-    console.log(`开始将 ${data.length} 条报表数据写入 OneDrive Workbook (每批 ${batchSize} 行)...`);
+    log.info(`开始将 ${data.length} 条报表数据写入 OneDrive Workbook (每批 ${batchSize} 行)...`);
 
     // 创建 OneDrive 服务实例（使用 graph_token.js + ExpiredWorkbook 默认值）
     const service = new OneDriveWorkbookService();
 
     // 连接 Workbook
     const connectResult = await service.connect({ persistChanges: true });
-    console.log('connectResult:', connectResult);
+    log.debug('connectResult:', connectResult);
     if (!connectResult.success) {
-      console.error('连接 OneDrive Workbook 失败:', connectResult.error);
+      log.error('连接 OneDrive Workbook 失败:', connectResult.error);
       return { success: false, error: connectResult.error };
     }
 
-    console.log('OneDrive Workbook 连接成功');
+    log.info('OneDrive Workbook 连接成功');
 
     // 检查 worksheet 是否已存在，存在则删除
     const worksheets = await service.getWorksheets();
     const existingSheet = worksheets.find(sheet => sheet.name === worksheetName);
 
     if (existingSheet) {
-      console.log(`Worksheet "${worksheetName}" 已存在，删除旧版本...`);
+      log.info(`Worksheet "${worksheetName}" 已存在，删除旧版本...`);
       await service.deleteWorksheet(worksheetName);
     }
 
     // 创建新的 worksheet
-    console.log(`创建 Worksheet "${worksheetName}"...`);
+    log.info(`创建 Worksheet "${worksheetName}"...`);
     await service.createWorksheet(worksheetName);
 
     // 将数据转换为二维数组（含表头）
     const excelData = jsonTo2DArray(data);
 
     if (excelData.length === 0) {
-      console.warn('无数据可写入');
+      log.warn('无数据可写入');
       await service.disconnect();
       return { success: true, message: 'No data to write' };
     }
@@ -314,12 +317,12 @@ async function writeReportDataToOneDrive(data, options = {}) {
     const totalDataRows = dataRows.length;
     const totalBatches = Math.ceil(totalDataRows / batchSize);
 
-    console.log(`总计 ${totalDataRows} 行数据 ${colCount} 列，分 ${totalBatches} 批写入`);
+    log.info(`总计 ${totalDataRows} 行数据 ${colCount} 列，分 ${totalBatches} 批写入`);
 
     // 第 1 批：写入表头 + 第一批数据
     const firstBatch = dataRows.slice(0, batchSize);
     const firstBatchRange = `A1:${endCol}${firstBatch.length + 1}`;
-    console.log(`批次 1/${totalBatches}: 写入 ${firstBatchRange} (表头 + ${firstBatch.length} 行)...`);
+    log.info(`批次 1/${totalBatches}: 写入 ${firstBatchRange} (表头 + ${firstBatch.length} 行)...`);
     await service.updateRangeValues(worksheetName, firstBatchRange, [headerRow, ...firstBatch]);
 
     // 后续批次：纯数据（从第 2 批开始，起始行偏移 = 1 表头 + 已写入行数）
@@ -329,7 +332,7 @@ async function writeReportDataToOneDrive(data, options = {}) {
       const endRow = startRow + batchData.length - 1;
       const batchRange = `A${startRow}:${endCol}${endRow}`;
 
-      console.log(`批次 ${i + 1}/${totalBatches}: 写入 ${batchRange} (${batchData.length} 行)...`);
+      log.info(`批次 ${i + 1}/${totalBatches}: 写入 ${batchRange} (${batchData.length} 行)...`);
       await service.updateRangeValues(worksheetName, batchRange, batchData);
 
       // 批次间延迟，避免触发 API 限流
@@ -339,7 +342,7 @@ async function writeReportDataToOneDrive(data, options = {}) {
     }
 
     const finalRange = `A1:${endCol}${totalDataRows + 1}`;
-    console.log(`数据写入 OneDrive 成功，Range: ${finalRange}`);
+    log.info(`数据写入 OneDrive 成功，Range: ${finalRange}`);
 
     // 断开连接
     await service.disconnect();
@@ -353,7 +356,7 @@ async function writeReportDataToOneDrive(data, options = {}) {
       totalBatches
     };
   } catch (error) {
-    console.error('写入 OneDrive 失败:', error);
+    log.error('写入 OneDrive 失败:', error);
     return { success: false, error: error.message };
   }
 }
@@ -375,7 +378,7 @@ function columnIndexToLetter(index) {
 
 export async function getReportData() {
   try {
-    console.log("开始获取报表数据");
+    log.info("开始获取报表数据");
 
     // 使用sfConn对象获取报表数据
     const result = await sfConn.getReportData();
@@ -388,7 +391,7 @@ export async function getReportData() {
         // 更新统计数据
         appState.stats.reportRecords = result.data?.length || 0;
         // 不再强制跳转步骤，保持在当前步骤
-        console.log("应用状态已更新");
+        log.debug("应用状态已更新");
 
         // 隐藏loading mask
         const loadingMask = document.getElementById("loading-mask");
@@ -418,15 +421,15 @@ export async function getReportData() {
         // 将报表数据同步写入 OneDrive Workbook
         const writeResult = await writeReportDataToOneDrive(result.data);
         if (writeResult.success) {
-          showNotification(`${writeResult.message}，Worksheet: ${writeResult.worksheet}`);
+          showNotification(`${writeResult.message}，Worksheet: ${writeResult.worksheet}`, "success");
         } else {
-          showNotification(`报表数据获取成功，共 ${appState.stats.reportRecords} 条记录`);
+          showNotification(`报表数据获取成功，共 ${appState.stats.reportRecords} 条记录`, "success");
         }
 
-        console.log("报表数据获取成功");
+        log.info("报表数据获取成功");
     }
   } catch (error) {
-    console.error("获取报表数据失败:", error);
+    log.error("获取报表数据失败:", error);
     showNotification("获取报表数据失败，请稍后重试", "error");
 
     // 隐藏loading mask
@@ -435,13 +438,13 @@ export async function getReportData() {
       loadingMask.style.display = "none";
       loadingMask.querySelector("h3").textContent = "正在从Salesforce获取数据...";
     }
-    console.log("获取报表数据失败，已显示错误通知");
+    log.info("获取报表数据失败，已显示错误通知");
   }
 }
 
 export async function getT2Data() {
   try {
-    console.log("开始获取T-4数据");
+    log.info("开始获取T-4数据");
 
     // 获取用户输入的天数
     const daysInput = document.getElementById("t2-days-input");
@@ -458,7 +461,7 @@ export async function getT2Data() {
         // 更新统计数据
         appState.stats.t2Records = result.data?.length || 0;
         // 不再强制跳转步骤，保持在当前步骤
-        console.log("应用状态已更新");
+        log.debug("应用状态已更新");
 
         // 隐藏loading mask
         const loadingMask = document.getElementById("loading-mask");
@@ -485,11 +488,11 @@ export async function getT2Data() {
         // 更新统计数据
         updateStats();
         // 不再强制跳转到步骤5，保持在当前步骤
-        showNotification(`T-4数据获取成功，共 ${appState.stats.t2Records} 条记录`);
-        console.log("T-4数据获取成功");
+        showNotification(`T-4数据获取成功，共 ${appState.stats.t2Records} 条记录`, "success");
+        log.info("T-4数据获取成功");
     }
   } catch (error) {
-    console.error("获取T-4数据失败:", error);
+    log.error("获取T-4数据失败:", error);
     showNotification("获取T-4数据失败，请稍后重试", "error");
 
     // 隐藏loading mask
@@ -498,13 +501,13 @@ export async function getT2Data() {
       loadingMask.style.display = "none";
       loadingMask.querySelector("h3").textContent = "正在从Salesforce获取数据...";
     }
-    console.log("获取T-4数据失败，已显示错误通知");
+    log.info("获取T-4数据失败，已显示错误通知");
   }
 }
 
 export async function getSalesforceData() {
   try {
-    console.log("开始获取最新Salesforce数据");
+    log.info("开始获取最新Salesforce数据");
     loadingLog("开始获取Salesforce数据...", "info");
 
     // 显示日志区域
@@ -514,7 +517,7 @@ export async function getSalesforceData() {
       const logContent = document.getElementById("loading-log-content");
       if (logContent) logContent.innerHTML = "";
     }
-    console.log("appState.order_numbers: ", appState.order_numbers);
+    log.debug("appState.order_numbers: ", appState.order_numbers);
     // 使用sfConn对象获取Salesforce数据
     const result = await sfConn.getSFData(appState.order_numbers, (count) => {
       // 更新记录数显示
@@ -524,14 +527,14 @@ export async function getSalesforceData() {
       }
       loadingLog(`正在获取数据，已匹配 ${count} 条记录...`, "info");
     });
-    console.log("result1: " + result.data);
+    log.debug("result1: " + result.data);
     if (result.success) {
-        console.log("result: " + result.data);
+        log.debug("result: " + result.data);
         // 更新记录数显示
         const recordCountSpan = document.getElementById("record-count");
         if (recordCountSpan) {
           recordCountSpan.textContent = result.data.length;
-          console.log("已更新UI记录数显示");
+          log.debug("已更新UI记录数显示");
         }
 
         // 更新统计数据
@@ -545,7 +548,7 @@ export async function getSalesforceData() {
         const loadingMask = document.getElementById("loading-mask");
         if (loadingMask) {
           loadingMask.style.display = "none";
-          console.log("已隐藏loading mask");
+          log.debug("已隐藏loading mask");
         }
         loadingLog(`数据获取完成，共 ${result.data.length} 条记录`, "success");
 
@@ -558,10 +561,10 @@ export async function getSalesforceData() {
           exportBtn.style.display = "inline-block";
         }
 
-        showNotification(`最新数据获取成功，共 ${result.data.length} 条记录`);
+        showNotification(`最新数据获取成功，共 ${result.data.length} 条记录`, "success");
     }
   } catch (error) {
-    console.error("获取Salesforce数据失败:", error);
+    log.error("获取Salesforce数据失败:", error);
     loadingLog(`获取Salesforce数据失败: ${error.message}`, "error");
     showNotification(
       "获取Salesforce数据失败，请检查Session ID和网络连接",
@@ -573,13 +576,13 @@ export async function getSalesforceData() {
     if (loadingMask) {
       loadingMask.style.display = "none";
     }
-    console.log("获取数据失败，已显示错误通知");
+    log.info("获取数据失败，已显示错误通知");
   }
 }
 
 export async function getDailyData() {
   try {
-    console.log("开始获取当日数据");
+    log.info("开始获取当日数据");
 
     // 获取自定义日期参数
     let startDate = null;
@@ -608,12 +611,12 @@ export async function getDailyData() {
         return;
       }
       
-      console.log(`使用自定义日期范围: ${startDate} 到 ${endDate}`);
+      log.info(`使用自定义日期范围: ${startDate} 到 ${endDate}`);
     }
 
     // 使用sfConn对象获取当日数据
     const result = await sfConn.getDailyData(startDate, endDate);
-    console.log("获取当日数据结果:", result);
+    log.debug("获取当日数据结果:", result);
 
     if (result.success) {
         // 更新应用状态
@@ -623,7 +626,7 @@ export async function getDailyData() {
         // 更新统计数据
         appState.stats.dailyOrders = result.data.length;
         // 不再强制跳转步骤，保持在当前步骤
-        console.log("应用状态已更新");
+        log.debug("应用状态已更新");
 
         // 隐藏loading mask
         const loadingMask = document.getElementById("loading-mask");
@@ -651,13 +654,13 @@ export async function getDailyData() {
         // 更新统计数据
         updateStats();
         // 不再强制跳转到步骤4，保持在当前步骤
-        showNotification(`当日数据获取成功，共 ${result.data.length} 个订单`);
-        console.log("当日数据获取成功");
+        showNotification(`当日数据获取成功，共 ${result.data.length} 个订单`, "success");
+        log.info("当日数据获取成功");
     } else {
       showNotification(`获取当日数据失败: ${result.error}`, "error");
     }
   } catch (error) {
-    console.error("获取当日数据失败:", error);
+    log.error("获取当日数据失败:", error);
     showNotification("获取当日数据失败，请稍后重试", "error");
 
     // 隐藏loading mask
@@ -667,13 +670,13 @@ export async function getDailyData() {
       loadingMask.querySelector("h3").textContent =
         "正在从Salesforce获取数据...";
     }
-    console.log("获取当日数据失败，已显示错误通知");
+    log.info("获取当日数据失败，已显示错误通知");
   }
 }
 
 export async function getPCDDailyData() {
   try {
-    console.log("开始获取 PCD 当日数据");
+    log.info("开始获取 PCD 当日数据");
 
     // 获取自定义 SOQL 查询
     let customQuery = null;
@@ -681,14 +684,14 @@ export async function getPCDDailyData() {
     
     if (customQueryInput && customQueryInput.value && customQueryInput.value.trim()) {
       customQuery = customQueryInput.value.trim();
-      console.log(`使用自定义 SOQL 查询: ${customQuery}`);
+      log.info(`使用自定义 SOQL 查询: ${customQuery}`);
     } else {
-      console.log("使用默认查询");
+      log.debug("使用默认查询");
     }
 
     // 使用sfConn对象获取 PCD 当日数据
     const result = await sfConn.getPCDDailyData(customQuery);
-    console.log("获取 PCD 当日数据结果:", result);
+    log.debug("获取 PCD 当日数据结果:", result);
 
     if (result.success) {
         // 更新应用状态
@@ -698,7 +701,7 @@ export async function getPCDDailyData() {
         // 更新统计数据
         appState.stats.pcdDailyOrders = result.data.length;
         // 不再强制跳转步骤，保持在当前步骤
-        console.log("应用状态已更新");
+        log.debug("应用状态已更新");
 
         // 隐藏loading mask
         const loadingMask = document.getElementById("loading-mask");
@@ -726,8 +729,8 @@ export async function getPCDDailyData() {
         // 更新统计数据
         updateStats();
         
-        showNotification(`PCD 当日数据获取成功，共 ${result.data.length} 个订单`);
-        console.log("PCD 当日数据获取成功");
+        showNotification(`PCD 当日数据获取成功，共 ${result.data.length} 个订单`, "success");
+        log.info("PCD 当日数据获取成功");
     } else {
       showNotification(`获取 PCD 当日数据失败: ${result.error}`, "error");
       // 隐藏loading mask
@@ -737,7 +740,7 @@ export async function getPCDDailyData() {
       }
     }
   } catch (error) {
-    console.error("获取 PCD 当日数据失败:", error);
+    log.error("获取 PCD 当日数据失败:", error);
     showNotification("获取 PCD 当日数据失败，请稍后重试", "error");
 
     // 隐藏loading mask
@@ -747,13 +750,13 @@ export async function getPCDDailyData() {
       loadingMask.querySelector("h3").textContent =
         "正在从Salesforce获取数据...";
     }
-    console.log("获取 PCD 当日数据失败，已显示错误通知");
+    log.info("获取 PCD 当日数据失败，已显示错误通知");
   }
 }
 
 export async function getPCDPIDFalloutData() {
   try {
-    console.log("开始获取 PCD PID Fallout 数据");
+    log.info("开始获取 PCD PID Fallout 数据");
 
     // 显示loading mask
     const loadingMask = document.getElementById("loading-mask");
@@ -764,7 +767,7 @@ export async function getPCDPIDFalloutData() {
 
     // 使用sfConn对象获取 PCD PID Fallout 数据
     const result = await sfConn.getPCDPIDFalloutData();
-    console.log("获取 PCD PID Fallout 数据结果:", result);
+    log.debug("获取 PCD PID Fallout 数据结果:", result);
 
     if (result.success) {
         // 更新应用状态
@@ -773,7 +776,7 @@ export async function getPCDPIDFalloutData() {
         appState.pcd_pid_fallout_data = result.data;
         // 更新统计数据
         appState.stats.pcdPidFalloutOrders = result.data.length;
-        console.log("应用状态已更新");
+        log.debug("应用状态已更新");
 
         // 隐藏loading mask
         if (loadingMask) {
@@ -798,8 +801,8 @@ export async function getPCDPIDFalloutData() {
         // 更新统计数据
         updateStats();
         
-        showNotification(`PCD PID Fallout 数据获取成功，共 ${result.data.length} 条记录`);
-        console.log("PCD PID Fallout 数据获取成功");
+        showNotification(`PCD PID Fallout 数据获取成功，共 ${result.data.length} 条记录`, "success");
+        log.info("PCD PID Fallout 数据获取成功");
     } else {
       showNotification(`获取 PCD PID Fallout 数据失败: ${result.error}`, "error");
       // 隐藏loading mask
@@ -808,7 +811,7 @@ export async function getPCDPIDFalloutData() {
       }
     }
   } catch (error) {
-    console.error("获取 PCD PID Fallout 数据失败:", error);
+    log.error("获取 PCD PID Fallout 数据失败:", error);
     showNotification("获取 PCD PID Fallout 数据失败，请稍后重试", "error");
 
     // 隐藏loading mask
@@ -816,13 +819,13 @@ export async function getPCDPIDFalloutData() {
     if (loadingMask) {
       loadingMask.style.display = "none";
     }
-    console.log("获取 PCD PID Fallout 数据失败，已显示错误通知");
+    log.info("获取 PCD PID Fallout 数据失败，已显示错误通知");
   }
 }
 
 export async function getPCDQCIssueData() {
   try {
-    console.log("开始获取 PCD QC Issue 数据");
+    log.info("开始获取 PCD QC Issue 数据");
 
     // 显示loading mask
     const loadingMask = document.getElementById("loading-mask");
@@ -833,7 +836,7 @@ export async function getPCDQCIssueData() {
 
     // 使用sfConn对象获取 PCD QC Issue 数据
     const result = await sfConn.getPCDQCIssueData();
-    console.log("获取 PCD QC Issue 数据结果:", result);
+    log.debug("获取 PCD QC Issue 数据结果:", result);
 
     if (result.success) {
         // 更新应用状态
@@ -842,7 +845,7 @@ export async function getPCDQCIssueData() {
         appState.pcd_qc_issue_data = result.data;
         // 更新统计数据
         appState.stats.pcdQCIssueOrders = result.data.length;
-        console.log("应用状态已更新");
+        log.debug("应用状态已更新");
 
         // 隐藏loading mask
         if (loadingMask) {
@@ -867,8 +870,8 @@ export async function getPCDQCIssueData() {
         // 更新统计数据
         updateStats();
         
-        showNotification(`PCD QC Issue 数据获取成功，共 ${result.data.length} 条记录`);
-        console.log("PCD QC Issue 数据获取成功");
+        showNotification(`PCD QC Issue 数据获取成功，共 ${result.data.length} 条记录`, "success");
+        log.info("PCD QC Issue 数据获取成功");
     } else {
       showNotification(`获取 PCD QC Issue 数据失败: ${result.error}`, "error");
       // 隐藏loading mask
@@ -877,7 +880,7 @@ export async function getPCDQCIssueData() {
       }
     }
   } catch (error) {
-    console.error("获取 PCD QC Issue 数据失败:", error);
+    log.error("获取 PCD QC Issue 数据失败:", error);
     showNotification("获取 PCD QC Issue 数据失败，请稍后重试", "error");
 
     // 隐藏loading mask
@@ -885,7 +888,7 @@ export async function getPCDQCIssueData() {
     if (loadingMask) {
       loadingMask.style.display = "none";
     }
-    console.log("获取 PCD QC Issue 数据失败，已显示错误通知");
+    log.info("获取 PCD QC Issue 数据失败，已显示错误通知");
   }
 }
 
@@ -1074,7 +1077,7 @@ export function processExcelFile(file) {
       // 更新统计数据
       appState.stats.uploadedOrders = orderNumbers.length;
       // 不再强制跳转步骤，保持在当前步骤
-      console.log("应用状态已更新");
+      log.debug("应用状态已更新");
       loadingLog(`已保存 ${orderNumbers.length} 个订单号到应用状态`, "success");
 
       updateUIState();
@@ -1083,7 +1086,7 @@ export function processExcelFile(file) {
       // 不再强制跳转到步骤4，保持在当前步骤
       showNotification(
         `文件已成功上传，共读取到 ${orderNumbers.length} 个唯一的订单号`
-      );
+      , "success");
       
       // 显示"显示最新数据"按钮
       const getLatestDataBtn = document.getElementById("get-latest-data-btn");
@@ -1091,7 +1094,7 @@ export function processExcelFile(file) {
         getLatestDataBtn.style.display = "inline-block";
       }
 
-      console.log("文件上传处理完成");
+      log.info("文件上传处理完成");
       loadingLog("文件上传处理完成", "success");
     },
     (error) => {
@@ -1100,7 +1103,7 @@ export function processExcelFile(file) {
       if (loadingMask) {
         loadingMask.style.display = "none";
       }
-      console.error("处理Excel文件失败:", error);
+      log.error("处理Excel文件失败:", error);
       loadingLog(`处理Excel文件失败: ${error}`, "error");
     }
   );
@@ -1146,7 +1149,7 @@ export function processVVIPExcelFile(file) {
       appState.stats.uploadedPcdAccounts = pcdIds.length;
       appState.stats.uploadedLtsAccounts = ltsIds.length;
       
-      console.log("应用状态已更新");
+      log.debug("应用状态已更新");
 
       updateUIState();
       // 更新统计数据
@@ -1154,7 +1157,7 @@ export function processVVIPExcelFile(file) {
       
       showNotification(
         `文件已成功上传，共读取到 ${pcdIds.length} 个 PCD ID 和 ${ltsIds.length} 个 LTS ID`
-      );
+      , "success");
       
       // 显示"获取 PCD/LTS 状态"按钮
       const getVVIPDataBtn = document.getElementById("get-vvip-data-btn");
@@ -1162,7 +1165,7 @@ export function processVVIPExcelFile(file) {
         getVVIPDataBtn.style.display = "inline-block";
       }
 
-      console.log("VVIP文件上传处理完成");
+      log.info("VVIP文件上传处理完成");
     },
     (error) => {
       // 失败回调
@@ -1170,7 +1173,7 @@ export function processVVIPExcelFile(file) {
       if (loadingMask) {
         loadingMask.style.display = "none";
       }
-      console.error("处理VVIP Excel文件失败:", error);
+      log.error("处理VVIP Excel文件失败:", error);
     }
   );
 }
@@ -1208,7 +1211,7 @@ export function processAnalysisExcelFile(file) {
       // 更新统计数据
       appState.stats.analysisRecords = data.length;
       
-      console.log("应用状态已更新");
+      log.debug("应用状态已更新");
 
       updateUIState();
       // 更新统计数据
@@ -1216,12 +1219,12 @@ export function processAnalysisExcelFile(file) {
       
       showNotification(
         `文件已成功上传，共读取到 ${data.length} 条记录`
-      );
+      , "success");
       
       // 自动渲染数据
       renderAnalysisData(data);
 
-      console.log("数据分析文件上传处理完成");
+      log.info("数据分析文件上传处理完成");
     },
     (error) => {
       // 失败回调
@@ -1229,14 +1232,14 @@ export function processAnalysisExcelFile(file) {
       if (loadingMask) {
         loadingMask.style.display = "none";
       }
-      console.error("处理数据分析 Excel 文件失败:", error);
+      log.error("处理数据分析 Excel 文件失败:", error);
     }
   );
 }
 
 export async function getVVIPData() {
   try {
-    console.log("开始获取VVIP数据");
+    log.info("开始获取VVIP数据");
 
     // 使用sfConn对象获取VVIP数据
     const result = await sfConn.getVVIPData(appState.pcd_account_ids, appState.lts_account_ids, (count) => {
@@ -1252,7 +1255,7 @@ export async function getVVIPData() {
         const recordCountSpan = document.getElementById("record-count");
         if (recordCountSpan) {
           recordCountSpan.textContent = result.data.length;
-          console.log("已更新UI记录数显示");
+          log.debug("已更新UI记录数显示");
         }
 
         // 保存数据到应用状态
@@ -1266,7 +1269,7 @@ export async function getVVIPData() {
         const loadingMask = document.getElementById("loading-mask");
         if (loadingMask) {
           loadingMask.style.display = "none";
-          console.log("已隐藏loading mask");
+          log.debug("已隐藏loading mask");
         }
 
         // 显示数据
@@ -1278,10 +1281,10 @@ export async function getVVIPData() {
           exportBtn.style.display = "inline-block";
         }
 
-        showNotification(`VVIP数据获取成功，共 ${result.data.length} 条记录`);
+        showNotification(`VVIP数据获取成功，共 ${result.data.length} 条记录`, "success");
     }
   } catch (error) {
-    console.error("获取VVIP数据失败:", error);
+    log.error("获取VVIP数据失败:", error);
     showNotification(
       "获取VVIP数据失败，请检查Session ID和网络连接",
       "error"
@@ -1292,7 +1295,7 @@ export async function getVVIPData() {
     if (loadingMask) {
       loadingMask.style.display = "none";
     }
-    console.log("获取VVIP数据失败，已显示错误通知");
+    log.info("获取VVIP数据失败，已显示错误通知");
   }
 }
 
@@ -1321,7 +1324,7 @@ export function analyzeData() {
         
         showNotification("数据分析完成", "success");
     } catch (error) {
-        console.error("数据分析失败:", error);
+        log.error("数据分析失败:", error);
         showNotification("数据分析失败: " + error.message, "error");
     } finally {
         // 隐藏 loading mask
@@ -1378,7 +1381,7 @@ export function processT2AnalysisExcelFile(file) {
       if (loadingMask) {
         loadingMask.style.display = "none";
       }
-      console.error("处理 T-4 分析 Excel 文件失败:", error);
+      log.error("处理 T-4 分析 Excel 文件失败:", error);
       showNotification("处理文件失败: " + error, "error");
     });
 }
@@ -1387,7 +1390,7 @@ export function processT2AnalysisExcelFile(file) {
 function handleT2SheetSelection(sheetName) {
   if (!appState.t2_workbook) return;
 
-  console.log(`正在切换到工作表: ${sheetName}`);
+  log.info(`正在切换到工作表: ${sheetName}`);
   
   // 解析选中 Sheet 的数据
   const data = parseSheetData(appState.t2_workbook, sheetName);
@@ -1406,7 +1409,7 @@ function handleT2SheetSelection(sheetName) {
   
   showNotification(
     `已加载工作表 "${sheetName}"，共 ${data.length} 条记录，包含 ${uniqueOrderCount} 个唯一订单`
-  );
+  , "success");
   
   // 自动渲染数据
   renderT2AnalysisData(data);
@@ -1436,7 +1439,7 @@ export function processT2RulesFile(file) {
         showNotification("规则文件格式错误：应为规则数组", "error");
       }
     } catch (error) {
-      console.error("解析规则文件失败:", error);
+      log.error("解析规则文件失败:", error);
       showNotification("解析规则文件失败: " + error.message, "error");
     }
   };
@@ -1475,7 +1478,7 @@ export function analyzeT2Data() {
         try {
             // 执行分析
             // 使用硬编码的 T-4 规则 (applyT2Rules)
-            console.log("使用 applyT2Rules 进行分析...");
+            log.debug("使用 applyT2Rules 进行分析...");
             const analyzedData = applyT2Rules(dataToAnalyze);
             
             // 更新应用状态
@@ -1489,7 +1492,7 @@ export function analyzeT2Data() {
             
             showNotification("T-4 数据分析完成", "success");
         } catch (error) {
-            console.error("T-4 数据分析失败:", error);
+            log.error("T-4 数据分析失败:", error);
             showNotification("T-4 数据分析失败: " + error.message, "error");
         } finally {
             // 隐藏 loading mask
@@ -1526,7 +1529,7 @@ export function processLunchFile(file) {
         showNotification("文件格式错误：应为地点数组", "error");
       }
     } catch (error) {
-      console.error("解析午餐文件失败:", error);
+      log.error("解析午餐文件失败:", error);
       showNotification("解析文件失败: " + error.message, "error");
     }
   };
@@ -1568,7 +1571,7 @@ export async function handleCreateBulkJob() {
       showNotification(`创建 Bulk 任务失败: ${result.error}`, "error");
     }
   } catch (error) {
-    console.error("创建 Bulk 任务出错:", error);
+    log.error("创建 Bulk 任务出错:", error);
     showNotification("创建 Bulk 任务出错", "error");
   } finally {
     if (loadingMask) {
@@ -1617,7 +1620,7 @@ export async function handleCheckBulkJob() {
       showNotification(`查询状态失败: ${result.error}`, "error");
     }
   } catch (error) {
-    console.error("查询状态出错:", error);
+    log.error("查询状态出错:", error);
     showNotification("查询状态出错", "error");
   } finally {
     if (loadingMask) {
@@ -1684,7 +1687,7 @@ export async function handleDownloadBulkResult(format = 'csv') {
       showNotification(`下载结果失败: ${result.error}`, "error");
     }
   } catch (error) {
-    console.error("下载结果出错:", error);
+    log.error("下载结果出错:", error);
     showNotification("下载结果出错", "error");
   } finally {
     if (loadingMask) {
@@ -1703,7 +1706,7 @@ export function shakeLunch() {
     // 简单的随机选择动画效果
     const container = document.getElementById("lunch-result-container");
     if (container) {
-        container.innerHTML = '<div style="text-align: center; font-size: 24px; color: #faad14;"><i class="fas fa-spinner fa-spin"></i> 正在选...</div>';
+        container.innerHTML = '<div style="text-align: center; font-size: var(--fs-3xl); color: var(--warning-color);"><i class="fas fa-spinner fa-spin"></i> 正在选...</div>';
         container.style.display = 'block';
     }
 
@@ -1717,13 +1720,13 @@ export function shakeLunch() {
 // 获取所有 Bulk Query Jobs
 export async function fetchBulkJobs() {
     try {
-        console.log("开始获取 Bulk Jobs...");
+        log.info("开始获取 Bulk Jobs...");
         
         const result = await sfConn.getAllBulkQueryJobs();
         
         if (result.success) {
             const jobs = result.jobs || [];
-            console.log(`获取到 ${jobs.length} 个 Bulk Job`);
+            log.info(`获取到 ${jobs.length} 个 Bulk Job`);
             
             // 渲染表格
             renderBulkJobsTable(jobs);
@@ -1732,7 +1735,7 @@ export async function fetchBulkJobs() {
                 showNotification(`共 ${jobs.length} 个 Bulk Job`, "success");
             }
         } else {
-            console.error("获取 Bulk Jobs 失败:", result.error);
+            log.error("获取 Bulk Jobs 失败:", result.error);
             showNotification(`获取 Bulk Jobs 失败: ${result.error}`, "error");
             
             // 显示空状态
@@ -1747,7 +1750,7 @@ export async function fetchBulkJobs() {
                 emptyEl.innerHTML = '';
                 const icon = document.createElement('i');
                 icon.className = 'fas fa-exclamation-circle';
-                icon.style.cssText = 'font-size: 24px; color: #ff4d4f; margin-bottom: 0.5rem;';
+                icon.style.cssText = 'font-size: var(--fs-3xl); color: var(--error-color); margin-bottom: 0.5rem;';
                 const p = document.createElement('p');
                 p.textContent = `获取失败: ${result.error}`;
                 emptyEl.appendChild(icon);
@@ -1755,7 +1758,7 @@ export async function fetchBulkJobs() {
             }
         }
     } catch (error) {
-        console.error("获取 Bulk Jobs 出错:", error);
+        log.error("获取 Bulk Jobs 出错:", error);
         showNotification("获取 Bulk Jobs 出错", "error");
     }
 }
@@ -1790,7 +1793,7 @@ export async function executeAnonymousCode() {
         
         if (result.success) {
             const res = result.result;
-            console.log("Execute Anonymous 结果:", res);
+            log.debug("Execute Anonymous 结果:", res);
             
             // 格式化输出结果
             let output = "";
@@ -1828,7 +1831,7 @@ export async function executeAnonymousCode() {
             showNotification(`执行失败: ${errorMsg}`, "error");
         }
     } catch (error) {
-        console.error("Execute Anonymous 出错:", error);
+        log.error("Execute Anonymous 出错:", error);
         resultContent.textContent = `✗ 执行出错\n\n错误: ${error.message || error}`;
         resultContainer.style.display = "block";
         showNotification("执行出错: " + (error.message || error), "error");
@@ -1871,7 +1874,7 @@ export async function loadScheduleJobs() {
 
         if (result && result.success) {
             const alarms = result.alarms || [];
-            console.log("Schedule Jobs (Alarms):", alarms);
+            log.debug("定时任务 (Alarms):", alarms);
 
             if (alarms.length === 0) {
                 if (loadingEl) loadingEl.style.display = "none";
@@ -1897,7 +1900,7 @@ export async function loadScheduleJobs() {
             throw new Error(result && result.error ? result.error : "获取定时任务失败");
         }
     } catch (error) {
-        console.error("获取定时任务出错:", error);
+        log.error("获取定时任务出错:", error);
         showNotification("获取定时任务出错: " + (error.message || error), "error");
         if (loadingEl) loadingEl.style.display = "none";
         if (emptyEl) emptyEl.style.display = "block";
@@ -1905,7 +1908,7 @@ export async function loadScheduleJobs() {
             emptyEl.innerHTML = '';
             const icon = document.createElement('i');
             icon.className = 'fas fa-exclamation-triangle';
-            icon.style.cssText = 'font-size: 48px; margin-bottom: 1rem; color: #ff4d4f;';
+            icon.style.cssText = 'font-size: var(--icon-2xl); margin-bottom: 1rem; color: var(--error-color);';
             const p = document.createElement('p');
             p.textContent = `加载失败: ${error.message || error}`;
             emptyEl.appendChild(icon);
@@ -1983,7 +1986,7 @@ export async function createScheduleJob() {
             });
         });
 
-        console.log("Create alarm result: ", result);
+        log.debug("创建 Alarm 结果: ", result);
 
         if (result && result.success) {
             showNotification(`定时任务 "${sanitizedName}" 创建成功`, "success");
@@ -1999,7 +2002,7 @@ export async function createScheduleJob() {
             throw new Error(result && result.error ? result.error : "创建定时任务失败");
         }
     } catch (error) {
-        console.error("创建定时任务出错:", error);
+        log.error("创建定时任务出错:", error);
         showNotification("创建定时任务出错: " + (error.message || error), "error");
     } finally {
         if (createBtn) {
@@ -2037,7 +2040,7 @@ export async function deleteScheduleJob(alarmName) {
             throw new Error(result && result.error ? result.error : "删除定时任务失败");
         }
     } catch (error) {
-        console.error("删除定时任务出错:", error);
+        log.error("删除定时任务出错:", error);
         showNotification("删除定时任务出错: " + (error.message || error), "error");
     }
 }
@@ -2064,7 +2067,7 @@ export async function clearAllScheduleJobs() {
             throw new Error(result && result.error ? result.error : "清除定时任务失败");
         }
     } catch (error) {
-        console.error("清除定时任务出错:", error);
+        log.error("清除定时任务出错:", error);
         showNotification("清除定时任务出错: " + (error.message || error), "error");
     }
 }
@@ -2125,7 +2128,7 @@ export async function pauseScheduleJob(alarmName) {
             throw new Error(result && result.error ? result.error : `${actionText}定时任务失败`);
         }
     } catch (error) {
-        console.error("操作定时任务出错:", error);
+        log.error("操作定时任务出错:", error);
         showNotification("操作定时任务出错: " + (error.message || error), "error");
     }
 }
@@ -2158,7 +2161,7 @@ export async function resumeScheduleJob(alarmName) {
             throw new Error(result && result.error ? result.error : "恢复定时任务失败");
         }
     } catch (error) {
-        console.error("恢复定时任务出错:", error);
+        log.error("恢复定时任务出错:", error);
         showNotification("恢复定时任务出错: " + (error.message || error), "error");
     }
 }
@@ -2168,7 +2171,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // 只处理 ALARM_TRIGGERED 消息，其他消息类型不干预，交给其他监听器处理
         if (message.type === 'ALARM_TRIGGERED') {
-            console.log('Alarm triggered in page:', message.alarm.name);
+            log.info('页面收到 Alarm 触发:', message.alarm.name);
             showNotification(`定时任务 "${message.alarm.name}" 已触发!`, "info");
             
             // 触发一个自定义事件，让页面可以处理

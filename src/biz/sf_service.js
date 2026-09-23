@@ -1,4 +1,7 @@
 /* eslint-disable no-unused-vars */
+import { createLogger } from "../common/logger.js";
+
+const log = createLogger("SF");
 import { flattenRecords, remove_duplicates, loadingLog } from "../common/utils.js";
 import { applyExpiryRules, applyT2Rules } from "../common/t2rules.js";
 
@@ -16,7 +19,7 @@ export let sfConn = {
 
   async testConnection(session_id, instanceUrl) {
     try {
-      console.log("instanceUrl", instanceUrl);
+      log.debug("instanceUrl:", instanceUrl);
       let finalInstanceUrl = instanceUrl;
       
       // 如果没有传入 instanceUrl，尝试从 chrome.storage.local 获取
@@ -25,16 +28,16 @@ export let sfConn = {
           const stored = await chrome.storage.local.get('sf_instance_url');
           finalInstanceUrl = stored.sf_instance_url;
         } catch (e) {
-          console.warn('从 chrome.storage.local 读取 instanceUrl 失败:', e);
+          log.warn('从 chrome.storage.local 读取 instanceUrl 失败:', e);
         }
       }
       
       // 如果仍然没有，使用默认的 here2serve 实例
       if (!finalInstanceUrl) {
         finalInstanceUrl = "https://here2serve.my.salesforce.com";
-        console.log("No instanceUrl provided or found in storage, using default:", finalInstanceUrl);
+        log.info("未提供 instanceUrl（storage 中也未找到），使用默认值:", finalInstanceUrl);
       } else {
-        console.log("Using instanceUrl from session:", finalInstanceUrl);
+        log.info("使用会话中的 instanceUrl:", finalInstanceUrl);
       }
 
       if (finalInstanceUrl === "https://here2serve.lightning.force.com") {
@@ -50,15 +53,15 @@ export let sfConn = {
       // Get user identity info
       userInfo = await conn.identity();
       // 安全：不输出完整的连接对象和用户信息，避免泄露 session ID 和 access token
-      console.log("Connection established successfully");
-      console.log("User:", userInfo?.display_name || userInfo?.name || userInfo?.username);
+      log.info("Salesforce 连接建立成功");
+      log.debug("用户:", userInfo?.display_name || userInfo?.name || userInfo?.username);
       // 保存连接对象
       this.connection = conn;
       globalConn = conn;
       this.lastError = null;
       return true;
     } catch (err) {
-      console.error("Error:", err);
+      log.error("连接测试失败:", err);
       this.connection = null;
       this.lastError = {
         message: err && err.message ? err.message : String(err),
@@ -73,7 +76,7 @@ export let sfConn = {
     try {
       return { success: true, userInfo };
     } catch (error) {
-      console.error("Error getting user info:", error);
+      log.error("获取用户信息失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -94,7 +97,7 @@ export let sfConn = {
         return { success: false, error: "No organization info found" };
       }
     } catch (error) {
-      console.error("Error getting org info:", error);
+      log.error("获取组织信息失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -130,15 +133,14 @@ export let sfConn = {
       
       if (customDays && !isNaN(customDays) && customDays > 0) {
         nextNDays = parseInt(customDays);
-        console.log(`Using custom days: fetching T2 data for next ${nextNDays} days.`);
+        log.info(`使用自定义天数：获取未来 ${nextNDays} 天的 T2 数据`);
       } else {
-        console.log(`Today is day ${dayOfWeek}, fetching T2 data for next ${nextNDays} days.`);
+        log.info(`今天是星期 ${dayOfWeek}，获取未来 ${nextNDays} 天的 T2 数据`);
         // 如果是周五 (5)，查询未来3天的数据（覆盖周六、周日、周一）
         // if (dayOfWeek === 5) {
         //   nextNDays = 3;
-        //   console.log("Today is Friday, fetching T2 data for next 3 days.");
         // } else {
-        //   console.log(`Today is day ${dayOfWeek}, fetching T2 data for next 2 days.`);
+        //   nextNDays = 2;
         // }
       }
 
@@ -224,7 +226,7 @@ export let sfConn = {
         // 应用 T2 规则
         const finalRecords = applyT2Rules(filteredRecords);
 
-        console.log(`报表数据获取成功，原始: ${processedRecords.length}, 去重后: ${filteredRecords.length}`);
+        log.info(`报表数据获取成功，原始: ${processedRecords.length}, 去重后: ${filteredRecords.length}`);
         
         return {
           success: true,
@@ -237,7 +239,7 @@ export let sfConn = {
         };
       }
     } catch (error) {
-      console.error("获取当日数据失败:", error);
+      log.error("获取当日数据失败:", error);
       return { success: false, error: error.message };
     }
   },  
@@ -283,7 +285,7 @@ export let sfConn = {
 
         // 启用去重逻辑
         const removedDupeList = remove_duplicates(processedRecords);
-        console.log(`报表数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
+        log.info(`报表数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
         
         // 增加额外的列，并确保它们在最前面
         const addFields = removedDupeList.map(record => {
@@ -311,7 +313,7 @@ export let sfConn = {
         };
       }
     } catch (error) {
-      console.error("获取当日数据失败:", error);
+      log.error("获取当日数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -322,13 +324,13 @@ export let sfConn = {
     // 只允许 YYYY-MM-DD 格式
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(dateStr)) {
-      console.warn(`日期格式无效: ${dateStr}，已忽略`);
+      log.warn(`日期格式无效: ${dateStr}，已忽略`);
       return null;
     }
     // 验证是否为有效日期
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) {
-      console.warn(`日期无效: ${dateStr}，已忽略`);
+      log.warn(`日期无效: ${dateStr}，已忽略`);
       return null;
     }
     return dateStr;
@@ -353,13 +355,13 @@ export let sfConn = {
         // 自定义日期范围逻辑
         if (validStartDate && validEndDate) {
           dateCondition = `order.Service_Request_Date__c >= ${validStartDate} AND order.Service_Request_Date__c <= ${validEndDate}`;
-          console.log(`Fetching data for custom range: ${validStartDate} to ${validEndDate}`);
+          log.info(`获取自定义日期范围数据: ${validStartDate} ~ ${validEndDate}`);
         } else if (validStartDate) {
           dateCondition = `order.Service_Request_Date__c >= ${validStartDate}`;
-          console.log(`Fetching data from: ${validStartDate}`);
+          log.info(`获取数据，起始日期: ${validStartDate}`);
         } else if (validEndDate) {
           dateCondition = `order.Service_Request_Date__c <= ${validEndDate}`;
-          console.log(`Fetching data until: ${validEndDate}`);
+          log.info(`获取数据，截止日期: ${validEndDate}`);
         }
       } else {
         // 默认逻辑
@@ -373,10 +375,10 @@ export let sfConn = {
           const sunday = todayObj.subtract(1, 'day').format('YYYY-MM-DD');
           const saturday = todayObj.subtract(2, 'day').format('YYYY-MM-DD');
           dateCondition = `order.Service_Request_Date__c IN (${saturday}, ${sunday}, ${today})`;
-          console.log(`Fetching data for dates: ${saturday}, ${sunday}, ${today} (Monday logic)`);
+          log.info(`获取周末及当日数据（周一逻辑）: ${saturday}, ${sunday}, ${today}`);
         } else {
           dateCondition = `order.Service_Request_Date__c = ${today}`;
-          console.log("Fetching data for date:", today);
+          log.info("获取当日数据，日期:", today);
         }
       }
 
@@ -413,7 +415,7 @@ export let sfConn = {
 
         // 启用去重逻辑
         const removedDupeList = remove_duplicates(processedRecords);
-        console.log(`当日数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
+        log.info(`当日数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
         
         
 
@@ -428,7 +430,7 @@ export let sfConn = {
         };
       }
     } catch (error) {
-      console.error("获取当日数据失败:", error);
+      log.error("获取当日数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -494,7 +496,7 @@ export let sfConn = {
 
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         const totalBatches = Math.ceil(orderNumbers.length / BATCH_SIZE);
-        console.log(
+        log.info(
           `正在查询数据，批次: ${batchNum}/${totalBatches}, 数量: ${
             batchOrderNumbers.length
           }`
@@ -507,7 +509,7 @@ export let sfConn = {
           allRecords = allRecords.concat(result.records);
           if (onProgress) onProgress(allRecords.length);
         }
-        console.log(`已获取${result.records.length}条记录`);
+        log.info(`已获取${result.records.length}条记录`);
         loadingLog(`第 ${batchNum} 批次完成，已获取 ${result.records ? result.records.length : 0} 条记录`, "success");
       }
       loadingLog(`所有批次查询完成，共获取 ${allRecords.length} 条记录，正在处理...`, "info");
@@ -517,7 +519,7 @@ export let sfConn = {
         const processedRecords = flattenRecords(allRecords);
         // 启用去重逻辑
         const removedDupeList = remove_duplicates(processedRecords);
-        console.log("removedDupeList: " , removedDupeList);
+        log.debug("removedDupeList: " , removedDupeList);
         // 增加额外的列，并确保它们在最前面
         const addFields = removedDupeList.map(record => {
           return {
@@ -529,17 +531,17 @@ export let sfConn = {
             'Root Cause Category': ''
           };
         });
-        console.log("addFields: " , addFields);
+        log.debug("addFields: " , addFields);
         // 应用 T2 规则
         const finalRecords = applyExpiryRules(addFields);
-        console.log("finalRecords, "+ finalRecords);
+        log.debug("finalRecords, "+ finalRecords);
         return {
           success: true,
           data: finalRecords,
         };
       
     } catch (error) {
-      console.error("获取Salesforce数据失败:", error);
+      log.error("获取Salesforce数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -577,7 +579,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
           "','"
         )}')`;
 
-        console.log(
+        log.info(
           `正在查询数据，批次: ${Math.floor(i / BATCH_SIZE) + 1}, 数量: ${
             batchAccountIds.length
           }`
@@ -589,7 +591,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
           allRecords = allRecords.concat(result.records);
           if (onProgress) onProgress(allRecords.length);
         }
-        console.log(`已获取${result.records.length}条记录`);
+        log.info(`已获取${result.records.length}条记录`);
       }
       
       if(allRecords.length>0){
@@ -610,7 +612,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         };
       }
     } catch (error) {
-      console.error("获取Salesforce数据失败:", error);
+      log.error("获取Salesforce数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -645,7 +647,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         const soql = `select Account__c from AccountProfile__c where CustomerNo__c in ('${escapedOrderNumbers.join(
           "','"
         )}')`;
-        console.log(
+        log.info(
           `正在查询 AccountProfile__c 数据，批次: ${
             Math.floor(i / BATCH_SIZE) + 1
           }, 数量: ${batchAccountIds.length}`
@@ -656,7 +658,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         if (result.records && result.records.length > 0) {
           allAccounts = allAccounts.concat(result.records);
         }
-        console.log(`已获取${result.records.length}条 AccountProfile__c 记录`);
+        log.info(`已获取${result.records.length}条 AccountProfile__c 记录`);
       }
 
       let allOrderItems = [];
@@ -665,7 +667,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         const accountIds = [
           ...new Set(allAccounts.map((acc) => acc.Account__c).filter((id) => id)),
         ];
-        console.log(`提取到 ${accountIds.length} 个 Account ID`);
+        log.info(`提取到 ${accountIds.length} 个 Account ID`);
 
         // 分批查询 OrderItem
         for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
@@ -680,7 +682,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
                           AND Order.AccountId IN ('${escapedIds.join("','")}')
                           AND order.Custom_OrderStatus__c not in ('Activated','Cancelled','Superseded','Rejected','Amend Requested','Superseded')`;
 
-          console.log(
+          log.info(
             `正在查询 OrderItem 数据，批次: ${
               Math.floor(i / BATCH_SIZE) + 1
             }, 数量: ${batchIds.length}`
@@ -691,7 +693,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
             allOrderItems = allOrderItems.concat(result.records);
             if (onProgress) onProgress(allOrderItems.length);
           }
-          console.log(`已获取${result.records.length}条 OrderItem 记录`);
+          log.info(`已获取${result.records.length}条 OrderItem 记录`);
         }
       }
 
@@ -713,7 +715,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         };
       }
     } catch (error) {
-      console.error("获取 LTS Orders 失败:", error);
+      log.error("获取 LTS Orders 失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -732,7 +734,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
       // 安全警告：不再接受任意自定义 SOQL 查询以防止注入攻击
       // 如果提供了自定义查询，仅记录日志并忽略，使用默认安全查询
       if (customQuery && customQuery.trim()) {
-        console.warn("自定义 SOQL 查询已被禁用以防止注入攻击，使用默认安全查询");
+        log.warn("自定义 SOQL 查询已被禁用以防止注入攻击，使用默认安全查询");
       }
 
       dailyQuery = `SELECT order.Name,
@@ -784,11 +786,11 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
             ...record
           };
         });
-        console.log(addFieldList.length);
+        log.debug(addFieldList.length);
 
         // 应用 T2 规则
         const finalRecords = applyT2Rules(addFieldList);
-        console.log(`报表数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
+        log.info(`报表数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`);
         
         return {
           success: true,
@@ -801,7 +803,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         };
       }
     } catch (error) {
-      console.error("获取 Expiry daily Data 失败:", error);
+      log.error("获取 Expiry daily Data 失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -826,13 +828,13 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         });
         if (pcdRecords.success) {
           pcdRecordsData = pcdRecords.data;
-          console.log(
+          log.info(
             "获取PCD数据成功，总计:",
             pcdRecordsData.length,
             "条记录"
           );
         } else {
-          console.error("获取PCD数据失败:", pcdRecords.error);
+          log.error("获取PCD数据失败:", pcdRecords.error);
         }
       }
 
@@ -844,19 +846,19 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         });
         if (ltsRecords.success) {
           ltsRecordsData = ltsRecords.data;
-          console.log(
+          log.info(
             "获取LTS数据成功，总计:",
             ltsRecordsData.length,
             "条记录"
           );
         } else {
-          console.error("获取LTS数据失败:", ltsRecords.error);
+          log.error("获取LTS数据失败:", ltsRecords.error);
         }
       }
 
       let allRecords = pcdRecordsData.concat(ltsRecordsData);
 
-      console.log("获取VVIP数据成功，总计:", allRecords.length, "条记录");
+      log.info("获取VVIP数据成功，总计:", allRecords.length, "条记录");
 
       // 再次去重，确保合并后的数据唯一
       const finalUniqueRecords = remove_duplicates(allRecords);
@@ -866,7 +868,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         data: finalUniqueRecords,
       };
     } catch (error) {
-      console.error("获取VVIP数据失败:", error);
+      log.error("获取VVIP数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -889,7 +891,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
       });
       return { success: true, jobInfo: response };
     } catch (error) {
-      console.error("Create Bulk Job Error:", error);
+      log.error("创建 Bulk Job 失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -905,7 +907,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
       });
       return { success: true, jobInfo: response };
     } catch (error) {
-      console.error("Check Bulk Job Status Error:", error);
+      log.error("查询 Bulk Job 状态失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -958,7 +960,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
 
       return { success: true, csvData: allCsvData };
     } catch (error) {
-      console.error("Get Bulk Job Results Error:", error);
+      log.error("获取 Bulk Job 结果失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -997,7 +999,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
               'Ready To Submit', 'Superseded', 'Activated',
               'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
       
-              console.log("dailyQuery: ", dailyQuery);
+              log.debug("dailyQuery: ", dailyQuery);
       const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
       const records = result.records || [];
       
@@ -1013,7 +1015,7 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         };
       }
     } catch (error) {
-      console.error("获取 PCD expiry 当日数据失败:", error);
+      log.error("获取 PCD expiry 当日数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1064,7 +1066,7 @@ OrderId  IN (SELECT ID FROM Order WHERE
         const orderIds = [...new Set(flatternRecords.map(record => record.OrderId).filter(id => id))];
         
         if (orderIds.length > 0) {
-          console.log(`提取到 ${orderIds.length} 个 Order ID`);
+          log.info(`提取到 ${orderIds.length} 个 Order ID`);
           
           // 构建 OrchestrationItem 查询，分批处理以避免 SOQL 长度限制
           const BATCH_SIZE = 600;
@@ -1085,11 +1087,11 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
                 allOrchestrationItems = allOrchestrationItems.concat(orchResult.records);
               }
             } catch (orchError) {
-              console.error(`查询 OrchestrationItem 批次 ${Math.floor(i / BATCH_SIZE) + 1} 失败:`, orchError);
+              log.error(`查询 OrchestrationItem 批次 ${Math.floor(i / BATCH_SIZE) + 1} 失败:`, orchError);
             }
           }
           
-          console.log(`获取到 ${allOrchestrationItems.length} 条 OrchestrationItem 记录`);
+          log.info(`获取到 ${allOrchestrationItems.length} 条 OrchestrationItem 记录`);
           
           // 展平 OrchestrationItem 数据并按 OrderId 分组
           const flatOrchItems = flattenRecords(allOrchestrationItems);
@@ -1135,7 +1137,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
         };
       }
     } catch (error) {
-      console.error("获取 PCD PID Fallout 数据失败:", error);
+      log.error("获取 PCD PID Fallout 数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1188,7 +1190,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
         };
       }
       
-      console.log(`获取到 ${orderRecords.length} 条 Order 记录`);
+      log.info(`获取到 ${orderRecords.length} 条 Order 记录`);
       
       // 展平 Order 数据
       const flatOrderRecords = flattenRecords(orderRecords);
@@ -1203,7 +1205,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
         };
       }
       
-      console.log(`提取到 ${orderIds.length} 个 Order ID`);
+      log.info(`提取到 ${orderIds.length} 个 Order ID`);
       
       // 第二步：查询 OrchestrationItem 数据，分批处理
       const BATCH_SIZE = 600;
@@ -1224,11 +1226,11 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
             allOrchestrationItems = allOrchestrationItems.concat(orchResult.records);
           }
         } catch (orchError) {
-          console.error(`查询 OrchestrationItem 批次 ${Math.floor(i / BATCH_SIZE) + 1} 失败:`, orchError);
+          log.error(`查询 OrchestrationItem 批次 ${Math.floor(i / BATCH_SIZE) + 1} 失败:`, orchError);
         }
       }
       
-      console.log(`获取到 ${allOrchestrationItems.length} 条 OrchestrationItem 记录`);
+      log.info(`获取到 ${allOrchestrationItems.length} 条 OrchestrationItem 记录`);
       
       // 展平 OrchestrationItem 数据并按 OrderId 分组
       const flatOrchItems = flattenRecords(allOrchestrationItems);
@@ -1262,7 +1264,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
         data: mergedRecords,
       };
     } catch (error) {
-      console.error("获取 PCD QC Issue 数据失败:", error);
+      log.error("获取 PCD QC Issue 数据失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1287,7 +1289,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
       
       return { success: true, jobs: jobs };
     } catch (error) {
-      console.error("Get All Bulk Query Jobs Error:", error);
+      log.error("获取全部 Bulk 任务失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1311,14 +1313,14 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
         url: `/services/data/v${defaultApiVersion}/tooling/executeAnonymous/?anonymousBody=${encodedApexCode}`
       });
 
-      console.log("Execute Anonymous Response:", executeResponse);
+      log.debug("Execute Anonymous 响应:", executeResponse);
 
       // 2. 如果执行成功且有 compiled bytecode 或 success 为 true，自动获取日志详情
       let logDetails = null;
       if (executeResponse && executeResponse.success) {
         // 获取当前用户的最新日志
         logDetails = await this.getLatestDebugLog();
-        console.log("Debug Log Details: ", logDetails);
+        log.debug("Debug Log 详情: ", logDetails);
       }
 
       return {
@@ -1327,7 +1329,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
         logDetails: logDetails
       };
     } catch (error) {
-      console.error("Execute Anonymous Error:", error);
+      log.error("执行 Execute Anonymous 失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1357,7 +1359,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
 
         // 调用 getDebugLogDetail 获取详细日志信息
         const logDetail = await this.getDebugLogDetail(logId);
-        console.log("logDetail: ", logDetail);
+        log.debug("logDetail: ", logDetail);
         if (logDetail.success) {
           return {
             success: true,
@@ -1378,7 +1380,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
 
       return { success: false, error: "No debug logs found" };
     } catch (error) {
-      console.error("Get Latest Debug Log Error:", error);
+      log.error("获取最新 Debug Log 失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1396,7 +1398,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
       if (!logId) {
         return { success: false, error: "Log ID is required" };
       }
-      console.log("logId: ", logId);
+      log.debug("logId: ", logId);
       // 使用 ApexLog 的 Body 端点获取日志内容
       let logBody = await this.connection.request({
         method: 'GET',
@@ -1407,13 +1409,13 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
       if (typeof logBody === 'string') {
         logBody = logBody.replace(/\\n/g, '\n');
       }
-      console.log("logBody: ", logBody);
+      log.debug("logBody: ", logBody);
       return {
         success: true,
         log: logBody
       };
     } catch (error) {
-      console.error("Get Debug Log Detail Error:", error);
+      log.error("获取 Debug Log 详情失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1457,7 +1459,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
 
       return { success: false, error: "No log lines found" };
     } catch (error) {
-      console.error("Get Debug Log Lines Error:", error);
+      log.error("读取 Debug Log 内容失败:", error);
       return { success: false, error: error.message };
     }
   }

@@ -68,9 +68,6 @@ export const Icons = {
     // 搜索图标 (Search)
     search: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M10.5 3.75a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zM2.25 10.5a8.25 8.25 0 1114.59 5.28l4.69 4.69a.75.75 0 11-1.06 1.06l-4.69-4.69A8.25 8.25 0 012.25 10.5z" clip-rule="evenodd" /></svg>`,
 
-    // 返回图标 (Arrow Left)
-    arrowLeft: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M11.03 3.97a.75.75 0 010 1.06l-6.22 6.22H21a.75.75 0 010 1.5H4.81l6.22 6.22a.75.75 0 11-1.06 1.06l-7.5-7.5a.75.75 0 010-1.06l7.5-7.5a.75.75 0 011.06 0z" clip-rule="evenodd" /></svg>`,
-    
     // Excel 文件图标 (更像 Excel 的版本)
     fileExcelAlt: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625zM7.5 15a.75.75 0 01.75-.75h7.5a.75.75 0 010 1.5h-7.5A.75.75 0 017.5 15zm.75 2.25a.75.75 0 000 1.5h7.5a.75.75 0 000-1.5h-7.5z" clip-rule="evenodd" /><path d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z" /></svg>`,
 
@@ -138,7 +135,39 @@ export const Icons = {
     copy: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path fill-rule="evenodd" d="M17.25 3A2.25 2.25 0 0119.5 5.25v10.5A2.25 2.25 0 0117.25 18H8.25A2.25 2.25 0 016 15.75V5.25A2.25 2.25 0 018.25 3h9zm-9 1.5a.75.75 0 00-.75.75v10.5c0 .414.336.75.75.75h9a.75.75 0 00.75-.75V5.25a.75.75 0 00-.75-.75h-9z" clip-rule="evenodd" /><path d="M4.5 6.75a.75.75 0 00-.75.75v11.25a2.25 2.25 0 002.25 2.25H15a.75.75 0 000-1.5H6a.75.75 0 01-.75-.75V7.5a.75.75 0 00-.75-.75z" /></svg>`,
 
     // 网络节点图标 (Network Wired)
-    networkWired: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M6 3a3 3 0 00-.75 5.904V10.5a1.5 1.5 0 001.5 1.5h3.75V8.904A3.001 3.001 0 0112 3a3 3 0 011.5 5.904V12h3.75a1.5 1.5 0 001.5-1.5V8.904A3.001 3.001 0 0118 3a3 3 0 01.75 5.904V10.5a3 3 0 01-3 3h-3.75v2.096A3.001 3.001 0 0112 21a3 3 0 01-.75-5.904V13.5H7.5a3 3 0 01-3-3V8.904A3.001 3.001 0 016 3z" /></svg>`
+    networkWired: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M6 3a3 3 0 00-.75 5.904V10.5a1.5 1.5 0 001.5 1.5h3.75V8.904A3.001 3.001 0 0112 3a3 3 0 011.5 5.904V12h3.75a1.5 1.5 0 001.5-1.5V8.904A3.001 3.001 0 0118 3a3 3 0 01.75 5.904V10.5a3 3 0 01-3 3h-3.75v2.096A3.001 3.001 0 0112 21a3 3 0 01-.75-5.904V13.5H7.5a3 3 0 01-3-3V8.904A3.001 3.001 0 016 3z" /></svg>`,
+
+    // 播放图标 (Play)
+    play: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M7.5 4.5l12 7.5-12 7.5V4.5z" /></svg>`,
+
+    // 停止图标 (Stop)
+    stop: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>`,
+
+    // 暂停图标 (Pause)
+    pause: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><rect x="6.75" y="5.25" width="3.75" height="13.5" rx="1.2" /><rect x="13.5" y="5.25" width="3.75" height="13.5" rx="1.2" /></svg>`,
+
+    // 加号图标 (Plus)
+    plus: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M11.25 4.5h1.5v6.75H19.5v1.5h-6.75V19.5h-1.5v-6.75H4.5v-1.5h6.75V4.5z" /></svg>`,
+
+    // 垃圾桶图标 (Trash)。同时服务于「清除所有」「删除任务」等场景
+    trash: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M10.5 3.75A.75.75 0 0111.25 3h1.5a.75.75 0 01.75.75V5.25h4.125a.75.75 0 010 1.5H6.375a.75.75 0 010-1.5H10.5V3.75z" /><path d="M7.125 8.25h9.75l-.75 10.5a1.5 1.5 0 01-1.5 1.4H9.375a1.5 1.5 0 01-1.5-1.4l-.75-10.5z" /></svg>`,
+
+    // 向上箭头 (Arrow Up)
+    arrowUp: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M12 3.75l6.75 6.75h-4.5v9.75h-4.5V10.5h-4.5L12 3.75z" /></svg>`,
+
+    // 向下箭头 (Arrow Down)
+    arrowDown: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M12 20.25l-6.75-6.75h4.5V3.75h4.5v9.75h4.5L12 20.25z" /></svg>`,
+
+    // ---- 2026-09-24 补（原 login.html 用 FontAwesome CDN 渲染，popup.html 手写 iconMap）----
+
+    // 闪电 (Bolt)
+    bolt: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" /></svg>`,
+
+    // 勾选 (Check)
+    check: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M20.03 5.47a.75.75 0 010 1.06l-9.75 9.75a.75.75 0 01-1.06 0l-5.25-5.25a.75.75 0 011.06-1.06l4.72 4.72 9.22-9.22a.75.75 0 011.06 0z" /></svg>`,
+
+    // 登录/进入 (Sign In)
+    signInAlt: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="svg-icon"><path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" /></svg>`
 };
 
 // 图标映射表
@@ -186,7 +215,40 @@ export const IconMap = {
     'fa-chevron-down': 'chevronDown',
     'fa-chevron-left': 'arrowLeft',
     'fa-arrow-left': 'arrowLeft',
-    'fa-network-wired': 'networkWired'
+    'fa-network-wired': 'networkWired',
+
+    // ---- 2026-09-24 补齐：以下图标此前在 HTML / 首页布局里被使用但没有映射，
+    //      因为项目没有引入 FontAwesome 字体，<i class="fas fa-xxx"> 不被替换就会
+    //      渲染成空白。新增图标请务必同步在这里登记（npm run check:ui 会检查）。
+    'fa-play': 'play',
+    'fa-stop': 'stop',
+    'fa-pause': 'pause',
+    'fa-plus': 'plus',
+    'fa-trash': 'trash',
+    'fa-trash-alt': 'trash',
+    'fa-broom': 'trash',
+    'fa-arrow-up': 'arrowUp',
+    'fa-arrow-down': 'arrowDown',
+    'fa-file-import': 'cloudUpload',
+    'fa-cloud-download-alt': 'download',
+    'fa-file-csv': 'fileExcelAlt',
+    'fa-file-archive': 'cubes',
+    'fa-file-code': 'code',
+    'fa-list': 'bars',
+    'fa-dice': 'utensils',
+    'fa-sync': 'sync',
+    'fa-inbox': 'clock',
+    'fa-headphones': 'networkWired',
+    'fa-box-open': 'cubes',
+    'fa-satellite-dish': 'networkWired',
+    'fa-calendar-alt': 'calendarDay',
+
+    // ---- 2026-09-24 补：让 login.html / popup.html 也能走共享图标体系 ----
+    'fa-bolt': 'bolt',
+    'fa-check': 'check',
+    'fa-sign-in-alt': 'signInAlt',
+    'fa-cube': 'cube',
+    'fa-external-link-alt': 'externalLink'
 };
 
 /**

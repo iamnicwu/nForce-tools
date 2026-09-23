@@ -149,12 +149,12 @@
 
                         <div style="position: relative; margin: 2rem 0; text-align: center;">
                             <hr style="border: 0; border-top: 1px solid var(--border-color);">
-                            <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 0 1rem; color: var(--text-secondary); font-size: 12px;">下一步</span>
+                            <span style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 0 1rem; color: var(--text-secondary); font-size:var(--fs-xs);">下一步</span>
                         </div>
 
                         <!-- 测试连接部分 -->
                         <div class="form-group" style="margin-bottom: 1.5rem; text-align: center;">
-                            <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">测试连接</h3>
+                            <h3 style="margin-bottom: 1rem; font-size:var(--fs-xl);">测试连接</h3>
                             <form id="test-connection-form">
                                 <button type="submit" class="ant-btn ant-btn-default ant-btn-lg" name="test_connection" style="width: 100%;">
                                     <i class="fas fa-plug"></i>
@@ -183,7 +183,7 @@
                         </div>
                         <div id="connection-info" style="color: var(--text-secondary); margin-top: 1rem; text-align: center;">
                             <p>点击"测试连接"按钮以验证Salesforce连接</p>
-                            <p style="font-size: 0.875rem;">连接成功后才能进行后续操作</p>
+                            <p style="font-size:var(--fs-base);">连接成功后才能进行后续操作</p>
                         </div>
                     </div>
                 </div>
@@ -239,7 +239,7 @@
                                         <li><strong>状态：</strong>排除已完成、已取消或无效的订单 (如 Activated, Cancelled, Rejected 等)。</li>
                                     </ul>
                                 </li>
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 此操作可能需要几分钟时间，请耐心等待。</li>
+                                <li style="color: var(--text-secondary); font-size:var(--fs-sm);">* 此操作可能需要几分钟时间，请耐心等待。</li>
                             </ul>
                         </div>
                         
@@ -266,7 +266,7 @@
                             </div>
 
                             <div class="form-group">
-                                <button type="submit" name="get_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px;">
+                                <button type="submit" name="get_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg);">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取数据</span>
                                 </button>
@@ -315,13 +315,13 @@
                                         <li><strong>状态：</strong>排除已完成、已取消或无效的订单 (如 Activated, Cancelled, Rejected 等)。</li>
                                     </ul>
                                 </li>
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 此操作用于获取历史遗留未完成的订单数据。</li>
+                                <li style="color: var(--text-secondary); font-size:var(--fs-sm);">* 此操作用于获取历史遗留未完成的订单数据。</li>
                             </ul>
                         </div>
                         
                         <form id="report-data-form" class="unified-form">
                             <div class="form-group">
-                                <button type="submit" name="get_report_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px;">
+                                <button type="submit" name="get_report_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg);">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取报表</span>
                                 </button>
@@ -376,7 +376,7 @@
                                         <li>批量查询 Salesforce 获取最新详情。</li>
                                     </ul>
                                 </li>
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 仅支持 .xlsx 格式文件。</li>
+                                <li style="color: var(--text-secondary); font-size:var(--fs-sm);">* 仅支持 .xlsx 格式文件。</li>
                             </ul>
                         </div>
 
@@ -390,7 +390,7 @@
                                 <input type="file" id="file" name="file" accept=".xlsx">
                             </div>
                             <div class="action-buttons">
-                                <button type="button" id="get-latest-data-btn" class="ant-btn ant-btn-primary" style="display: none; background-color: #52c41a; border-color: #52c41a;">
+                                <button type="button" id="get-latest-data-btn" class="ant-btn ant-btn-primary" style="display: none; background-color: var(--success-color); border-color: var(--success-color);">
                                     <i class="fas fa-sync-alt"></i>
                                     <span>获取最新数据</span>
                                 </button>
@@ -482,7 +482,7 @@
                 <div class="ant-card-body">
                     <div class="settings-list">
                         <button type="button" class="settings-row" data-goto="1">
-                            <span class="settings-row-icon" style="--row-accent:#1677ff; --row-tint:#e6f1fb;">
+                            <span class="settings-row-icon" style="--row-accent:var(--accent-blue); --row-tint:var(--accent-blue-tint);">
                                 <i class="fas fa-plug"></i>
                             </span>
                             <span class="settings-row-text">
@@ -492,7 +492,7 @@
                             <i class="fas fa-chevron-right settings-row-arrow"></i>
                         </button>
                         <button type="button" class="settings-row" data-goto="20">
-                            <span class="settings-row-icon" style="--row-accent:#722ed1; --row-tint:#f0eafc;">
+                            <span class="settings-row-icon" style="--row-accent:var(--accent-purple); --row-tint:var(--accent-purple-tint);">
                                 <i class="fas fa-th-large"></i>
                             </span>
                             <span class="settings-row-text">
@@ -502,7 +502,7 @@
                             <i class="fas fa-chevron-right settings-row-arrow"></i>
                         </button>
                         <button type="button" class="settings-row" data-goto="6">
-                            <span class="settings-row-icon" style="--row-accent:#8c8c8c; --row-tint:#f0f0f2;">
+                            <span class="settings-row-icon" style="--row-accent:var(--text-secondary); --row-tint:var(--accent-gray-tint);">
                                 <i class="fas fa-info-circle"></i>
                             </span>
                             <span class="settings-row-text">
@@ -523,7 +523,7 @@
                 </div>
                 <div class="ant-card-body">
                     <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        <i class="fas fa-tv" style="font-size: 3rem; margin-bottom: 1rem; color: var(--theme-color);"></i>
+                        <i class="fas fa-tv" style="font-size: var(--icon-2xl); margin-bottom: 1rem; color: var(--theme-color);"></i>
                         <h3>OTT 功能模块</h3>
                         <p>此模块正在开发中...</p>
                     </div>
@@ -547,7 +547,7 @@
                             <ul class="section-desc">
                                 <li>系统将从 Salesforce 获取 PCD 所有Expired的数据</li>
                                 
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 此操作可能需要几分钟时间，请耐心等待。</li>
+                                <li style="color: var(--text-secondary); font-size:var(--fs-sm);">* 此操作可能需要几分钟时间，请耐心等待。</li>
                             </ul>
                         </div>
                         
@@ -558,7 +558,7 @@
                                     id="pcd-daily-soql-query"
                                     class="ant-input"
                                     rows="8"
-                                    style="width: 100%; resize: vertical; font-family: monospace; font-size: 12px;"
+                                    style="width: 100%; resize: vertical; font-family: monospace; font-size:var(--fs-xs);"
                                 >SELECT order.Name,
           order.OrderNumber,
           order.Order_Nature__c,
@@ -585,13 +585,13 @@
           order.Custom_OrderStatus__c NOT IN (
               'Ready To Submit', 'Superseded', 'Activated',
               'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')</textarea>
-                                <div style="margin-top: 0.5rem; font-size: 0.85em; color: #8c8c8c;">
+                                <div style="margin-top: 0.5rem; font-size:var(--fs-xs); color: var(--text-secondary);">
                                     <i class="fas fa-info-circle"></i> 默认查询将获取 PCD Expiry 数据，可根据需要修改查询条件
                                 </div>
                             </div>
 
                             <div class="form-group">
-                                <button type="submit" name="get_pcd_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px;">
+                                <button type="submit" name="get_pcd_daily_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg);">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取数据</span>
                                 </button>
@@ -635,7 +635,7 @@
                             <ul class="section-desc">
                                 <li>上传包含 Account ID 的 Excel 文件</li>
                                 <li>系统将自动查询并返回对应的 PCD/LTS 订单状态</li>
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 仅支持 .xlsx 格式文件</li>
+                                <li style="color: var(--text-secondary); font-size:var(--fs-sm);">* 仅支持 .xlsx 格式文件</li>
                             </ul>
                         </div>
 
@@ -690,7 +690,7 @@
                             <ul class="section-desc">
                                 <li>上传 Excel 数据文件并配置分析规则</li>
                                 <li>系统将根据规则自动分析和标记数据</li>
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 可上传自定义 JSON 规则文件</li>
+                                <li style="color: var(--text-secondary); font-size:var(--fs-sm);">* 可上传自定义 JSON 规则文件</li>
                             </ul>
                         </div>
 
@@ -714,7 +714,7 @@
                                         <div style="margin-bottom: 0.5rem; font-weight: 500;">自定义规则 (可选)</div>
                                         <label class="upload-drag-wrapper" for="rules-file" style="padding: 1rem; min-height: auto;">
                                             <div style="display: flex; align-items: center; justify-content: center; gap: 1rem;">
-                                                <i class="fas fa-code" style="font-size: 24px; color: var(--theme-color);"></i>
+                                                <i class="fas fa-code" style="font-size:var(--fs-3xl); color: var(--theme-color);"></i>
                                                 <div style="text-align: left;">
                                                     <p class="upload-text" style="margin: 0;">点击上传 JSON 规则文件</p>
                                                     <p class="upload-hint" style="margin: 0;">如果不上传，将使用默认规则</p>
@@ -722,7 +722,7 @@
                                             </div>
                                             <input type="file" id="rules-file" name="rules_file" accept=".json">
                                         </label>
-                                        <div id="rules-file-info" style="margin-top: 0.5rem; font-size: 12px; color: var(--theme-color); display: none; align-items: center; gap: 0.5rem;">
+                                        <div id="rules-file-info" style="margin-top: 0.5rem; font-size:var(--fs-xs); color: var(--theme-color); display: none; align-items: center; gap: 0.5rem;">
                                             <i class="fas fa-check-circle"></i>
                                             <span id="rules-file-name"></span>
                                         </div>
@@ -731,7 +731,7 @@
                                     <div id="rules-list-container" style="flex: 1; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 10px; overflow-y: auto; max-height: 200px; display: none;">
                                         <div style="font-weight: 500; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
                                             <span>规则列表</span>
-                                            <span style="font-size: 12px; color: var(--text-light);">可拖拽排序或使用按钮</span>
+                                            <span style="font-size:var(--fs-xs); color: var(--text-light);">可拖拽排序或使用按钮</span>
                                         </div>
                                         <ul id="rules-list" style="list-style: none; padding: 0; margin: 0;">
                                         </ul>
@@ -836,7 +836,7 @@
                                         <li><strong>排除：</strong> Fulfillment Detail 包含 "INVENTORY ASSIGNED" 或 "INVENTORY READY" 的记录。</li>
                                     </ul>
                                 </li>
-                                <li style="color: #8c8c8c; font-size: 0.9em;">* 此操作可能需要几分钟时间，请耐心等待。</li>
+                                <li style="color: var(--text-secondary); font-size:var(--fs-sm);">* 此操作可能需要几分钟时间，请耐心等待。</li>
                             </ul>
                         </div>
                         
@@ -846,7 +846,7 @@
                                 <input type="number" id="t2-days-input" class="ant-input" placeholder="默认: 周五3天，其他2天" min="1" max="30" style="text-align: center;">
                             </div>
                             <div class="form-group">
-                                <button type="submit" name="get_t2_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px; background-color: var(--theme-color); border-color: var(--theme-color);">
+                                <button type="submit" name="get_t2_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg); background-color: var(--theme-color); border-color: var(--theme-color);">
                                     <i class="fas fa-cloud-download-alt"></i>
                                     <span>立即获取数据</span>
                                 </button>
@@ -925,15 +925,15 @@
                                     <div style="margin-bottom: 0.5rem; font-weight: 500;">自定义规则 (可选)</div>
                                     <label class="file-upload ant-upload-drag" for="t2-rules-file" style="padding: 1rem; min-height: auto;">
                                         <div class="ant-upload-drag-container" style="display: flex; align-items: center; justify-content: center; gap: 1rem;">
-                                            <i class="fas fa-code" style="font-size: 24px; color: var(--theme-color);"></i>
+                                            <i class="fas fa-code" style="font-size:var(--fs-3xl); color: var(--theme-color);"></i>
                                             <div>
                                                 <p class="ant-upload-text" style="margin: 0;">点击上传 JSON 规则文件</p>
-                                                <p class="ant-upload-hint" style="margin: 0; font-size: 12px;">如果不上传，将使用默认规则</p>
+                                                <p class="ant-upload-hint" style="margin: 0; font-size:var(--fs-xs);">如果不上传，将使用默认规则</p>
                                             </div>
                                         </div>
                                         <input type="file" id="t2-rules-file" name="rules_file" accept=".json" style="display: none;">
                                     </label>
-                                    <div id="t2-rules-file-info" style="margin-top: 0.5rem; font-size: 12px; color: var(--theme-color); display: none; align-items: center; gap: 0.5rem;">
+                                    <div id="t2-rules-file-info" style="margin-top: 0.5rem; font-size:var(--fs-xs); color: var(--theme-color); display: none; align-items: center; gap: 0.5rem;">
                                         <i class="fas fa-check-circle"></i>
                                         <span id="t2-rules-file-name"></span>
                                     </div>
@@ -943,7 +943,7 @@
                                 <div id="t2-rules-list-container" style="flex: 1; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 10px; overflow-y: auto; max-height: 300px; display: none;">
                                     <div style="font-weight: 500; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
                                         <span>规则列表</span>
-                                        <span style="font-size: 12px; color: var(--text-light);">可拖拽排序或使用按钮</span>
+                                        <span style="font-size:var(--fs-xs); color: var(--text-light);">可拖拽排序或使用按钮</span>
                                     </div>
                                     <ul id="t2-rules-list" style="list-style: none; padding: 0; margin: 0;">
                                         <!-- 规则项将通过 JS 动态插入 -->
@@ -1032,7 +1032,7 @@
                     </div>
                     
                     <div id="lunch-actions" class="action-buttons" style="display: none; justify-content: center;">
-                        <button type="button" id="shake-lunch-btn" class="ant-btn ant-btn-primary ant-btn-lg" style="background-color: var(--theme-color); border-color: var(--theme-color); height: 50px; font-size: 18px; padding: 0 40px;">
+                        <button type="button" id="shake-lunch-btn" class="ant-btn ant-btn-primary ant-btn-lg" style="background-color: var(--theme-color); border-color: var(--theme-color); height: 50px; font-size:var(--fs-xl); padding: 0 40px;">
                             <i class="fas fa-dice"></i>
                             <span>摇一摇</span>
                         </button>
@@ -1087,7 +1087,7 @@
                                 <textarea id="bulk-soql-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10000"></textarea>
                             </div>
                             <div class="form-group" style="text-align: right; margin-bottom: 2rem;">
-                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary" style="background-color: #2f54eb; border-color: #2f54eb;">
+                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary" style="background-color: var(--accent-indigo); border-color: var(--accent-indigo);">
                                     <i class="fas fa-play"></i> 创建 Bulk 任务
                                 </button>
                             </div>
@@ -1105,13 +1105,13 @@
                                     <button type="button" id="download-bulk-csv-btn" class="ant-btn ant-btn-primary">
                                         <i class="fas fa-file-csv"></i> 下载 CSV
                                     </button>
-                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-primary" style="background-color: #52c41a; border-color: #52c41a;">
+                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-primary" style="background-color: var(--success-color); border-color: var(--success-color);">
                                         <i class="fas fa-file-archive"></i> 下载 ZIP
                                     </button>
                                 </div>
                             </div>
 
-                            <div id="bulk-job-status-container" style="display: none; background: #fafafa; padding: 1rem; border-radius: 4px; border: 1px solid #d9d9d9;">
+                            <div id="bulk-job-status-container" style="display: none; background: var(--bg-tertiary); padding: 1rem; border-radius: 4px; border: 1px solid var(--border-color);">
                                 <h4 style="margin-top: 0; margin-bottom: 1rem;">任务状态</h4>
                                 <div id="bulk-job-status-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;"></div>
                             </div>
@@ -1134,11 +1134,11 @@
                             </div>
                         </div>
                         <div id="bulk-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
-                            <i class="fas fa-check-circle" style="font-size: 24px; color: #52c41a; margin-bottom: 0.5rem;"></i>
+                            <i class="fas fa-check-circle" style="font-size:var(--fs-3xl); color: var(--success-color); margin-bottom: 0.5rem;"></i>
                             <p>当前没有正在运行的 Bulk Job</p>
                         </div>
                         <div id="bulk-jobs-loading" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                            <i class="fas fa-spinner fa-spin" style="font-size: 24px;"></i>
+                            <i class="fas fa-spinner fa-spin" style="font-size:var(--fs-3xl);"></i>
                             <p>正在加载 Bulk Job 信息...</p>
                         </div>
                     </div>
@@ -1173,7 +1173,7 @@
                         
                         <form id="pcd-pid-fallout-data-form" class="unified-form">
                             <div class="form-group">
-                                <button type="submit" name="get_pcd_pid_fallout_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px; background-color: var(--theme-color); border-color: var(--theme-color);">
+                                <button type="submit" name="get_pcd_pid_fallout_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg); background-color: var(--theme-color); border-color: var(--theme-color);">
                                     <i class="fas fa-search"></i>
                                     <span>查询数据</span>
                                 </button>
@@ -1234,7 +1234,7 @@
                         
                         <form id="pcd-qc-issue-data-form" class="unified-form">
                             <div class="form-group">
-                                <button type="submit" name="get_pcd_qc_issue_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size: 16px; background-color: var(--theme-color); border-color: var(--theme-color);">
+                                <button type="submit" name="get_pcd_qc_issue_data" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; height: 48px; font-size:var(--fs-lg); background-color: var(--theme-color); border-color: var(--theme-color);">
                                     <i class="fas fa-search"></i>
                                     <span>查询数据</span>
                                 </button>
@@ -1295,7 +1295,7 @@ System.debug('Hello World');"></textarea>
                                 <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
                                     <span class="ant-divider-inner-text">执行结果</span>
                                 </div>
-                                <div id="anonymous-result-content" style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;"></div>
+                                <div id="anonymous-result-content" style="background: var(--code-bg); color: var(--code-fg); padding: 1rem; border-radius: 4px; font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;"></div>
                             </div>
                         </div>
                     </div>
@@ -1361,7 +1361,7 @@ System.debug('Hello World');"></textarea>
                                         <button type="button" id="refresh-schedule-jobs-btn" class="ant-btn ant-btn-primary ant-btn-sm" style="background-color: var(--theme-color); border-color: var(--theme-color);">
                                             <i class="fas fa-sync"></i> 刷新列表
                                         </button>
-                                        <button type="button" id="clear-all-schedule-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm" style="color: #ff4d4f; border-color: #ff4d4f;">
+                                        <button type="button" id="clear-all-schedule-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm" style="color: var(--error-color); border-color: var(--error-color);">
                                             <i class="fas fa-trash-alt"></i> 清除所有
                                         </button>
                                     </div>
@@ -1373,7 +1373,7 @@ System.debug('Hello World');"></textarea>
                                             <i class="fas fa-spinner fa-spin"></i> 正在加载...
                                         </div>
                                         <div id="schedule-jobs-empty" style="text-align: center; padding: 2rem; color: var(--text-secondary); display: none;">
-                                            <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 1rem;"></i>
+                                            <i class="fas fa-inbox" style="font-size: var(--icon-2xl); margin-bottom: 1rem;"></i>
                                             <p>暂无定时任务</p>
                                         </div>
                                         <table id="schedule-jobs-table" class="schedule-jobs-table" style="display: none; width: 100%; border-collapse: collapse; table-layout: fixed;">
@@ -1386,13 +1386,13 @@ System.debug('Hello World');"></textarea>
                                                 <col style="width: 15%;">
                                             </colgroup>
                                             <thead>
-                                                <tr style="background: #fafafa; border-bottom: 1px solid var(--border-color);">
-                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">任务名称</th>
-                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">类型</th>
-                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">状态</th>
-                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">周期(分钟)</th>
-                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">下次执行</th>
-                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: #8c8c8c; font-size: 13px; box-sizing: border-box;">操作</th>
+                                                <tr style="background: var(--bg-tertiary); border-bottom: 1px solid var(--border-color);">
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: var(--text-secondary); font-size:var(--fs-sm); box-sizing: border-box;">任务名称</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: var(--text-secondary); font-size:var(--fs-sm); box-sizing: border-box;">类型</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: var(--text-secondary); font-size:var(--fs-sm); box-sizing: border-box;">状态</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: var(--text-secondary); font-size:var(--fs-sm); box-sizing: border-box;">周期(分钟)</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: var(--text-secondary); font-size:var(--fs-sm); box-sizing: border-box;">下次执行</th>
+                                                    <th style="padding: 12px 16px; text-align: center; font-weight: 500; color: var(--text-secondary); font-size:var(--fs-sm); box-sizing: border-box;">操作</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="schedule-jobs-list">
@@ -1406,6 +1406,251 @@ System.debug('Hello World');"></textarea>
                         </div>
                     </div>
                 </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：SOQL 数据导出（section-23） ===== -->
+                <div id="section-23" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">SOQL 数据导出</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon" style="background: var(--theme-bg);">
+                                    <i class="fas fa-search" style="color: var(--theme-color);"></i>
+                                </div>
+                                <h3 class="section-title">SOQL 查询</h3>
+                                <ul class="section-desc">
+                                    <li>输入 SOQL 执行查询，支持自动补全对象/字段、查询历史、自动翻页（上限 50000 行），结果可导出 Excel / CSV。</li>
+                                </ul>
+                            </div>
+
+                            <div style="max-width: 1000px; margin: 0 auto;">
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label for="soql-object-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">对象（用于字段自动补全，可留空）</label>
+                                    <input type="text" id="soql-object-input" class="ant-input" list="soql-object-list" placeholder="例如: Order / Account / Custom_Object__c" style="max-width: 480px;">
+                                    <datalist id="soql-object-list"></datalist>
+                                    <datalist id="soql-field-list"></datalist>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                        <label for="soql-query-input" style="font-weight: 500;">SOQL 查询语句</label>
+                                        <select id="soql-history-select" class="ant-input" style="max-width: 360px;"></select>
+                                    </div>
+                                    <textarea id="soql-query-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 100"></textarea>
+                                </div>
+                                <div class="form-group" style="display: flex; gap: 12px; align-items: center; text-align: right; margin-bottom: 1rem;">
+                                    <label style="display: flex; align-items: center; gap: 6px; font-size:var(--fs-sm);">
+                                        <input type="checkbox" id="soql-query-all"> 含已删除记录（queryAll）
+                                    </label>
+                                    <span style="flex: 1;"></span>
+                                    <button type="button" id="run-soql-btn" class="ant-btn ant-btn-primary" style="background-color: var(--accent-indigo); border-color: var(--accent-indigo);">
+                                        <i class="fas fa-play"></i> 执行查询
+                                    </button>
+                                </div>
+                                <div id="soql-result-info" style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size:var(--fs-sm);"></div>
+                                <div id="soql-export-actions" style="display: none; gap: 10px; margin-bottom: 1rem;">
+                                    <button type="button" id="export-soql-xlsx-btn" class="ant-btn ant-btn-primary" style="background-color: var(--success-color); border-color: var(--success-color);">
+                                        <i class="fas fa-file-excel"></i> 导出 Excel
+                                    </button>
+                                    <button type="button" id="export-soql-csv-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-file-csv"></i> 导出 CSV
+                                    </button>
+                                </div>
+                                <div id="soql-result-table"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：批量数据导入（section-24） ===== -->
+                <div id="section-24" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">批量数据导入</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon" style="background: var(--theme-bg);">
+                                    <i class="fas fa-file-import" style="color: var(--theme-color);"></i>
+                                </div>
+                                <h3 class="section-title">Data Import</h3>
+                                <ul class="section-desc">
+                                    <li>上传 CSV / Excel，映射字段后批量执行 insert / update / upsert / delete，支持失败明细导出。</li>
+                                </ul>
+                            </div>
+
+                            <div style="max-width: 1000px; margin: 0 auto;">
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">数据文件（.csv / .xlsx，首行为表头）</label>
+                                    <input type="file" id="import-file-input" class="ant-input" accept=".csv,.xlsx,.xls">
+                                    <div id="import-file-info" style="margin-top: 6px; color: var(--text-secondary); font-size:var(--fs-sm);"></div>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1rem; display: flex; gap: 12px; flex-wrap: wrap;">
+                                    <div style="flex: 1; min-width: 220px;">
+                                        <label for="import-object-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">目标对象 API 名称</label>
+                                        <input type="text" id="import-object-input" class="ant-input" placeholder="例如: Order_Item__c">
+                                    </div>
+                                    <div style="flex: 0 0 180px;">
+                                        <label for="import-op-select" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">操作类型</label>
+                                        <select id="import-op-select" class="ant-input">
+                                            <option value="insert">insert（新增）</option>
+                                            <option value="update">update（更新）</option>
+                                            <option value="upsert">upsert（存在则更新）</option>
+                                            <option value="delete">delete（删除，需 Id 列）</option>
+                                        </select>
+                                    </div>
+                                    <div style="flex: 0 0 140px;">
+                                        <label for="import-batch-size" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">批大小（≤200）</label>
+                                        <input type="number" id="import-batch-size" class="ant-input" value="200" min="1" max="200">
+                                    </div>
+                                </div>
+                                <div id="import-mapping-wrapper" style="display: none; margin-bottom: 1.5rem;">
+                                    <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                        <span class="ant-divider-inner-text">字段映射</span>
+                                    </div>
+                                    <div id="import-mapping-container"></div>
+                                </div>
+                                <div style="text-align: right; margin-bottom: 1rem;">
+                                    <button type="button" id="run-import-btn" class="ant-btn ant-btn-primary" style="background-color: var(--success-color); border-color: var(--success-color);">
+                                        <i class="fas fa-upload"></i> 开始导入
+                                    </button>
+                                </div>
+                                <div id="import-result-info" style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size:var(--fs-sm);"></div>
+                                <div id="import-result-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：Metadata 工具（section-25） ===== -->
+                <div id="section-25" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">Metadata 工具</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon" style="background: var(--theme-bg);">
+                                    <i class="fas fa-box-open" style="color: var(--theme-color);"></i>
+                                </div>
+                                <h3 class="section-title">Metadata 检索 / 打包下载</h3>
+                                <ul class="section-desc">
+                                    <li>按类型检索组织内组件（Apex 类、报表、Layout 等），一键打包下载 Metadata zip。</li>
+                                </ul>
+                            </div>
+
+                            <div style="max-width: 1000px; margin: 0 auto;">
+                                <div class="form-group" style="margin-bottom: 1rem; display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                                    <div style="flex: 1; min-width: 260px;">
+                                        <label for="metadata-type-select" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Metadata 类型</label>
+                                        <select id="metadata-type-select" class="ant-input"><option value="">-- 请先加载类型 --</option></select>
+                                    </div>
+                                    <div style="flex: 0 0 180px;">
+                                        <label for="metadata-folder-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">文件夹（Report 等类型可选）</label>
+                                        <input type="text" id="metadata-folder-input" class="ant-input" placeholder="留空=全部">
+                                    </div>
+                                    <button type="button" id="load-metadata-types-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-list"></i> 加载类型
+                                    </button>
+                                    <button type="button" id="list-metadata-members-btn" class="ant-btn ant-btn-primary" style="background-color: var(--accent-indigo); border-color: var(--accent-indigo);">
+                                        <i class="fas fa-search"></i> 检索成员
+                                    </button>
+                                </div>
+                                <div id="metadata-list-info" style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size:var(--fs-sm);"></div>
+                                <div id="metadata-members-table" style="margin-bottom: 1.5rem;"></div>
+                                <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                    <span class="ant-divider-inner-text">打包下载</span>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label for="metadata-members-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">手动指定成员 FullName（可选，逗号或换行分隔；留空则下载上面检索到的全部成员）</label>
+                                    <textarea id="metadata-members-input" class="ant-input" rows="3" placeholder="例如: MyApexClass1, MyApexClass2"></textarea>
+                                </div>
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <button type="button" id="metadata-retrieve-btn" class="ant-btn ant-btn-primary" style="background-color: var(--success-color); border-color: var(--success-color);">
+                                        <i class="fas fa-download"></i> 打包下载 (.zip)
+                                    </button>
+                                    <span id="metadata-retrieve-status" style="color: var(--text-secondary); font-size:var(--fs-sm);"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：事件监听（section-26） ===== -->
+                <div id="section-26" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">事件监听</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon" style="background: var(--theme-bg);">
+                                    <i class="fas fa-satellite-dish" style="color: var(--theme-color);"></i>
+                                </div>
+                                <h3 class="section-title">Event Monitor</h3>
+                                <ul class="section-desc">
+                                    <li>通过 Streaming API（CometD）实时监听 Platform Event / Change Data Capture 事件消息。</li>
+                                </ul>
+                            </div>
+
+                            <div style="max-width: 1000px; margin: 0 auto;">
+                                <div class="form-group" style="margin-bottom: 1rem; display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                                    <div style="flex: 0 0 220px;">
+                                        <label for="event-type-select" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">事件类型</label>
+                                        <select id="event-type-select" class="ant-input">
+                                            <option value="standardPlatformEvent">标准 Platform Event</option>
+                                            <option value="platformEvent">自定义 Platform Event</option>
+                                            <option value="customChannel">自定义事件通道</option>
+                                            <option value="changeEvent">Change Data Capture</option>
+                                        </select>
+                                    </div>
+                                    <div style="flex: 1; min-width: 240px;">
+                                        <label for="event-channel-select" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">事件通道</label>
+                                        <select id="event-channel-select" class="ant-input"><option value="">-- 请先加载 --</option></select>
+                                    </div>
+                                    <div style="flex: 0 0 140px;">
+                                        <label for="event-replay-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Replay Id</label>
+                                        <input type="number" id="event-replay-input" class="ant-input" value="-1">
+                                    </div>
+                                    <button type="button" id="event-reload-channels-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-sync-alt"></i> 刷新通道
+                                    </button>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 1rem;">
+                                    <label for="event-custom-channel-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">手动指定通道（可选，直接填通道名或完整路径，如 My_Event__e）</label>
+                                    <input type="text" id="event-custom-channel-input" class="ant-input" placeholder="留空则使用上面选择的通道">
+                                    <div id="event-prefix-hint" style="margin-top: 6px; color: var(--text-secondary); font-size:var(--fs-xs);">通道前缀：/event/</div>
+                                </div>
+                                <div class="form-group" style="display: flex; gap: 10px; align-items: center; margin-bottom: 1rem;">
+                                    <button type="button" id="event-subscribe-btn" class="ant-btn ant-btn-primary" style="background-color: var(--accent-indigo); border-color: var(--accent-indigo);">
+                                        <i class="fas fa-headphones"></i> 开始监听
+                                    </button>
+                                    <button type="button" id="event-unsubscribe-btn" class="ant-btn ant-btn-default" disabled>
+                                        <i class="fas fa-stop"></i> 停止监听
+                                    </button>
+                                    <button type="button" id="event-clear-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-broom"></i> 清空
+                                    </button>
+                                    <button type="button" id="event-export-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-file-code"></i> 导出 JSON
+                                    </button>
+                                    <span style="flex: 1;"></span>
+                                    <span id="event-log-count" style="color: var(--text-secondary); font-size:var(--fs-sm);">0 条</span>
+                                </div>
+                                <div id="event-status" style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size:var(--fs-sm);"></div>
+                                <div id="event-log-container"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>

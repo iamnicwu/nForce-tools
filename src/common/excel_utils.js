@@ -1,3 +1,6 @@
+import { createLogger } from "./logger.js";
+
+const log = createLogger("EXCEL");
 import { showNotification, loadingLog } from "./utils.js";
 
 /**
@@ -32,9 +35,9 @@ export function exportToExcel(data, fileNamePrefix, sheetName) {
     // 导出文件
     XLSX.writeFile(workbook, fileName);
     showNotification(`数据已成功导出为 ${fileName}`, "success");
-    console.log("数据导出成功");
+    log.info("数据导出成功");
   } catch (error) {
-    console.error("导出数据失败:", error);
+    log.error("导出数据失败:", error);
     showNotification("导出数据失败，请稍后重试", "error");
   }
 }
@@ -50,9 +53,8 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 export function processExcelFile(file, onSuccess, onError) {
   if (!file) return;
-  console.log("123");
-  if (!file.name.endsWith(".xlsx")) {
-    console.error("文件格式不正确，请上传Excel文件(.xlsx)");
+    if (!file.name.endsWith(".xlsx")) {
+    log.error("文件格式不正确，请上传Excel文件(.xlsx)");
     showNotification("请上传Excel文件(.xlsx)", "error");
     loadingLog("文件格式不正确，请上传Excel文件(.xlsx)", "error");
     if (onError) onError("文件格式不正确");
@@ -61,14 +63,14 @@ export function processExcelFile(file, onSuccess, onError) {
 
   // 检查文件大小
   if (file.size > MAX_FILE_SIZE) {
-    console.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
+    log.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
     showNotification(`文件过大，最大支持 50MB`, "error");
     loadingLog(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`, "error");
     if (onError) onError("文件过大");
     return;
   }
 
-  console.log("开始处理Excel文件:", file.name);
+  log.info("开始处理Excel文件:", file.name);
   loadingLog(`开始处理Excel文件: ${file.name}`, "info");
   showNotification("正在处理文件...", "success");
 
@@ -76,11 +78,11 @@ export function processExcelFile(file, onSuccess, onError) {
   const reader = new FileReader();
   reader.onload = function (e) {
     try {
-      console.log("文件读取完成，开始解析Excel");
+      log.info("文件读取完成，开始解析Excel");
       loadingLog("文件读取完成，正在解析Excel...", "info");
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
-      console.log(
+      log.info(
         "Excel文件解析成功，工作表数量:",
         workbook.SheetNames.length
       );
@@ -119,14 +121,14 @@ export function processExcelFile(file, onSuccess, onError) {
       });
 
       if (targetSheetName) {
-        console.log(`找到最新日期的工作表: ${targetSheetName}`);
+        log.info(`找到最新日期的工作表: ${targetSheetName}`);
         loadingLog(`选择工作表: ${targetSheetName}`, "info");
       } else {
         // 优先查找名为 'details' 的工作表
         targetSheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'details');
         
         if (!targetSheetName) {
-          console.log("未找到日期格式或 'details' 工作表，使用第一个工作表");
+          log.info("未找到日期格式或 'details' 工作表，使用第一个工作表");
           targetSheetName = workbook.SheetNames[0];
           loadingLog(`未找到指定工作表，使用: ${targetSheetName}`, "warning");
         }
@@ -134,12 +136,12 @@ export function processExcelFile(file, onSuccess, onError) {
 
       // 获取工作表
       const worksheet = workbook.Sheets[targetSheetName];
-      console.log("正在处理工作表:", targetSheetName);
+      log.info("正在处理工作表:", targetSheetName);
       loadingLog(`正在处理工作表: ${targetSheetName}`, "info");
 
       // 将工作表转换为JSON数据
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      console.log("工作表转换为JSON数据成功，行数:", jsonData.length);
+      log.info("工作表转换为JSON数据成功，行数:", jsonData.length);
       loadingLog(`工作表转换为JSON数据成功，共 ${jsonData.length} 行`, "success");
 
       // 提取订单号
@@ -159,7 +161,7 @@ export function processExcelFile(file, onSuccess, onError) {
         // 查找订单号列
         let orderColumn = null;
         const firstRowKeys = Object.keys(jsonData[0]);
-        console.log("查找订单号列，可用列:", firstRowKeys);
+        log.info("查找订单号列，可用列:", firstRowKeys);
         loadingLog(`可用列: ${firstRowKeys.join(', ')}`, "info");
 
         // 预处理 possibleColumnNames，生成清理后的版本用于快速查找
@@ -173,7 +175,7 @@ export function processExcelFile(file, onSuccess, onError) {
           // 直接匹配
           if (possibleColumnNames.includes(normalizedKey)) {
             orderColumn = key;
-            console.log("直接匹配到订单号列:", key);
+            log.info("直接匹配到订单号列:", key);
             loadingLog(`直接匹配到订单号列: ${key}`, "success");
             break;
           }
@@ -181,14 +183,14 @@ export function processExcelFile(file, onSuccess, onError) {
           const cleanKey = normalizedKey.replace(/[^a-z0-9\u4e00-\u9fa5]/g, "");
           if (cleanPossibleNames.includes(cleanKey)) {
             orderColumn = key;
-            console.log("清理后匹配到订单号列:", key, "(原始:", cleanKey, ")");
+            log.info("清理后匹配到订单号列:", key, "(原始:", cleanKey, ")");
             loadingLog(`清理后匹配到订单号列: ${key}`, "success");
             break;
           }
         }
 
         if (orderColumn) {
-          console.log("找到订单号列:", orderColumn);
+          log.info("找到订单号列:", orderColumn);
           loadingLog(`开始提取订单号 (列: ${orderColumn})...`, "info");
           // 提取订单号，去重
           const uniqueOrders = new Set();
@@ -205,7 +207,7 @@ export function processExcelFile(file, onSuccess, onError) {
           });
 
           orderNumbers.push(...uniqueOrders);
-          console.log(
+          log.info(
             "提取订单号完成，共",
             orderNumbers.length,
             "个唯一订单号"
@@ -216,7 +218,7 @@ export function processExcelFile(file, onSuccess, onError) {
             onSuccess(orderNumbers);
           }
         } else {
-          console.error("未找到订单号列，请检查Excel文件格式");
+          log.error("未找到订单号列，请检查Excel文件格式");
           loadingLog("未找到订单号列，请检查Excel文件格式", "error");
           showNotification(
             "未找到订单号列，请检查Excel文件格式",
@@ -226,12 +228,12 @@ export function processExcelFile(file, onSuccess, onError) {
           return;
         }
       } else {
-        console.log("Excel文件中没有数据行");
+        log.info("Excel文件中没有数据行");
         loadingLog("Excel文件中没有数据行", "warning");
         if (onError) onError("Excel文件中没有数据行");
       }
     } catch (error) {
-      console.error("处理Excel文件时出错:", error);
+      log.error("处理Excel文件时出错:", error);
       loadingLog(`处理Excel文件时出错: ${error.message}`, "error");
       showNotification("处理Excel文件失败，请检查文件格式", "error");
       if (onError) onError(error);
@@ -239,14 +241,14 @@ export function processExcelFile(file, onSuccess, onError) {
   };
 
   reader.onerror = function () {
-    console.error("读取Excel文件失败");
+    log.error("读取Excel文件失败");
     loadingLog("读取Excel文件失败", "error");
     showNotification("读取Excel文件失败", "error");
     if (onError) onError("读取Excel文件失败");
   };
 
   // 开始读取文件
-  console.log("开始读取文件...");
+  log.debug("开始读取文件...");
   loadingLog("正在读取文件...", "info");
   reader.readAsArrayBuffer(file);
 }
@@ -261,7 +263,7 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
   if (!file) return;
 
   if (!file.name.endsWith(".xlsx")) {
-    console.error("文件格式不正确，请上传Excel文件(.xlsx)");
+    log.error("文件格式不正确，请上传Excel文件(.xlsx)");
     showNotification("请上传Excel文件(.xlsx)", "error");
     if (onError) onError("文件格式不正确");
     return;
@@ -269,20 +271,20 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
 
   // 检查文件大小
   if (file.size > MAX_FILE_SIZE) {
-    console.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
+    log.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
     showNotification(`文件过大，最大支持 50MB`, "error");
     if (onError) onError("文件过大");
     return;
   }
 
-  console.log("开始处理VVIP Excel文件:", file.name);
+  log.info("开始处理VVIP Excel文件:", file.name);
   showNotification("正在处理文件...", "success");
 
   // 使用SheetJS读取Excel文件
   const reader = new FileReader();
   reader.onload = function (e) {
     try {
-      console.log("文件读取完成，开始解析Excel");
+      log.info("文件读取完成，开始解析Excel");
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       
@@ -295,17 +297,17 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
         if (!workbook.SheetNames.includes(sheetName)) return false;
 
         const worksheet = workbook.Sheets[sheetName];
-        console.log(`正在处理工作表: ${sheetName}`);
+        log.info(`正在处理工作表: ${sheetName}`);
         
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        console.log(`工作表 ${sheetName} 转换为JSON数据成功，行数: ${jsonData.length}`);
+        log.info(`工作表 ${sheetName} 转换为JSON数据成功，行数: ${jsonData.length}`);
 
         if (jsonData.length === 0) return false;
 
         // 查找目标列
         let targetColumn = null;
         const firstRowKeys = Object.keys(jsonData[0]);
-        console.log(`在 ${sheetName} 中查找 ${label} 列，可用列:`, firstRowKeys);
+        log.info(`在 ${sheetName} 中查找 ${label} 列，可用列:`, firstRowKeys);
 
         // 尝试查找匹配的列
         for (const key of firstRowKeys) {
@@ -324,7 +326,7 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
         }
 
         if (targetColumn) {
-          console.log(`找到 ${label} 列:`, targetColumn);
+          log.info(`找到 ${label} 列:`, targetColumn);
           let count = 0;
           jsonData.forEach((row) => {
             let idValue = row[targetColumn];
@@ -338,10 +340,10 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
               }
             }
           });
-          console.log(`从 ${sheetName} 提取了 ${count} 个 ${label}`);
+          log.info(`从 ${sheetName} 提取了 ${count} 个 ${label}`);
           return true;
         } else {
-          console.log(`在 ${sheetName} 中未找到 ${label} 列`);
+          log.info(`在 ${sheetName} 中未找到 ${label} 列`);
           return false;
         }
       };
@@ -358,7 +360,7 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
 
       // 3. 如果没有处理任何特定的 sheet，回退到处理第一个 sheet
       if (!hasProcessedAnySheet) {
-        console.log("未找到预定义的 PCD/LTS 工作表，尝试处理第一个工作表");
+        log.info("未找到预定义的 PCD/LTS 工作表，尝试处理第一个工作表");
         const firstSheetName = workbook.SheetNames[0];
         
         // 尝试查找 bsn (PCD)
@@ -377,14 +379,14 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
       const totalCount = pcdIdsArray.length + ltsIdsArray.length;
       
       if (totalCount > 0) {
-        console.log(
+        log.info(
           `提取完成，共 ${pcdIdsArray.length} 个 PCD ID, ${ltsIdsArray.length} 个 LTS ID`
         );
         if (onSuccess) {
           onSuccess({ pcdIds: pcdIdsArray, ltsIds: ltsIdsArray });
         }
       } else {
-        console.error("未找到有效的 Account ID (bsn 或 CUST_NUM)，请检查Excel文件格式");
+        log.error("未找到有效的 Account ID (bsn 或 CUST_NUM)，请检查Excel文件格式");
         showNotification(
           "未找到有效的 Account ID (bsn 或 CUST_NUM)，请检查Excel文件格式",
           "error"
@@ -392,20 +394,20 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
         if (onError) onError("未找到有效的 Account ID");
       }
     } catch (error) {
-      console.error("处理Excel文件时出错:", error);
+      log.error("处理Excel文件时出错:", error);
       showNotification("处理Excel文件失败，请检查文件格式", "error");
       if (onError) onError(error);
     }
   };
 
   reader.onerror = function () {
-    console.error("读取Excel文件失败");
+    log.error("读取Excel文件失败");
     showNotification("读取Excel文件失败", "error");
     if (onError) onError("读取Excel文件失败");
   };
 
   // 开始读取文件
-  console.log("开始读取文件...");
+  log.debug("开始读取文件...");
   reader.readAsArrayBuffer(file);
 }
 
@@ -534,8 +536,8 @@ export function analyzeT2Data(data, rules) {
   if (!rules || rules.length === 0) return data;
 
   const jsonData = [...data]; // 浅拷贝
-  console.log("开始分析 T-4 数据...");
-  console.log(jsonData);
+  log.info("开始分析 T-4 数据...");
+  log.debug(jsonData);
   return applyRules(jsonData, rules);
 }
 
@@ -596,7 +598,7 @@ export function applyRules(data, rules) {
     return Object.keys(row).find(k => matchKey(k, name));
   };
 
-  console.log(`开始根据规则处理数据，规则数量: ${rules.length}`);
+  log.info(`开始根据规则处理数据，规则数量: ${rules.length}`);
 
   let processedCount = 0;
   const ruleStats = {};
@@ -737,7 +739,7 @@ export function applyRules(data, rules) {
                  break;
               // 可以根据需要添加更多操作符
               default:
-                console.warn(`未知的操作符: ${cond.operator}`);
+                log.warn(`未知的操作符: ${cond.operator}`);
                 thisConditionMet = false;
             }
           }
@@ -789,9 +791,9 @@ export function applyRules(data, rules) {
     }
   });
 
-  console.log(`数据处理完成，共更新了 ${processedCount} 行数据`);
+  log.info(`数据处理完成，共更新了 ${processedCount} 行数据`);
   Object.keys(ruleStats).forEach(ruleName => {
-    console.log(`规则 "${ruleName}" 应用次数: ${ruleStats[ruleName]}`);
+    log.info(`规则 "${ruleName}" 应用次数: ${ruleStats[ruleName]}`);
   });
 
   return jsonData;
@@ -807,7 +809,7 @@ export function processAnalysisExcelFile(file, onSuccess, onError) {
   if (!file) return;
 
   if (!file.name.endsWith(".xlsx")) {
-    console.error("文件格式不正确，请上传Excel文件(.xlsx)");
+    log.error("文件格式不正确，请上传Excel文件(.xlsx)");
     showNotification("请上传Excel文件(.xlsx)", "error");
     if (onError) onError("文件格式不正确");
     return;
@@ -815,20 +817,20 @@ export function processAnalysisExcelFile(file, onSuccess, onError) {
 
   // 检查文件大小
   if (file.size > MAX_FILE_SIZE) {
-    console.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
+    log.error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB，最大支持 50MB`);
     showNotification(`文件过大，最大支持 50MB`, "error");
     if (onError) onError("文件过大");
     return;
   }
 
-  console.log("开始处理数据分析 Excel 文件:", file.name);
+  log.info("开始处理数据分析 Excel 文件:", file.name);
   showNotification("正在处理文件...", "success");
 
   // 使用SheetJS读取Excel文件
   const reader = new FileReader();
   reader.onload = function (e) {
     try {
-      console.log("文件读取完成，开始解析Excel");
+      log.info("文件读取完成，开始解析Excel");
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       
@@ -836,41 +838,41 @@ export function processAnalysisExcelFile(file, onSuccess, onError) {
       let targetSheetName = workbook.SheetNames.find(name => name.toLowerCase() === 'details');
       // 如果没找到，则使用第一个工作表
       if (!targetSheetName) {
-        console.log("未找到名为 'details' 的工作表，使用第一个工作表");
+        log.info("未找到名为 'details' 的工作表，使用第一个工作表");
         targetSheetName = workbook.SheetNames[0];
       }
       const worksheet = workbook.Sheets[targetSheetName];
-      console.log(`正在处理工作表: ${targetSheetName}`);
+      log.info(`正在处理工作表: ${targetSheetName}`);
       
       // 将工作表转换为JSON数据
       // defval: '' 选项确保即使单元格为空，生成的 JSON 对象也会包含该列的键（表头），从而保留完整的表头结构
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-      console.log(`工作表 ${targetSheetName} 转换为JSON数据成功，行数: ${jsonData.length}`);
+      log.info(`工作表 ${targetSheetName} 转换为JSON数据成功，行数: ${jsonData.length}`);
 
       if (jsonData.length > 0) {
         if (onSuccess) {
           onSuccess(jsonData);
         }
       } else {
-        console.error("Excel文件中没有数据行");
+        log.error("Excel文件中没有数据行");
         showNotification("Excel文件中没有数据行", "error");
         if (onError) onError("Excel文件中没有数据行");
       }
     } catch (error) {
-      console.error("处理Excel文件时出错:", error);
+      log.error("处理Excel文件时出错:", error);
       showNotification("处理Excel文件失败，请检查文件格式", "error");
       if (onError) onError(error);
     }
   };
 
   reader.onerror = function () {
-    console.error("读取Excel文件失败");
+    log.error("读取Excel文件失败");
     showNotification("读取Excel文件失败", "error");
     if (onError) onError("读取Excel文件失败");
   };
 
   // 开始读取文件
-  console.log("开始读取文件...");
+  log.debug("开始读取文件...");
   reader.readAsArrayBuffer(file);
 }
 

@@ -82,7 +82,11 @@
       "tiles": [
         { "id": "bulk", "step": 15, "label": "Bulk 操作", "icon": "fa-database", "desc": "批量作业管理" },
         { "id": "anonymous", "step": 18, "label": "Execute Anonymous", "icon": "fa-code", "desc": "Apex 匿名执行" },
-        { "id": "schedule-jobs", "step": 19, "label": "Schedule Jobs", "icon": "fa-clock", "desc": "定时任务管理" }
+        { "id": "schedule-jobs", "step": 19, "label": "Schedule Jobs", "icon": "fa-clock", "desc": "定时任务管理" },
+        { "id": "soql-export", "step": 23, "label": "SOQL 导出", "icon": "fa-search", "desc": "查询 · 导出 Excel/CSV" },
+        { "id": "data-import", "step": 24, "label": "批量导入", "icon": "fa-file-import", "desc": "CSV/Excel 批量写入" },
+        { "id": "metadata-tools", "step": 25, "label": "Metadata 工具", "icon": "fa-box-open", "desc": "检索 · 打包下载" },
+        { "id": "event-monitor", "step": 26, "label": "事件监听", "icon": "fa-satellite-dish", "desc": "Platform Event · CDC" }
       ]
     },
     {

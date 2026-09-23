@@ -6,8 +6,9 @@
     <title>nForce Tools - 登录</title>
     <!-- 引入 jsforce 库 (本地) -->
     <script src="lib/js/jsforce.min.js"></script>
-    <!-- 引入 Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 共享设计令牌 + 表单控件字体继承（原先这里只引了 FontAwesome CDN，
+         既没有 antd 也没有 main.css，导致所有 button/input 回退成 Arial） -->
+    <link rel="stylesheet" href="lib/css/main.css">
     <style>
         * {
             margin: 0;
@@ -16,8 +17,7 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #001529 0%, #1890ff 100%);
+            background: linear-gradient(135deg, var(--brand-navy) 0%, var(--primary-color) 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -35,14 +35,14 @@
         }
         
         .login-header {
-            background: #001529;
+            background: var(--brand-navy);
             color: white;
             padding: 30px;
             text-align: center;
         }
         
         .login-header h1 {
-            font-size: 24px;
+            font-size: var(--fs-3xl);
             margin-bottom: 8px;
             color: #fff;
             display: flex;
@@ -52,11 +52,11 @@
         }
         
         .login-header h1 i {
-            color: #1890ff;
+            color: var(--primary-color);
         }
         
         .login-header p {
-            font-size: 14px;
+            font-size: var(--fs-base);
             color: rgba(255, 255, 255, 0.65);
         }
         
@@ -69,7 +69,7 @@
         }
         
         .session-card {
-            border: 2px solid #e8e8e8;
+            border: 2px solid var(--border-light);
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 12px;
@@ -78,72 +78,72 @@
         }
         
         .session-card:hover {
-            border-color: #1890ff;
+            border-color: var(--primary-color);
             box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
             transform: translateY(-2px);
         }
         
         .session-card.selected {
-            border-color: #1890ff;
-            background: #e6f7ff;
+            border-color: var(--primary-color);
+            background: var(--primary-bg);
         }
         
         .session-env {
             display: inline-block;
             padding: 4px 12px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: var(--fs-xs);
             font-weight: 600;
             margin-bottom: 10px;
         }
         
         .session-env.sandbox {
-            background: #fff7e6;
-            color: #fa8c16;
+            background: var(--accent-orange-tint);
+            color: var(--accent-orange);
         }
         
         .session-env.production {
-            background: #fff1f0;
-            color: #cf1322;
+            background: var(--error-bg);
+            color: var(--error-strong);
         }
         
         .session-env.unknown {
-            background: #f5f5f5;
-            color: #666;
+            background: var(--bg-tertiary);
+            color: var(--text-tertiary);
         }
         
         .session-domain {
-            color: #666;
-            font-size: 13px;
+            color: var(--text-tertiary);
+            font-size: var(--fs-sm);
             margin-bottom: 8px;
         }
         
         .session-user {
-            font-size: 16px;
+            font-size: var(--fs-lg);
             font-weight: 600;
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 4px;
         }
         
         .session-email {
-            color: #999;
-            font-size: 13px;
+            color: var(--text-secondary);
+            font-size: var(--fs-sm);
         }
         
         .session-tab {
-            color: #999;
-            font-size: 12px;
+            color: var(--text-secondary);
+            font-size: var(--fs-xs);
             margin-top: 8px;
         }
         
         .login-btn {
             width: 100%;
             height: 50px;
-            background: #1890ff;
+            background: var(--primary-color);
             border: none;
             border-radius: 6px;
             color: white;
-            font-size: 16px;
+            font-size: var(--fs-lg);
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -155,12 +155,12 @@
         
         .login-btn:hover {
             transform: translateY(-2px);
-            background: #40a9ff;
+            background: var(--primary-hover);
             box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
         }
         
         .login-btn:disabled {
-            background: #d9d9d9;
+            background: var(--border-color);
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
@@ -175,7 +175,7 @@
             width: 50px;
             height: 50px;
             border: 4px solid rgba(24, 144, 255, 0.2);
-            border-top-color: #1890ff;
+            border-top-color: var(--primary-color);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
@@ -186,8 +186,8 @@
         }
         
         .loading-text {
-            color: #666;
-            font-size: 14px;
+            color: var(--text-tertiary);
+            font-size: var(--fs-base);
         }
         
         .no-session {
@@ -196,19 +196,19 @@
         }
         
         .no-session i {
-            font-size: 48px;
-            color: #d9d9d9;
+            font-size: var(--icon-2xl);
+            color: var(--border-color);
             margin-bottom: 15px;
         }
         
         .no-session h3 {
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 10px;
         }
         
         .no-session p {
-            color: #666;
-            font-size: 14px;
+            color: var(--text-tertiary);
+            font-size: var(--fs-base);
             margin-bottom: 20px;
         }
         
@@ -216,30 +216,30 @@
             width: 100%;
             height: 44px;
             background: white;
-            border: 2px solid #1890ff;
+            border: 2px solid var(--primary-color);
             border-radius: 6px;
-            color: #1890ff;
-            font-size: 14px;
+            color: var(--primary-color);
+            font-size: var(--fs-base);
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
         }
         
         .manual-login-btn:hover {
-            background: #1890ff;
+            background: var(--primary-color);
             color: white;
         }
         
         .manual-login-section {
-            border-top: 1px solid #e8e8e8;
+            border-top: 1px solid var(--border-light);
             padding-top: 20px;
             margin-top: 20px;
         }
         
         .manual-login-section h4 {
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 15px;
-            font-size: 14px;
+            font-size: var(--fs-base);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -251,30 +251,30 @@
         
         .form-group label {
             display: block;
-            color: #666;
-            font-size: 13px;
+            color: var(--text-tertiary);
+            font-size: var(--fs-sm);
             margin-bottom: 6px;
         }
         
         .form-group input {
             width: 100%;
             height: 40px;
-            border: 1px solid #d9d9d9;
+            border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 0 12px;
-            font-size: 14px;
+            font-size: var(--fs-base);
             transition: all 0.3s ease;
         }
         
         .form-group input:focus {
             outline: none;
-            border-color: #1890ff;
+            border-color: var(--primary-color);
             box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
         }
         
         .error-msg {
-            color: #ff4d4f;
-            font-size: 13px;
+            color: var(--error-color);
+            font-size: var(--fs-sm);
             margin-top: 10px;
             display: none;
         }
@@ -285,23 +285,23 @@
         
         .login-footer {
             padding: 16px 30px;
-            background: #fafafa;
-            border-top: 1px solid #e8e8e8;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-light);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         
         .copyright {
-            font-size: 12px;
-            color: #999;
+            font-size: var(--fs-xs);
+            color: var(--text-secondary);
             display: flex;
             align-items: center;
             gap: 6px;
         }
         
         .copyright a {
-            color: #1890ff;
+            color: var(--primary-color);
             text-decoration: none;
         }
         
@@ -310,8 +310,8 @@
         }
         
         .version {
-            font-size: 12px;
-            color: #999;
+            font-size: var(--fs-xs);
+            color: var(--text-secondary);
         }
     </style>
 </head>
@@ -358,7 +358,7 @@
                     <label for="session-id">Session ID</label>
                     <input type="text" id="session-id" placeholder="请输入 Salesforce Session ID">
                 </div>
-                <button id="manual-login-btn" class="login-btn" style="background: #666;">
+                <button id="manual-login-btn" class="login-btn" style="background: var(--text-tertiary);">
                     <i class="fas fa-check"></i>
                     <span>验证并登录</span>
                 </button>
@@ -370,13 +370,31 @@
         <div class="login-footer">
             <div class="copyright">
                 <i class="fas fa-bolt"></i>
-                <span>nForce Tools v3.0</span>
+                <span>nForce Tools <span id="login-version">v-</span></span>
             </div>
             <div class="version">© 2026</div>
         </div>
     </div>
     
-    <!-- Login App Script -->
-    <script src="login_app.js"></script>
+    <!-- Login App Script（login_app.js 引入 common/logger.js，需以 ESM 方式加载；
+         webpack 产物为 IIFE，module 方式加载同样兼容） -->
+    <script src="login_app.js" type="module"></script>
+    <script type="module">
+        // 图标改用共享的 common/icons.js 内联 SVG。
+        // 原先登录页从 cdnjs 拉 FontAwesome 6.4.0，是扩展里唯一的外部网络依赖，
+        // 断网/CDN 不可用时会退化成 7 个方框。CSS 不受 script-src 'self' 约束所以它一直"能用"，
+        // 但这没有必要。
+        import { replaceIcons } from './common/icons.js';
+
+        replaceIcons();
+
+        // 版本号唯一来源：manifest.json（原先这里硬编码 v3.0，与 manifest 3.3.0 / popup v1.0 都不一致）
+        const el = document.getElementById('login-version');
+        try {
+            el.textContent = 'v' + chrome.runtime.getManifest().version;
+        } catch (e) {
+            el.textContent = '';
+        }
+    </script>
 </body>
 </html>

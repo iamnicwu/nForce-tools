@@ -20,6 +20,9 @@
  */
 
 // 导入 graph_token.js 中的默认 token
+import { createLogger, maskSecret } from "./logger.js";
+
+const log = createLogger("OD");
 import defaultGraphToken from './graph_token.js';
 
 const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0';
@@ -116,7 +119,7 @@ export class OneDriveWorkbookService {
       // background.js (Service Worker) 中没有 window 对象，可直接 fetch
       // content script / popup 中有 window 对象，需要通过 background 代理
       const isInBackground = typeof window === 'undefined';
-      console.log("isInBackground: "+ isInBackground);
+      log.debug("isInBackground: ", isInBackground);
       
       if (isInBackground) {
         
@@ -128,7 +131,7 @@ export class OneDriveWorkbookService {
         return await this._fetchViaBackground(url, method, body);
       }
     } catch (error) {
-      console.error('OneDrive Workbook API request failed:', error);
+      log.error('OneDrive Workbook API 请求失败:', error);
       throw error;
     }
   }
@@ -156,7 +159,7 @@ export class OneDriveWorkbookService {
     // 处理 404 Not Found
     if (response.status === 404) {
       if (this.sessionId && url.includes('/workbook/') && !url.includes('/createSession')) {
-        console.warn('Workbook session expired, attempting to recreate...');
+        log.warn('Workbook session 已过期，正在重建...');
         await this.createSession();
         return this._fetchDirect(url, method, body);
       }
@@ -243,7 +246,7 @@ export class OneDriveWorkbookService {
     try {
       // 验证 Workbook 可访问
       await this._request(this.baseUrl);
-      console.log('Workbook connection verified');
+      log.info('Workbook 连接验证成功');
 
       // 创建 Session（提高性能）
       await this.createSession(persistChanges);
@@ -255,7 +258,7 @@ export class OneDriveWorkbookService {
         sessionId: this.sessionId
       };
     } catch (error) {
-      console.error('Failed to connect to workbook:', error);
+      log.error('连接 Workbook 失败:', error);
       return {
         success: false,
         error: error.message
@@ -280,11 +283,11 @@ export class OneDriveWorkbookService {
       const result = await this._request(url, 'POST', { persistChanges });
 
       this.sessionId = result.id;
-      console.log(`Workbook session created: ${this.sessionId}, persistChanges: ${persistChanges}`);
+      log.info(`Workbook session created: ${maskSecret(this.sessionId)}, persistChanges: ${persistChanges}`);
 
       return this.sessionId;
     } catch (error) {
-      console.error('Failed to create workbook session:', error);
+      log.error('创建 Workbook session 失败:', error);
       throw error;
     }
   }
@@ -296,7 +299,7 @@ export class OneDriveWorkbookService {
    */
   async refreshSession() {
     if (!this.sessionId) {
-      console.warn('No active session to refresh');
+      log.warn('没有可刷新的活动 session');
       return false;
     }
 
@@ -305,7 +308,7 @@ export class OneDriveWorkbookService {
       await this.getWorksheets();
       return true;
     } catch (error) {
-      console.warn('Session refresh failed, recreating...');
+      log.warn('Session 刷新失败，正在重建...');
       await this.createSession();
       return true;
     }
@@ -323,11 +326,11 @@ export class OneDriveWorkbookService {
     try {
       const url = `${this.baseUrl}/closeSession`;
       await this._request(url, 'POST');
-      console.log('Workbook session closed');
+      log.info('Workbook session 已关闭');
       this.sessionId = null;
       return true;
     } catch (error) {
-      console.error('Failed to close session:', error);
+      log.error('关闭 session 失败:', error);
       this.sessionId = null;
       return false;
     }
@@ -883,7 +886,7 @@ export class OneDriveWorkbookService {
       try {
         const profile = await this._request(`${GRAPH_API_BASE}/me`, 'GET');
         result.tokenUserName = profile?.displayName || profile?.userPrincipalName || 'Unknown';
-        console.log('Token 验证成功，用户:', result.tokenUserName);
+        log.info('Token 验证成功，用户:', result.tokenUserName);
       } catch (tokenError) {
         result.tokenOk = false;
         result.message = `Token 已过期或无效: ${tokenError.message}`;
@@ -899,7 +902,7 @@ export class OneDriveWorkbookService {
           name: f.name,
           id: f.id
         }));
-        console.log('Drive 访问成功，最近文件:', result.recentFiles);
+        log.info('Drive 访问成功，最近文件:', result.recentFiles);
       } catch (driveError) {
         result.driveOk = false;
         result.message = `Drive 访问失败: ${driveError.message}`;
@@ -966,7 +969,7 @@ export class OneDriveWorkbookService {
     this.workbookId = null;
     this.workbookPath = null;
     this.baseUrl = null;
-    console.log('Workbook disconnected');
+    log.info('Workbook 已断开连接');
   }
 }
 
