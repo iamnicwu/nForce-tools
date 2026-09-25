@@ -378,8 +378,8 @@
     
     <!-- Login App Script（login_app.js 引入 common/logger.js，需以 ESM 方式加载；
          webpack 产物为 IIFE，module 方式加载同样兼容） -->
-    <script src="login_app.js" type="module"></script>
-    <script type="module">
+    <script src="login_app.js" type="module">
+    <!-- <script type="module"> -->
         // 图标改用共享的 common/icons.js 内联 SVG。
         // 原先登录页从 cdnjs 拉 FontAwesome 6.4.0，是扩展里唯一的外部网络依赖，
         // 断网/CDN 不可用时会退化成 7 个方框。CSS 不受 script-src 'self' 约束所以它一直"能用"，

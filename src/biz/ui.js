@@ -131,6 +131,13 @@ export function showSection(sectionNumber) {
     });
   }
 
+  // 懒加载：Org Dashboard（Limits 用量，2 分钟内不重复自动拉取）
+  if (sectionNumber === 27) {
+    import('./org_limits.js').then((m) => {
+      if (m.initOrgDashboard) m.initOrgDashboard();
+    });
+  }
+
   // 切换视图：隐藏首页，显示该功能
   document.querySelectorAll(".step-section").forEach((section) => {
     section.classList.remove("active");

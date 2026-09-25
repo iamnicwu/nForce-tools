@@ -48,17 +48,6 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.salesforce.com https://*.force.com https://*.salesforce-setup.com https://*.cloudforce.com https://*.visualforce.com https://*.sfcrmapps.cn https://*.sfcrmproducts.cn https://*.salesforce.mil https://*.force.mil https://*.cloudforce.mil https://*.visualforce.mil https://*.crmforce.mil https://*.force.com.mcas.ms https://*.builder.salesforce-experience.com https://graph.microsoft.com https://*.sharepoint.com https://*.onedrive.microsoft.com;"
   },
-  "content_scripts": [
-    {
-      "js": ["app.js"],
-      "matches": [
-        "https://*.salesforce.com/*",
-        "https://*.force.com/*",
-        "https://*.salesforce-setup.com/*"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
   "web_accessible_resources": [
     {
       "resources": [

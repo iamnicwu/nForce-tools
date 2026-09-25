@@ -11,6 +11,8 @@
     <script src="lib/js/dayjs.min.js"></script>
     <!-- 引入 JSZip 库 -->
     <script src="lib/js/jszip.min.js"></script>
+    <!-- 引入 ECharts（数据分析图表 + Org 状态仪表盘） -->
+    <script src="lib/js/echarts.min.js"></script>
     <!-- 引入 Ant Design CSS -->
     <link rel="stylesheet" href="lib/css/antd.min.css">
     <!-- 引入自定义CSS -->
@@ -87,12 +89,9 @@
 
             <!-- ========== 首页：功能图标列表（由 rules/ui_layout.json 驱动） ========== -->
             <section class="launcher-view" id="launcher-view">
-                <div class="launcher-hero">
-                    <div class="launcher-hero-text">
-                        <h2 class="launcher-hero-title" id="launcher-hero-title">功能中心</h2>
-                        <p class="launcher-hero-subtitle" id="launcher-hero-subtitle">点击图标进入对应功能</p>
-                    </div>
-                </div>
+                <!-- Org 状态面板：直接展示 Salesforce Limits 用量（biz/org_limits.js 渲染，
+                     点击「查看全部」进入 section-27 的完整列表）。不占功能磁贴位 -->
+                <div id="org-dashboard-panel"></div>
 
                 <!-- 常用功能（有序列表，顺序完全由用户自己决定） -->
                 <div id="favorites-host"></div>
@@ -1647,6 +1646,38 @@ System.debug('Hello World');"></textarea>
                                 </div>
                                 <div id="event-status" style="margin-bottom: 0.75rem; color: var(--text-secondary); font-size:var(--fs-sm);"></div>
                                 <div id="event-log-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- ===== Org Dashboard：Salesforce Org Limits 用量看板（section-27） ===== -->
+                <div id="section-27" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">Org Dashboard</div>
+                            <div class="ant-card-extra">
+                                <button type="button" class="ant-btn ant-btn-primary ant-btn-sm" id="org-limits-refresh-btn">
+                                    <i class="fas fa-sync"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon" style="background: var(--theme-bg);">
+                                    <i class="fas fa-tachometer-alt" style="color: var(--theme-color);"></i>
+                                </div>
+                                <h3 class="section-title">Org Limits 用量</h3>
+                                <ul class="section-desc">
+                                    <li>通过 Limits API 实时展示当前 Org 的限额用量：API 调用、数据 / 文件存储等。</li>
+                                    <li>进度条颜色：<strong>60% 以上</strong>为警告色、<strong>85% 以上</strong>为危险色，接近上限时请控制批量操作节奏。</li>
+                                </ul>
+                            </div>
+                            <div id="org-limits-content">
+                                <div class="org-limits-loading">
+                                    <i class="fas fa-spinner fa-spin"></i> 正在从 Salesforce 获取 Org Limits...
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -8,6 +8,9 @@ import { $, on } from "./common/dom.js";
 import { appState } from "./biz/state.js";
 import { OneDriveWorkbookService } from "./common/onedrive_service.js";
 import { initUiLayout, renderLauncher } from "./biz/ui_layout.js";
+// Org 状态面板：session 真正可用后必须调 markSessionReady()，
+// 否则面板不会发起 limits 请求（时序约束见 org_limits.js 头部注释）
+import { markSessionReady } from "./biz/org_limits.js";
 import {
   initInspectorTools,
   loadSoqlFields,
@@ -123,6 +126,96 @@ function isSessionAuthFailure() {
   return AUTH_FAILURE_CODES.includes(err.errorCode.toUpperCase());
 }
 
+/**
+ * 从浏览器 Cookie 中重新获取 Salesforce 会话（sid）。
+ * 场景：存储的 session 已过期，但用户在浏览器里仍登录着 Salesforce，
+ * 此时 Cookie 里的 sid 是最新的。刷新 index.html 即可自动换新，无需手动重登。
+ * @param {string|null} knownBadSid - 刚被服务端判定失效的 sid，同值 Cookie 直接跳过
+ * @returns {Promise<boolean>} 是否刷新成功
+ */
+async function tryRefreshSessionFromCookie(knownBadSid = null) {
+  const instanceUrl = appState.instance_url;
+  if (!instanceUrl) return false;
+  if (!chrome.cookies || typeof chrome.cookies.getAll !== "function") {
+    log.warn("当前环境无 chrome.cookies 权限，跳过自动刷新");
+    return false;
+  }
+  try {
+    const cookies = await chrome.cookies.getAll({ url: instanceUrl, name: "sid" });
+    if (!cookies || cookies.length === 0) {
+      log.info("浏览器中未找到 sid Cookie，无法自动刷新会话");
+      return false;
+    }
+
+    // 与当前实例域名匹配的 Cookie 优先，其余按返回顺序兜底
+    let host = "";
+    try { host = new URL(instanceUrl).hostname; } catch (e) { /* instanceUrl 已在上面保证非空，忽略 */ }
+    const domainRank = (c) => {
+      const d = String(c.domain || "").replace(/^\./, "");
+      return host && (host === d || host.endsWith("." + d)) ? 0 : 1;
+    };
+    const sorted = [...cookies].sort((a, b) => domainRank(a) - domainRank(b));
+
+    for (const cookie of sorted) {
+      // Cookie 格式: org!sessionId
+      const parts = String(cookie.value || "").split("!");
+      const sid = parts.length >= 2 ? parts[1] : parts[0];
+      if (!sid || (knownBadSid && sid === knownBadSid)) continue;
+
+      log.info("尝试用浏览器 Cookie 刷新会话，domain:", cookie.domain);
+      const ok = await sfConn.testConnection(sid, instanceUrl);
+      if (ok) {
+        appState.session_id = sid;
+        appState.is_connected = true;
+        try {
+          await chrome.storage.local.set({
+            sf_session_id: sid,
+            sf_instance_url: instanceUrl,
+            is_connected: true
+          });
+        } catch (e) {
+          log.warn("写入刷新后的会话失败:", e);
+        }
+        log.info("已通过浏览器 Cookie 自动刷新 Salesforce 会话");
+        return true;
+      }
+      log.warn("该 Cookie 对应的会话无效，继续尝试下一个，domain:", cookie.domain);
+    }
+    return false;
+  } catch (e) {
+    log.warn("从 Cookie 自动刷新会话失败:", e);
+    return false;
+  }
+}
+
+/** 会话恢复 / 自动刷新成功后的统一收尾（补齐用户与组织信息并刷新 UI） */
+async function onSessionRestored(message) {
+  // session 已确认有效：打开 Org 状态面板的请求门闩（会触发 limits 拉取）
+  markSessionReady();
+  try {
+    await fetchUserInfo();
+    await fetchOrgInfo();
+  } catch (e) {
+    log.warn("获取用户/组织信息失败（不影响功能）:", e);
+  }
+  updateUIState();
+  try {
+    // 同步刷新 storage 中的用户 / 组织信息，保持与 chrome.storage 一致
+    await chrome.storage.local.set({
+      userInfo: appState.userInfo,
+      orgInfo: appState.orgInfo
+    });
+  } catch (e) {
+    log.warn("同步用户/组织信息到 storage 失败:", e);
+  }
+  try {
+    await renderLauncher();
+  } catch (e) {
+    log.warn('刷新首页图标状态失败:', e);
+  }
+  if (message) showNotification(message, "success");
+}
+
 // 初始化应用
 async function initApp() {
   // 从 chrome.storage.local 读取登录状态
@@ -183,9 +276,6 @@ async function initApp() {
 
   // 默认停留在「功能中心」首页，由用户点击图标进入具体功能
   goHome();
-  if (!appState.is_connected) {
-    showNotification("尚未连接 Salesforce，请点击「连接设置」完成连接", "warning");
-  }
 
   // 绑定事件
   // 兜底：bindEvents 内部已统一改用 dom.js 的 on()（元素缺失只会 warn 不会抛），
@@ -206,40 +296,51 @@ async function initApp() {
     const isValid = await validateStoredSession();
     if (isValid) {
       log.info("已恢复 Salesforce 会话");
-      // 补齐用户 / 组织信息（失败不影响功能）
-      try {
-        await fetchUserInfo();
-        await fetchOrgInfo();
-      } catch (e) {
-        log.warn("获取用户/组织信息失败（不影响功能）:", e);
-      }
-      updateUIState();
-      try {
-        await renderLauncher();
-      } catch (e) {
-        log.warn('刷新首页图标状态失败:', e);
-      }
+      await onSessionRestored();
     } else if (isSessionAuthFailure()) {
-      // 只有服务端明确返回「会话无效」时才降级
-      log.warn("Salesforce 会话已失效，降级为未连接状态（保留 session ID 便于重试）");
-      appState.is_connected = false;
-      // 只清除连接标记，保留 session_id / instance_url 以便用户直接重试
-      try {
-        await chrome.storage.local.set({ is_connected: false });
-      } catch (e) {
-        log.warn('更新连接状态失败:', e);
+      // 只有服务端明确返回「会话无效」时才需要处理。
+      // 先尝试从浏览器 Cookie 自动获取新 session（用户浏览器仍登录着的话即可无感续期），
+      // 刷新失败才降级为未连接。
+      log.warn("Salesforce 会话已失效，尝试从浏览器 Cookie 自动刷新...");
+      const refreshed = await tryRefreshSessionFromCookie(appState.session_id);
+      if (refreshed) {
+        await onSessionRestored("Session 已过期，已自动从浏览器获取新会话");
+      } else {
+        log.warn("自动刷新会话失败，降级为未连接状态（保留 session ID 便于重试）");
+        appState.is_connected = false;
+        // 只清除连接标记，保留 session_id / instance_url 以便用户直接重试
+        try {
+          await chrome.storage.local.set({ is_connected: false });
+        } catch (e) {
+          log.warn('更新连接状态失败:', e);
+        }
+        updateUIState();
+        try {
+          await renderLauncher();
+        } catch (e) {
+          log.warn('刷新首页图标状态失败:', e);
+        }
+        showNotification("Salesforce 会话已过期且自动刷新失败，请到 Salesforce 重新登录后刷新本页，或在「连接设置」手动更新", "error");
       }
-      updateUIState();
-      try {
-        await renderLauncher();
-      } catch (e) {
-        log.warn('刷新首页图标状态失败:', e);
-      }
-      showNotification("Salesforce 会话已失效，请在「连接设置」重新测试连接或重新登录", "error");
     } else {
       // 无法判定会话失效（多为请求被拦截）：保留已连接状态，仅记录日志
       log.warn("启动时会话校验未通过（可能是网络/CSP 限制），保留已连接状态。原因:", sfConn.lastError);
+      // session 本身来自存储且未被判失效：视为可用，打开 limits 请求门闩
+      // （若网络确实不通，limits 拉取会走既有失败态，不影响其他功能）
+      markSessionReady();
     }
+  } else if (!appState.is_connected && appState.instance_url) {
+    // 之前降级为未连接：刷新 index.html 时尝试从浏览器 Cookie 重新获取会话，
+    // 让用户不必手动走一遍登录页。
+    const refreshed = await tryRefreshSessionFromCookie(appState.session_id || null);
+    if (refreshed) {
+      await onSessionRestored("已自动从浏览器 Cookie 恢复 Salesforce 会话");
+    }
+  }
+
+  // 会话恢复 / 自动刷新都结束后，仍未连接才提示（避免先弹警告又马上连接成功的噪音）
+  if (!appState.is_connected) {
+    showNotification("尚未连接 Salesforce，请点击「连接设置」完成连接", "warning");
   }
 }
 
@@ -316,6 +417,8 @@ function bindEvents() {
           await fetchUserInfo();
           // 获取组织信息
           await fetchOrgInfo();
+          // session 刚测试通过：打开 Org 状态面板的请求门闩（会触发 limits 拉取）
+          markSessionReady();
           // // 获取 LTS Account 数量
           // await fetchLTSAccountCount();
 
