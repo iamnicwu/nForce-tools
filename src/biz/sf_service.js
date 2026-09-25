@@ -873,6 +873,31 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
     }
   },
 
+  /**
+   * 获取 Salesforce Org 的 Limits 用量（REST Limits API）
+   * GET /services/data/v{version}/limits/
+   * 返回形如 { DailyApiRequests: { Max, Remaining, type }, ... } 的映射，
+   * Complex 类型的条目带 Consumed 数组（按 Entity 拆分的已用量）。
+   */
+  async getOrgLimits() {
+    try {
+      if (!this.connection) {
+        return { success: false, error: "Salesforce connection not established" };
+      }
+      const response = await this.connection.request({
+        method: 'GET',
+        url: `/services/data/v${defaultApiVersion}/limits/`
+      });
+      if (!response || typeof response !== "object") {
+        return { success: false, error: "Limits 接口返回了空数据" };
+      }
+      return { success: true, limits: response };
+    } catch (error) {
+      log.error("获取 Org Limits 失败:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
   async createBulkQueryJob(soql) {
     try {
       if (!this.connection) {

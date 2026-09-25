@@ -17,10 +17,6 @@
  */
 const DEFAULT_LAYOUT = {
   version: 1,
-  hero: {
-    title: "功能中心",
-    subtitle: "点击图标进入对应功能 · 常用功能可自行挑选"
-  },
   favorites: {
     // 「常用功能」的默认列表：顺序即展示顺序，不再随使用频率变化。
     // 用户在界面上的改动存在 chrome.storage.local 的 ui_favorites，

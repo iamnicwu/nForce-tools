@@ -96,7 +96,7 @@
     --fs-base: 14px; /* 正文（默认） */
     --fs-lg: 16px;   /* 强调正文、区块小标题 */
     --fs-xl: 18px;   /* 三级标题 */
-    --fs-2xl: 20px;  /* 二级标题 / 首页 hero */
+    --fs-2xl: 20px;  /* 二级标题 */
     --fs-3xl: 24px;  /* 一级标题 */
     --fs-4xl: 30px;  /* 页面主标题 */
 
@@ -1896,37 +1896,6 @@ optgroup {
     margin: 0 auto;
 }
 
-/* 渐变主视觉（紧凑版：减小内边距，把更多空间留给功能磁贴） */
-.launcher-hero {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 14px 22px;
-    margin-bottom: 14px;
-    border-radius: 14px;
-    background: linear-gradient(120deg, var(--accent-blue) 0%, var(--accent-indigo) 52%, var(--accent-purple) 100%);
-    box-shadow: 0 6px 18px rgba(22, 119, 255, 0.22);
-    color: #fff;
-}
-
-.launcher-hero-text {
-    min-width: 0;
-}
-
-.launcher-hero-title {
-    font-size: var(--fs-xl);
-    font-weight: 600;
-    color: #fff;
-    margin: 0 0 2px;
-}
-
-.launcher-hero-subtitle {
-    font-size: var(--fs-sm);
-    color: rgba(255, 255, 255, 0.86);
-    margin: 0;
-}
-
 /* 布局配置（作为「设置 → 布局配置」功能页，见 #section-20） */
 .layout-panel-tip {
     margin: 0 0 10px;
@@ -2576,12 +2545,6 @@ optgroup {
 }
 
 @media (max-width: 768px) {
-    .launcher-hero {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 18px;
-    }
-
     .tile-grid {
         grid-template-columns: 1fr 1fr;
     }
@@ -2598,4 +2561,537 @@ optgroup {
     .tile-fav-btn {
         opacity: 1;
     }
+}
+
+/* ---------- Org Dashboard：Salesforce Limits 用量看板（#section-27） ---------- */
+
+.org-limits-loading {
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: var(--fs-sm);
+}
+
+.org-limits-loading .svg-icon {
+    font-size: var(--icon-md);
+    color: var(--primary-color);
+    margin-right: 6px;
+    vertical-align: -2px;
+}
+
+/* 顶部汇总卡片：4 个关键指标 */
+.org-limits-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.org-limit-card {
+    padding: 14px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-top: 3px solid var(--success-color);
+    border-radius: 12px;
+}
+
+.org-limit-card.is-warn {
+    border-top-color: var(--warning-color);
+    background: var(--warning-bg);
+}
+
+.org-limit-card.is-danger {
+    border-top-color: var(--error-color);
+    background: var(--error-bg);
+}
+
+.org-limit-card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.org-limit-card-title {
+    font-size: var(--fs-base);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.org-limit-card-pct {
+    font-size: var(--fs-xl);
+    font-weight: 700;
+    font-family: var(--font-mono);
+}
+
+.org-limit-card.is-ok .org-limit-card-pct {
+    color: var(--success-color);
+}
+
+.org-limit-card.is-warn .org-limit-card-pct {
+    color: var(--warning-color);
+}
+
+.org-limit-card.is-danger .org-limit-card-pct {
+    color: var(--error-color);
+}
+
+.org-limit-card-detail {
+    margin-top: 8px;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+}
+
+.org-limit-card-hint {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    color: var(--text-light);
+}
+
+/* 详情页汇总卡内的仪表盘（比首页面板的略大） */
+.org-limit-card .org-gauge-chart {
+    max-width: 168px;
+    height: 128px;
+    margin: 2px auto 0;
+}
+
+/* 进度条（卡片与列表共用） */
+.org-limit-bar {
+    display: block;
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.org-limit-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--success-color);
+    transition: width 0.4s ease;
+}
+
+.is-warn > .org-limit-bar > span,
+.org-limit-row.is-warn .org-limit-bar > span {
+    background: var(--warning-color);
+}
+
+.is-danger > .org-limit-bar > span,
+.org-limit-row.is-danger .org-limit-bar > span {
+    background: var(--error-color);
+}
+
+/* 搜索工具条 */
+.org-limits-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.org-limits-toolbar .ant-input {
+    max-width: 320px;
+    font-family: inherit;
+}
+
+.org-limits-updated {
+    font-size: var(--fs-xs);
+    color: var(--text-light);
+}
+
+/* 全量列表（分组 + 行） */
+.org-limit-group {
+    margin-bottom: 16px;
+}
+
+.org-limit-group-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.org-limit-group-count {
+    font-weight: 400;
+    color: var(--text-light);
+}
+
+.org-limit-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) 1fr 64px minmax(150px, auto);
+    align-items: center;
+    gap: 12px;
+    padding: 7px 12px;
+    border-left: 3px solid var(--success-color);
+    border-radius: 8px;
+    background: var(--bg-primary);
+}
+
+.org-limit-row + .org-limit-row {
+    margin-top: 4px;
+}
+
+.org-limit-row.is-warn {
+    border-left-color: var(--warning-color);
+    background: var(--warning-bg);
+}
+
+.org-limit-row.is-danger {
+    border-left-color: var(--error-color);
+    background: var(--error-bg);
+}
+
+.org-limit-name {
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.org-limit-row .org-limit-bar {
+    height: 6px;
+}
+
+.org-limit-pct {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    text-align: right;
+    color: var(--text-primary);
+}
+
+.org-limit-row.is-warn .org-limit-pct {
+    color: var(--warning-color);
+}
+
+.org-limit-row.is-danger .org-limit-pct {
+    color: var(--error-color);
+}
+
+.org-limit-count {
+    font-size: var(--fs-xs);
+    text-align: right;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .org-limits-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .org-limits-toolbar .ant-input {
+        max-width: none;
+    }
+
+    .org-limit-row {
+        grid-template-columns: 1fr 64px;
+        grid-template-areas:
+            "name pct"
+            "bar bar"
+            "count count";
+        row-gap: 4px;
+    }
+
+    .org-limit-name {
+        grid-area: name;
+    }
+
+    .org-limit-row .org-limit-bar {
+        grid-area: bar;
+    }
+
+    .org-limit-pct {
+        grid-area: pct;
+    }
+
+    .org-limit-count {
+        grid-area: count;
+        text-align: left;
+    }
+}
+
+/* ---------- 首页「Org 状态」面板（#org-dashboard-panel，功能中心顶部） ---------- */
+
+.org-dash-panel {
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+}
+
+.org-dash-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.org-dash-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-base);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.org-dash-title .svg-icon {
+    color: var(--accent-indigo);
+    font-size: var(--icon-md);
+}
+
+.org-dash-badge {
+    padding: 1px 9px;
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    color: var(--warning-color);
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: 999px;
+}
+
+.org-dash-badge.is-danger {
+    color: var(--error-color);
+    background: var(--error-bg);
+    border-color: var(--error-border);
+}
+
+.org-dash-more {
+    padding: 3px 10px;
+    font-size: var(--fs-xs);
+    color: var(--accent-indigo);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.org-dash-more:hover {
+    background: var(--accent-indigo-soft);
+    border-color: var(--accent-indigo);
+}
+
+/* 警示条：有指标进入警告/危险区间时显示 */
+.org-dash-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    font-size: var(--fs-sm);
+    color: var(--warning-color);
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: 10px;
+}
+
+.org-dash-alert.is-danger {
+    color: var(--error-color);
+    background: var(--error-bg);
+    border-color: var(--error-border);
+}
+
+.org-dash-alert .svg-icon {
+    flex-shrink: 0;
+    font-size: var(--fs-base);
+}
+
+.org-dash-alert-link {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: var(--fs-xs);
+    color: inherit;
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.org-dash-alert-link:hover {
+    opacity: 1;
+}
+
+/* 仪表盘卡网格（汽车仪表盘风格：半圆弧 gauge + 指针，SVG 由 org_limits.js 生成） */
+.org-dash-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+
+.org-dash-gauge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 12px 10px 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.org-dash-gauge:hover {
+    border-color: var(--border-color);
+    box-shadow: 0 2px 8px rgba(15, 35, 95, 0.08);
+}
+
+.org-dash-gauge.is-warn {
+    background: var(--warning-bg);
+}
+
+.org-dash-gauge.is-danger {
+    background: var(--error-bg);
+}
+
+/* gauge 图表容器（ECharts canvas，需固定高度；具体仪表盘由 biz/org_limits.js 渲染） */
+.org-gauge-chart {
+    width: 100%;
+    height: 104px;
+}
+
+.org-dash-gauge-name {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+    text-align: center;
+}
+
+.org-dash-gauge-value {
+    font-size: var(--fs-xl);
+    font-weight: 700;
+    font-family: var(--font-mono);
+    line-height: 1.15;
+    color: var(--success-color);
+}
+
+.org-dash-gauge.is-warn .org-dash-gauge-value {
+    color: var(--warning-color);
+}
+
+.org-dash-gauge.is-danger .org-dash-gauge-value {
+    color: var(--error-color);
+}
+
+.org-dash-gauge-count {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+/* 占位态（未连接 / 拉取中 / 失败） */
+.org-dash-placeholder {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 4px;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+}
+
+.org-dash-placeholder .svg-icon {
+    flex-shrink: 0;
+    font-size: var(--icon-md);
+    color: var(--text-light);
+}
+
+.org-dash-connect-btn {
+    margin-left: auto;
+    padding: 3px 12px;
+    font-size: var(--fs-xs);
+    color: var(--primary-color);
+    background: var(--primary-bg);
+    border: 1px solid var(--primary-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.org-dash-connect-btn:hover {
+    background: var(--primary-color);
+    color: var(--text-inverse);
+}
+
+@media (max-width: 768px) {
+    .org-dash-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .org-dash-placeholder {
+        flex-wrap: wrap;
+    }
+}
+
+/* ---------- 超额档（用量突破 100%，比危险档更醒目） ---------- */
+
+.org-dash-gauge.is-over {
+    background: var(--error-bg);
+    border-color: var(--error-border);
+}
+
+.org-dash-gauge.is-over .org-dash-gauge-value {
+    color: var(--error-strong);
+}
+
+/* 百分比后面的「超额」小标记 */
+.org-dash-gauge-value small {
+    margin-left: 4px;
+    padding: 0 5px;
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    vertical-align: 2px;
+    color: var(--error-strong);
+    background: var(--error-bg);
+    border: 1px solid var(--error-border);
+    border-radius: 4px;
+}
+
+.org-limit-card.is-over {
+    border-top-color: var(--error-strong);
+    background: var(--error-bg);
+}
+
+.org-limit-card.is-over .org-limit-card-pct {
+    color: var(--error-strong);
+}
+
+.org-limit-row.is-over {
+    border-left-color: var(--error-strong);
+    background: var(--error-bg);
+}
+
+.org-limit-row.is-over .org-limit-pct {
+    color: var(--error-strong);
+}
+
+/* 超额时进度条顶部再压一条更深的红线，视觉上"满出来了" */
+.org-limit-row.is-over .org-limit-bar > span {
+    background: var(--error-strong);
+    box-shadow: 0 0 0 1px var(--error-strong);
+}
+
+.org-dash-alert.is-over {
+    color: var(--error-strong);
+    background: var(--error-bg);
+    border-color: var(--error-strong);
+}
+
+.org-dash-badge.is-over {
+    color: var(--error-strong);
+    background: var(--error-bg);
+    border-color: var(--error-strong);
 }

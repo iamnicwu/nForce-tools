@@ -15,6 +15,8 @@ import { appState } from "./state.js";
 import { showSection } from "./ui.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
 import { replaceIcons } from "../common/icons.js";
+// 首页「Org 状态」面板：与首页一起渲染（连接成功后 renderLauncher 会被再次调用，面板随之刷新）
+import { refreshHomeDashboard } from "./org_limits.js";
 // 注意：不能用 `import DEFAULT_LAYOUT from "../rules/ui_layout.json"`，
 // 浏览器/扩展不支持 JSON 模块导入（会报 MIME 类型 application/json 的错误），
 // 直接运行 src/ 源码或不做打包时会导致整个 app.js 加载失败、首页空白。
@@ -31,7 +33,7 @@ const LAYOUT_SECTION = 20;
 
 // 需要连接 Salesforce 才能使用的功能
 const CONNECTION_REQUIRED_STEPS = new Set([
-  2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26
+  2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26, 27
 ]);
 
 // 配色表：tint 用于图标底色，accent 用于强调色，soft 用于磁贴悬浮底色。
@@ -78,15 +80,12 @@ function normalizeFavorites(raw) {
 }
 
 function normalizeLayout(raw) {
+  // hero 区块（渐变主视觉）已移除，布局里不再保留 hero 字段
   const layout = raw && typeof raw === "object" ? raw : {};
   const groups = Array.isArray(layout.groups) ? layout.groups : [];
   return {
     version: layout.version || 1,
     _readme: layout._readme,
-    hero: {
-      title: (layout.hero && layout.hero.title) || "功能中心",
-      subtitle: (layout.hero && layout.hero.subtitle) || "点击图标进入对应功能"
-    },
     favorites: normalizeFavorites(layout.favorites),
     groups: groups
       .filter((g) => g && Array.isArray(g.tiles) && g.tiles.length > 0)
@@ -424,11 +423,6 @@ export async function renderLauncher() {
   if (!currentLayout) return;
   buildTileIndex();
 
-  const heroTitle = document.getElementById("launcher-hero-title");
-  const heroSubtitle = document.getElementById("launcher-hero-subtitle");
-  if (heroTitle) heroTitle.textContent = currentLayout.hero.title;
-  if (heroSubtitle) heroSubtitle.textContent = currentLayout.hero.subtitle;
-
   const favoriteIds = effectiveFavoriteIds();
   const favoriteSet = new Set(favoriteIds);
 
@@ -441,6 +435,14 @@ export async function renderLauncher() {
   }
 
   replaceIcons();
+
+  // 首页「Org 状态」面板：未连接显示占位、已连接显示 Limits 摘要
+  // （放 replaceIcons 之后，面板内部会自己再调一次 replaceIcons）
+  try {
+    refreshHomeDashboard();
+  } catch (e) {
+    log.warn("渲染首页 Org 状态面板失败:", e);
+  }
 
   // 给自动化验证用：把当前状态挂到 DOM 上（对用户无副作用）
   const section = document.getElementById("launcher-view");
@@ -458,7 +460,6 @@ function layoutToJsonText(layout) {
   const clean = {
     _readme: layout._readme || "调整 groups[].tiles 顺序即可改变图标排列；想永久隐藏某个磁贴请把它的 id 写进 hidden 数组；favorites.ids 是「常用功能」的默认列表 —— 界面上的改动（卡片右下角 ☆ / 常用功能区「编辑」）会自动保存在本地，改这里只会影响恢复默认后的结果。",
     version: layout.version,
-    hero: layout.hero,
     favorites: {
       title: layout.favorites.title,
       max: layout.favorites.max,
