@@ -175,9 +175,36 @@ const GAUGE_TICK = "rgba(0, 0, 0, 0.25)";
 // 首页面板重建不能误伤详情页的实例（反之亦然）。
 const gaugeCharts = new Map(); // Element -> echarts 实例
 
+/**
+ * 容器尺寸变化 → 重算图表尺寸。
+ *
+ * 为什么只监听 window.resize 不够（2026-09-28 修）：ECharts 在 init 时把画布宽高
+ * **以像素写进内联样式**，这个固定宽度会成为 grid 轨道 min-content 的下限。
+ * 侧边栏被拖窄时，容器的 clientWidth 被画布自己撑住，于是 `chart.resize()` 读到的
+ * 永远是旧宽度 —— 实测 700px 拉窄到 300px 后画布恒为 278px、整页横向溢出 51px。
+ *
+ * ResizeObserver 监听的是**容器自身**：配 main.css 的 `min-width: 0`（卡片可收缩）
+ * 与 `overflow: hidden`（裁掉画布旧宽度），容器会先真正收缩，观察器随即触发，
+ * 画布这才按新宽度重画。
+ *
+ * 不会回环：容器尺寸由 CSS 固定（width:100% + 固定 height），chart.resize() 改的是
+ * 容器内部的 canvas，不影响容器自身尺寸。
+ */
+const gaugeObserver =
+  typeof ResizeObserver === "function"
+    ? new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const chart = gaugeCharts.get(entry.target);
+          if (!chart) continue;
+          try { chart.resize(); } catch (e) { /* ignore */ }
+        }
+      })
+    : null;
+
 function disposeGaugeCharts(scopeHost) {
   gaugeCharts.forEach((chart, el) => {
     if (scopeHost && !scopeHost.contains(el)) return; // 不在本次重建范围内，保留
+    if (gaugeObserver) gaugeObserver.unobserve(el);
     try { chart.dispose(); } catch (e) { /* ignore */ }
     gaugeCharts.delete(el);
   });
@@ -279,6 +306,8 @@ async function initGaugeCharts(host) {
       const chart = echarts.init(el);
       chart.setOption(gaugeOption(pct));
       gaugeCharts.set(el, chart);
+      // 窄栏（侧边栏）里容器宽度随后还会变：交给观察器在收缩/展开时重算
+      if (gaugeObserver) gaugeObserver.observe(el);
     } catch (e) {
       log.warn("初始化仪表盘失败:", e);
     }

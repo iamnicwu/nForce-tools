@@ -409,9 +409,12 @@ ${favoriteIds.map((id, i) => {
     ? `<p class="favorites-hint">拖动不了？用 <b>←</b> <b>→</b> 调整顺序，用 <b>×</b> 把功能移出常用。</p>`
     : "";
 
+  // 头部结构刻意与 groupHtml 的 .launcher-group-head 保持一致（同一套 chip 胶囊 +
+  // 右侧次要信息），这样「常用功能」和下面的功能分组在视觉上是同一类卡片。
+  // 见 main.css 的 .favorites-section 注释。
   return `<section class="favorites-section${favoritesEditing ? " is-editing" : ""}">
-                <div class="favorites-head">
-                    <span class="favorites-title"><i class="fas fa-star"></i>${escapeHtml(title)}</span>
+                <div class="launcher-group-head favorites-head">
+                    <span class="launcher-group-chip favorites-chip"><i class="fas fa-star"></i>${escapeHtml(title)}</span>
                     <span class="favorites-head-actions">${headActions}</span>
                 </div>
                 ${hint}

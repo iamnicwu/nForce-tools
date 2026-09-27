@@ -1226,6 +1226,64 @@ function run() {
             : `\n修法：删掉这些条目，或把路径改成真实位置（如 README.md → docs/README.md）`)
       );
     }
+    /* --- J2. 入口依赖的「初始 chunk」必须被 HTML 引用（2026-09-28 新增）------
+     *
+     * 起因（真实缺陷，已修）：webpack 的 `optimization.splitChunks.chunks = 'all'`
+     * 会把两个入口（app / login_app）的公共模块抽成一个独立的**初始** chunk
+     * （实测是 753.js，内容正是 common/logger.js、common/icons.js 这些被两边同时
+     * import 的模块）。而本项目**没有 html-webpack-plugin** —— index.html /
+     * login.html 是 CopyWebpackPlugin 逐字复制的手写 HTML，只引用各自的入口 bundle。
+     *
+     * 于是这个 chunk 永远不会被加载，而入口 bundle 的收尾是
+     *   `var a = o.O(void 0, [753], () => o(575))`
+     * webpack 的 startup 回调只有 `installedChunks[753] === 0` 时才跑 →
+     * **整个 app.js 一句都不执行**。表现极其误导：顶栏与 CSS 正常渲染、内容区
+     * 全空、图标全部未替换（unfixed=94），而 DevTools 里连一个报错都没有。
+     *
+     * 检测：从 dist 的入口 bundle 里抓 `o.O(void 0, [<ids>], …)` 这个形状
+     * （webpack 只在存在**初始** chunk 依赖时才生成它），再回查对应 HTML 是否引用。
+     * 异步 chunk 走 `o.e(...)` + JSONP 自动加载，不在检查范围内（也不该被引用）。
+     */
+    const DIST_DIR = path.join(ROOT, "dist");
+    const ENTRY_HTML = [
+      { bundle: "app.js", html: "index.html" },
+      { bundle: "login_app.js", html: "login.html" }
+    ];
+    const chunkIssues = [];
+    for (const { bundle, html } of ENTRY_HTML) {
+      const bundlePath = path.join(DIST_DIR, bundle);
+      const htmlPath = path.join(DIST_DIR, html);
+      // 没构建过就跳过：这条守卫只在 dist/ 已产出的前提下有意义
+      if (!exists(bundlePath) || !exists(htmlPath)) continue;
+      const code = read(bundlePath);
+      const htmlText = read(htmlPath);
+      const ids = new Set();
+      for (const m of code.matchAll(/\.O\(\s*(?:void 0|undefined)\s*,\s*\[([\d,\s]+)\]/g)) {
+        m[1].split(",").map((s) => s.trim()).filter(Boolean).forEach((x) => ids.add(x));
+      }
+      for (const id of ids) {
+        if (!exists(path.join(DIST_DIR, `${id}.js`))) continue;
+        if (new RegExp(`["'/]${id.replace(/\./g, "\\.")}\\.js["']`).test(htmlText)) continue;
+        chunkIssues.push({ bundle, html, file: `${id}.js` });
+      }
+    }
+    if (chunkIssues.length) {
+      add(
+        "ERROR",
+        "J. 页面资源",
+        `有 ${chunkIssues.length} 个 webpack「初始 chunk」没被 HTML 引用 → 对应入口整段不执行` +
+          `（页面只剩空壳、内容全空，且控制台无任何报错）`,
+        chunkIssues
+          .map(
+            (c) =>
+              `  dist/${c.bundle} 依赖 dist/${c.file}，但 dist/${c.html} 里没有 <script> 引用它`
+          )
+          .join("\n") +
+          `\n修法：webpack.config.js 的 optimization.splitChunks 必须是 { chunks: 'async' }` +
+          `\n      （不要改回 'all'，也不要往 HTML 里手写 <script src="753.js"> —— chunk 名由 webpack 内部 id 决定，跨构建会变）` +
+          `\n验证：重新构建后再跑 npm run check:ui，并确认 dist/index.html 能渲染出磁贴`
+      );
+    }
   } else {
     add("WARN", "J. 页面资源", "未找到 webpack.config.js，无法校验引用在 dist 中是否可达", "");
   }

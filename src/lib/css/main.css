@@ -34,10 +34,25 @@
 
     /* --- 背景 / 边框 --- */
     --bg-primary: #ffffff;
-    --bg-secondary: #edf1f7; /* 页面底色：轻蓝灰，避免全白单调 */
+    --bg-secondary: #edf1f7; /* 组件用的浅蓝灰底（导航按钮、进度条槽…），**不是**页面底色 */
     --bg-tertiary: #fafafa;  /* 卡片内浅底 */
     --border-color: #d9d9d9;
     --border-light: #f0f0f0;
+
+    /* --- 页面底色（2026-09-28 起）---
+       原来整页就是单一浅灰蓝，与纯白卡片之间几乎没有层次，一屏看下去发白、缺少
+       "这是一个数据工具"的体量感。改成「顶部略深 → 底部渐亮」的极淡冷调渐变：
+       卡片看起来是浮在页面上；底色始终浅到不会压住表格与图表的可读性。
+       只用在**页面级**容器（body / .admin-body），组件内部请继续用 --bg-secondary 等。 */
+    --bg-page-top: #dfe7f3;
+    --bg-page-mid: #e7ecf5;
+    --bg-page-bottom: #edf1f8;
+    --bg-page-gradient: linear-gradient(
+        180deg,
+        var(--bg-page-top) 0%,
+        var(--bg-page-mid) 45%,
+        var(--bg-page-bottom) 100%
+    );
 
     /* --- 强调色。原来同一套色板在 3 个地方各写了一遍：
            biz/ui_layout.js 的 group 色板、main.css 的 .theme-*、index.html 的 --row-accent。
@@ -158,7 +173,7 @@
 
 /* 基础样式重置 - 移除与 Ant Design 冲突的部分 */
 body {
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-page-mid);
     font-family: var(--font-sans);
     color: var(--text-primary);
     line-height: 1.5715;
@@ -179,7 +194,11 @@ optgroup {
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
-    background-color: var(--bg-secondary);
+    /* 页面底色画在这一层而不是 .page-content：本容器是 height:100vh + overflow:hidden，
+       所以渐变是**固定**的，内容滚动时不会把背景一起滚走（原来画在 .page-content 上，
+       长页面滚到底部时底色渐变就没了）。先写 background-color 兜底，再叠渐变。 */
+    background-color: var(--bg-page-mid);
+    background-image: var(--bg-page-gradient);
 }
 
 /* 主内容区 */
@@ -375,7 +394,14 @@ optgroup {
     flex: 1;
     padding: 24px;
     overflow-y: auto;
-    background-color: var(--bg-secondary);
+    /* 底色交给 .admin-body（见上），这里必须透明，否则渐变被盖住。
+       注意 overflow-x 的隐含行为：CSS 规范里只要 overflow-y 不是 visible，
+       overflow-x 的 visible 就会被计算成 auto —— 所以这一层天然是**可横向滚动**的。
+       内容一旦有一处顶出（例如 ECharts 画布的固定像素宽度撑住 grid 轨道），
+       整页就能被左右拖动。横向溢出属于 bug，用 clip 直接堵掉：
+       它不像 hidden 那样创建滚动容器，不会让内部元素误以为自己能横向滚。 */
+    overflow-x: clip;
+    background-color: transparent;
 }
 
 /* 数据展示页面容器 - 更宽 */
@@ -2194,21 +2220,35 @@ optgroup {
     }
 }
 
-/* 常用功能区 */
+/* 常用功能区（2026-09-28 起与下面的 .launcher-group **共用同一套外观**）
+   ----------------------------------------------------------------
+   原来常用功能区是一块独立的 indigo→purple 渐变卡（渐变底 + 14px 圆角 + 更大内边距），
+   与下面白底 + 左侧色条 + 12px 圆角的 .launcher-group 明显不是一类东西，
+   看起来像"从别的页面搬来的"。现在两者用完全相同的盒模型、底色、圆角与左侧色条，
+   只有两点差异，都靠 CSS 变量表达（不新增选择器分支）：
+     · 强调色固定 indigo —— 常用功能不隶属任何分组，用主题色里的"品牌"色
+     · 头部右侧放的是「编辑 / 完成 / 恢复默认」操作，而不是条目数 */
 .favorites-section {
-    margin-bottom: 20px;
-    padding: 16px 18px;
-    border-radius: 14px;
-    background: linear-gradient(135deg, var(--accent-indigo-soft) 0%, var(--accent-purple-soft) 100%);
-    border: 1px solid var(--accent-indigo-border-soft);
+    /* 复用 .launcher-group-chip 的内部变量，让标题芯片自动跟着变 */
+    --group-accent: var(--accent-indigo);
+    --group-tint: var(--accent-indigo-tint);
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-left: 3px solid var(--group-accent);
+    border-radius: 12px;
+    transition: box-shadow 0.2s;
 }
 
+/* 头部沿用 .launcher-group-head 的布局；.favorites-head 作为同义类保留，
+   因为 :root 的窄栏排版层（@media max-width:560px）按它做过折行声明 */
 .favorites-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .favorites-head-actions {
@@ -2217,19 +2257,20 @@ optgroup {
     gap: 8px;
 }
 
+/* 与 .launcher-group-count 对齐：同样是"右边的次要计数" */
 .fav-count {
     font-size: var(--fs-xs);
-    color: var(--text-secondary);
+    color: var(--text-light);
 }
 
 /* 常用功能区头部的「编辑 / 完成 / 恢复默认」按钮 */
 .fav-head-btn {
-    padding: 4px 12px;
+    padding: 2px 11px;
     font-size: var(--fs-xs);
     line-height: 1.5;
     color: var(--accent-indigo);
-    background: #fff;
-    border: 1px solid rgba(76, 91, 212, 0.3);
+    background: var(--bg-primary);
+    border: 1px solid var(--accent-indigo-border);
     border-radius: 999px;
     cursor: pointer;
     transition: background-color 0.2s, border-color 0.2s;
@@ -2241,19 +2282,19 @@ optgroup {
 }
 
 .fav-head-btn-primary {
-    color: #fff;
+    color: var(--text-inverse);
     background: var(--accent-indigo);
     border-color: var(--accent-indigo);
 }
 
 .fav-head-btn-primary:hover {
-    color: #fff;
+    color: var(--text-inverse);
     background: var(--accent-indigo-hover);
     border-color: var(--accent-indigo-hover);
 }
 
 .favorites-section.is-editing {
-    box-shadow: inset 0 0 0 2px rgba(76, 91, 212, 0.16);
+    box-shadow: inset 0 0 0 2px var(--accent-indigo-ring);
 }
 
 .favorites-hint {
@@ -2272,8 +2313,8 @@ optgroup {
     font-size: var(--fs-sm);
     color: var(--text-secondary);
     text-align: center;
-    background: rgba(255, 255, 255, 0.72);
-    border: 1px dashed rgba(76, 91, 212, 0.35);
+    background: var(--accent-indigo-tint);
+    border: 1px dashed var(--accent-indigo-border);
     border-radius: 12px;
 }
 
@@ -2282,23 +2323,12 @@ optgroup {
     font-size: var(--fs-lg);
 }
 
-.favorites-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: var(--fs-base);
-    font-weight: 600;
-    color: var(--accent-indigo);
-}
-
-.favorites-title i,
-.favorites-title .svg-icon {
+/* 常用功能标题：直接复用 .launcher-group-chip 的胶囊样式（结构见 biz/ui_layout.js），
+   只有星标保留金色 —— 它是"常用"这个语义的唯一记号。
+   注意 replaceIcons 会把 <i> 换成 <svg class="svg-icon"> 且丢掉自定义类，
+   所以这里必须用后代选择器而不是 .favorites-chip i */
+.favorites-chip .svg-icon {
     color: var(--warning-color);
-}
-
-.favorites-grid .tile {
-    border-color: rgba(76, 91, 212, 0.28);
-    box-shadow: 0 2px 8px rgba(76, 91, 212, 0.08);
 }
 
 /* 编辑态：磁贴不响应跳转，底部腾出位置放 ← → × */
@@ -2628,6 +2658,9 @@ optgroup {
     border: 1px solid var(--border-color);
     border-top: 3px solid var(--success-color);
     border-radius: 12px;
+    /* 见 .org-gauge-chart 上方注释：必须允许收缩，否则 ECharts 画布的固定像素宽度
+       会成为 grid 轨道 min-content 的下限，侧边栏拉窄后卡片缩不回来 */
+    min-width: 0;
 }
 
 .org-limit-card.is-warn {
@@ -2859,10 +2892,12 @@ optgroup {
 
 .org-dash-panel {
     padding: 14px 16px;
-    margin-bottom: 20px;
+    /* 与 .favorites-section / .launcher-group 统一为 12px：首页三块内容
+       （Org 状态 / 常用功能 / 功能分组）用同一条纵向节奏，堆叠起来才是整体的 */
+    margin-bottom: 12px;
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
-    border-radius: 14px;
+    border-radius: 12px;
 }
 
 .org-dash-head {
@@ -2978,6 +3013,8 @@ optgroup {
     border: 1px solid var(--border-light);
     border-radius: 12px;
     transition: border-color 0.2s, box-shadow 0.2s;
+    /* 见 .org-gauge-chart 上方注释 */
+    min-width: 0;
 }
 
 .org-dash-gauge:hover {
@@ -2993,10 +3030,24 @@ optgroup {
     background: var(--error-bg);
 }
 
-/* gauge 图表容器（ECharts canvas，需固定高度；具体仪表盘由 biz/org_limits.js 渲染） */
+/* gauge 图表容器（ECharts canvas，需固定高度；具体仪表盘由 biz/org_limits.js 渲染）
+   ------------------------------------------------------------------
+   ⚠️ 这里有一个踩过的坑，改动前务必读完：
+
+   ECharts 在 init 时把画布的宽高**以像素写进内联样式**，这个固定宽度会成为所在
+   grid / flex 项目 min-content 的下限。侧边栏被拖窄时（实测 700px → 300px）：
+     1. 画布仍是 278px → 卡片撑在 300px 缩不回来 → .page-content 横向溢出 51px（整页可左右拖）
+     2. chart.resize() 读的是**被自己撑大的**容器宽度 → 永远算回 278px，形成死循环
+   所以：
+     · 卡片（.org-dash-gauge / .org-limit-card）必须 min-width: 0，让轨道能真正收缩；
+     · 本容器 overflow: hidden，把收缩瞬间画布的旧宽度裁掉，别让它顶破卡片；
+     · org_limits.js 用 ResizeObserver 监听**本容器**（而不是只监听 window.resize）
+       来触发 chart.resize()，收缩后画布才会按新宽度重画。
+   ——缺任何一条，侧边栏里都会重现"仪表盘顶出 Org 状态分区 + 整页横向滚动"。 */
 .org-gauge-chart {
     width: 100%;
     height: 104px;
+    overflow: hidden;
 }
 
 .org-dash-gauge-name {
@@ -3194,6 +3245,11 @@ optgroup {
         min-height: 52px;
         padding: 6px 10px;
         column-gap: 8px;
+        /* 项目没有全局 box-sizing: border-box，不加这行 min-height 就形同虚设：
+           52(content) + 6+6(padding) = 64px，与宽屏的 height: 64px 一模一样，
+           紧凑模式白写了。加 border-box 后总高才是预期的 52px（侧边栏能省 12px）。
+           实测：改前 data-top-nav-height = 64，改后 = 52。 */
+        box-sizing: border-box;
     }
 
     .top-nav-left,

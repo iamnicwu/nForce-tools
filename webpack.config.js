@@ -123,15 +123,23 @@ module.exports = {
     hot: true
   },
   optimization: {
-    splitChunks: {
-      chunks: 'all',
-      cacheGroups: {
-        vendor: {
-          test: /[\\/]node_modules[\\/]/,
-          name: 'vendors',
-          chunks: 'all'
-        }
-      }
-    }
+    // ⚠️ 只允许拆分**异步** chunk（= webpack 的默认值）。不要改回 'all'。
+    //
+    // 2026-09-28 修：'all' 会把两个入口（app / login_app）的公共模块抽成一个**初始**
+    // 共享 chunk（实测名字是 753.js，内容正是 common/logger.js、icons.js 这些被两边
+    // 同时 import 的模块）。而本项目**没有 html-webpack-plugin** —— index.html /
+    // login.html 是 CopyWebpackPlugin 逐字复制的手写 HTML，只会引用各自入口。
+    //
+    // 后果不是"报错"，而是**静默不执行**：入口 bundle 的收尾是
+    //   var a = o.O(void 0, [753], () => o(575))
+    // webpack 的 startup 回调只有在 `installedChunks[753] === 0` 时才跑，而 753.js
+    // 从没被加载过 → 整个 app.js 一句都不执行。表现是：页面壳（顶栏/CSS）正常渲染，
+    // 内容区全空、图标全部未替换，**DevTools 里连一个报错都没有**。
+    // （留个回归验法：check-ui 的 J 组会检查「入口依赖的初始 chunk 是否被 HTML 引用」。）
+    //
+    // 代价：两个入口各自内联一份公共模块（实测 8.7KB），对本地扩展可忽略。
+    // 懒加载不受影响 —— 动态 import 的 chunk（cometd 等）是解析期生成的，
+    // 与 SplitChunksPlugin 无关，仍按需加载。
+    splitChunks: { chunks: 'async' }
   }
 };

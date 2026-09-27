@@ -6,11 +6,9 @@ build/
 dist/
 dist_backup_before_inspector_tools/
 
-# 打包快照
-src.zip
-src 3.3.zip
-src 4.1.zip
-src 4.1.3.zip
+# 打包快照（每个约 1MB）
+# 用通配符而不是逐个列名字：曾因只列了旧版本，`src 4.2.1.zip` 漏网成为未跟踪文件。
+src*.zip
 
 # ───────────────────────── 凭据（绝不入库） ─────────────────────────
 # 源码中禁止出现任何 token / secret；Graph Token 走 chrome.storage.local。
