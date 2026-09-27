@@ -26,6 +26,7 @@ import { appState } from "./state.js";
 import { showSection } from "./ui.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
 import { replaceIcons } from "../common/icons.js";
+import { ensureECharts } from "../common/lib_loader.js";
 
 const HOST_ID = "org-limits-content";
 // 首页「Org 状态」面板宿主
@@ -84,6 +85,9 @@ let lastFetchedAt = null;    // 拉取时间戳（毫秒）
 let loading = false;
 // session 就绪门闩：app.js 在 session 确认可用后调 markSessionReady() 打开
 let sessionReady = false;
+// 数据版本号：每次 lastLimits 被替换就 +1。
+// 首页面板用它算「渲染签名」，从而在磁贴/常用功能重渲染时不重建仪表盘。
+let limitsVersion = 0;
 
 // ---------- 工具 ----------
 
@@ -254,14 +258,21 @@ function gaugeOption(pct) {
  * 必须在 innerHTML 写入之后调用（此时 DOM 已存在且可见）。
  * 若容器宽度为 0（宿主处于 display:none，如连接成功后首页还隐藏着），
  * 实例仍会创建，等 nforce:home / resize 时统一 resize 补救。
+ *
+ * ECharts 现在是按需加载的（index.html 不再同步引入 1MB），因此本函数是异步的。
+ * 失败时降级为纯文字显示（卡片上的百分比/用量文本仍在），不影响功能可用性。
  */
-function initGaugeCharts(host) {
+async function initGaugeCharts(host) {
   if (!host) return;
-  if (typeof echarts === "undefined") {
-    log.warn("echarts 未加载（lib/js/echarts.min.js），仪表盘退化为纯文字显示");
+  try {
+    await ensureECharts();
+  } catch (error) {
+    log.warn("echarts 按需加载失败，仪表盘退化为纯文字显示:", error);
     return;
   }
   host.querySelectorAll(".org-gauge-chart").forEach((el) => {
+    // await 期间 host 可能已被重建，元素已脱离文档 → 跳过，避免给孤元素建实例
+    if (!host.contains(el)) return;
     const pct = parseFloat(el.getAttribute("data-pct"));
     if (!Number.isFinite(pct)) return;
     try {
@@ -339,24 +350,64 @@ function filteredItems(items) {
   );
 }
 
-function render() {
-  const host = document.getElementById(HOST_ID);
-  if (!host) return;
+// ---------- 详情页渲染（拆成 shell / summary / list 三段）----------
+//
+// 性能背景（2026-09-27 重构）：
+// 原实现是一个大 render()，搜索框的 input 事件直接调它 → 每敲一个键就
+// dispose 4 个 ECharts 实例 + 整个 host.innerHTML 重建 + 重新 init 4 个实例。
+// 输入 "storage"（7 次击键）= 7 次全量重建 + 28 次 init/dispose 配对。
+//
+// 现在：
+//   · shell（工具栏/搜索框）只建一次 —— 也顺带解决了"重建导致输入框丢焦点/光标跳位"
+//   · summary（4 个仪表盘）只在**数据变化**时重建
+//   · list（分组列表）在搜索时只重绘它自己
+//   · input 事件加 180ms debounce
 
-  if (!lastLimits) {
-    host.innerHTML = `<div class="kv-empty-state">
-                        <i class="fas fa-tachometer-alt"></i>
-                        <p>还没有 Limits 数据。</p>
-                        <p class="kv-empty-hint">点击右上角「刷新」从 Salesforce 拉取当前 Org 的限额用量。</p>
-                    </div>`;
-    replaceIcons();
-    return;
+const SEARCH_DEBOUNCE_MS = 180;
+let filterDebounceTimer = null;
+/** buildItems 的缓存：同一份 lastLimits 不必每次按键都重算 */
+let itemsCache = { source: null, items: null };
+
+function getItems() {
+  if (itemsCache.source !== lastLimits || !itemsCache.items) {
+    itemsCache = { source: lastLimits, items: buildItems(lastLimits) };
   }
+  return itemsCache.items;
+}
 
-  const items = buildItems(lastLimits);
-  const byKey = new Map(items.map((it) => [it.key, it]));
+/** 建立详情页骨架（只做一次；已存在则直接复用） */
+function ensureLimitsShell(host) {
+  if (host.querySelector("#org-limits-list")) return;
 
-  // 1) 顶部汇总卡片：固定四个关键指标（缺失的跳过）
+  const timeText = lastFetchedAt
+    ? `上次刷新：${new Date(lastFetchedAt).toLocaleString()}`
+    : "";
+
+  host.innerHTML = `
+                <div class="org-limits-summary" id="org-limits-summary"></div>
+                <div class="org-limits-toolbar">
+                    <input type="text" id="org-limits-filter" class="ant-input" placeholder="搜索限额名称，如 API / Storage / Email">
+                    <span class="org-limits-updated" id="org-limits-updated">${escapeHtml(timeText)}</span>
+                </div>
+                <div id="org-limits-list"></div>
+            `;
+
+  const filterInput = document.getElementById("org-limits-filter");
+  if (filterInput) {
+    filterInput.addEventListener("input", () => {
+      clearTimeout(filterDebounceTimer);
+      filterDebounceTimer = setTimeout(() => renderLimitsList(host), SEARCH_DEBOUNCE_MS);
+    });
+  }
+}
+
+/** 只重绘汇总卡 + 仪表盘（数据变化时调用） */
+function renderLimitsSummary(host) {
+  const summaryEl = host.querySelector("#org-limits-summary");
+  if (!summaryEl) return;
+
+  const byKey = new Map(getItems().map((it) => [it.key, it]));
+
   const keyCards = KEY_LIMITS
     .map((k) => {
       const hit = byKey.get(k.key);
@@ -365,8 +416,21 @@ function render() {
     .filter(Boolean)
     .join("\n");
 
-  // 2) 全量列表：按分组渲染（搜索过滤后）
+  // 重建 DOM 前先释放本宿主内的旧 gauge 实例
+  disposeGaugeCharts(summaryEl);
+  summaryEl.innerHTML = keyCards;
+  // 异步初始化（内部会确保 ECharts 已加载）
+  initGaugeCharts(summaryEl).catch((e) => log.warn("初始化仪表盘失败:", e));
+}
+
+/** 只重绘分组列表（搜索时调用） */
+function renderLimitsList(host) {
+  const listEl = host.querySelector("#org-limits-list");
+  if (!listEl) return;
+
+  const items = getItems();
   const rest = filteredItems(items.filter((it) => !it.keyLimit));
+
   const groupsHtml = LIMIT_GROUPS.map((g) => {
     const rows = rest.filter((it) => g.match(it.key));
     if (!rows.length) return "";
@@ -384,45 +448,50 @@ function render() {
                     </div>`
     : "";
 
-  const timeText = lastFetchedAt
+  listEl.innerHTML = rest.length
+    ? groupsHtml + othersHtml
+    : `<div class="kv-empty-state"><i class="fas fa-search"></i><p>没有匹配的限额</p></div>`;
+
+  replaceIcons(listEl);
+}
+
+/** 更新时间戳文案 */
+function renderLimitsUpdated(host) {
+  const el = host.querySelector("#org-limits-updated");
+  if (!el) return;
+  el.textContent = lastFetchedAt
     ? `上次刷新：${new Date(lastFetchedAt).toLocaleString()}`
     : "";
+}
 
-  // 重建 DOM 前先记住搜索词与焦点状态（重建后要还原，否则每敲一个字就丢焦点）
-  const prevInput = document.getElementById("org-limits-filter");
-  const prevQuery = prevInput ? prevInput.value : "";
-  const prevFocused = prevInput && document.activeElement === prevInput;
+function render() {
+  const host = document.getElementById(HOST_ID);
+  if (!host) return;
 
-  // 详情页与首页面板的 gauge 共享实例表：只释放本宿主内的旧实例
-  disposeGaugeCharts(host);
-  host.innerHTML = `
-                <div class="org-limits-summary">${keyCards}</div>
-                <div class="org-limits-toolbar">
-                    <input type="text" id="org-limits-filter" class="ant-input" placeholder="搜索限额名称，如 API / Storage / Email">
-                    <span class="org-limits-updated">${escapeHtml(timeText)}</span>
-                </div>
-                ${rest.length ? groupsHtml + othersHtml : `<div class="kv-empty-state"><i class="fas fa-search"></i><p>没有匹配的限额</p></div>`}
-            `;
-
-  // 搜索框：输入即按缓存数据重新渲染
-  const filterInput = document.getElementById("org-limits-filter");
-  if (filterInput) {
-    filterInput.value = prevQuery;
-    if (prevFocused) filterInput.focus();
-    // 把光标放到末尾，避免重新渲染后跳到开头
-    try { filterInput.setSelectionRange(prevQuery.length, prevQuery.length); } catch (e) { /* ignore */ }
-    filterInput.addEventListener("input", () => render());
+  if (!lastLimits) {
+    // 无数据：清掉骨架，避免残留的旧内容
+    disposeGaugeCharts(host);
+    host.innerHTML = `<div class="kv-empty-state">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <p>还没有 Limits 数据。</p>
+                        <p class="kv-empty-hint">点击右上角「刷新」从 Salesforce 拉取当前 Org 的限额用量。</p>
+                    </div>`;
+    replaceIcons();
+    return;
   }
 
-  // DOM 就绪后初始化汇总卡仪表盘
-  initGaugeCharts(host);
+  ensureLimitsShell(host);
+  renderLimitsUpdated(host);
+  renderLimitsSummary(host);
+  renderLimitsList(host);
 
   // 给自动化验证用：把当前状态挂到 DOM 上（对用户无副作用）
+  const items = getItems();
   const section = document.getElementById("section-27");
   if (section) {
     section.dataset.limitsLoaded = "true";
     section.dataset.limitsCount = String(items.length);
-    const api = byKey.get("DailyApiRequests");
+    const api = items.find((it) => it.key === "DailyApiRequests");
     if (api) section.dataset.apiPct = api.entry.pct.toFixed(1);
   }
 
@@ -453,6 +522,25 @@ function panelShell(inner, titleExtra = "") {
                 </section>`;
 }
 
+/**
+ * 首页面板的渲染签名。
+ *
+ * 性能背景：renderLauncher() 会在**很多**时机被调用（恢复会话 / 监听 storage 变化 /
+ * 增删常用功能 / 应用布局配置…），而它内部会调 refreshHomeDashboard()。
+ * 原实现每次都会 dispose + 重建 4 个 ECharts 实例 —— 表现是「在首页点一下 ☆ 加入
+ * 常用功能，4 个仪表盘就重建一遍」，点 8 次就是 32 次实例创建/销毁。
+ *
+ * 现在先算签名，签名没变就直接跳过重建（DOM 与图表实例都保持原样）。
+ */
+let panelSignature = null;
+
+function computePanelSignature() {
+  if (!appState.is_connected) return "disconnected";
+  if (!sessionReady) return "waiting";
+  if (!lastLimits) return "loading";
+  return `data:${lastFetchedAt || 0}:${limitsVersion}`;
+}
+
 /** 用缓存数据渲染首页面板（无数据时渲染占位态） */
 function renderHomePanel() {
   const host = document.getElementById(HOME_HOST_ID);
@@ -460,12 +548,21 @@ function renderHomePanel() {
 
   bindHomePanelEvents(host);
 
+  // 签名未变且已经渲染过 → 直接复用现有 DOM（保住 ECharts 实例）
+  const signature = computePanelSignature();
+  if (host.dataset.panelRendered === signature) return;
+
+  // 任何分支真正重建 DOM 时，都要先释放本宿主内的旧 gauge 实例
+  const cleanupGauges = () => disposeGaugeCharts(host);
+
   if (!appState.is_connected) {
+    cleanupGauges();
     host.innerHTML = panelShell(`<div class="org-dash-placeholder">
                         <i class="fas fa-plug"></i>
                         <span>连接 Salesforce 后，此处显示 Org 限额用量（API 请求 / 存储 / …）</span>
                         <button type="button" class="org-dash-connect-btn" data-action="goto-connect">去连接</button>
                     </div>`);
+    host.dataset.panelRendered = signature;
     replaceIcons();
     return;
   }
@@ -473,19 +570,23 @@ function renderHomePanel() {
   // session 尚未确认（启动校验 / Cookie 续期 / 手动连接还没完成）：
   // 只显示等待态，绝不能在此阶段发起 limits 请求
   if (!sessionReady) {
+    cleanupGauges();
     host.innerHTML = panelShell(`<div class="org-dash-placeholder">
                         <i class="fas fa-key"></i>
                         <span>正在确认 Salesforce 会话，确认后自动获取 Org 限额用量...</span>
                     </div>`);
+    host.dataset.panelRendered = signature;
     replaceIcons();
     return;
   }
 
   if (!lastLimits) {
+    cleanupGauges();
     host.innerHTML = panelShell(`<div class="org-dash-placeholder">
                         <i class="fas fa-spinner fa-spin"></i>
                         <span>正在获取 Org 限额用量...</span>
                     </div>`);
+    host.dataset.panelRendered = signature;
     replaceIcons();
     return;
   }
@@ -519,9 +620,10 @@ function renderHomePanel() {
   }
 
   // 只释放首页面板内的旧实例（详情页的实例不受影响）
-  disposeGaugeCharts(host);
+  cleanupGauges();
   host.innerHTML = panelShell(`${alertHtml}<div class="org-dash-grid">${metrics}</div>`, "");
-  initGaugeCharts(host);
+  // 异步初始化（内部会确保 ECharts 已加载）
+  initGaugeCharts(host).catch((e) => log.warn("初始化首页仪表盘失败:", e));
   if (overs || dangers || warns) {
     // 标题旁的计数徽标
     const title = host.querySelector(".org-dash-title");
@@ -540,6 +642,7 @@ function renderHomePanel() {
   }
 
   // 给自动化验证用（对用户无副作用）
+  host.dataset.panelRendered = signature;
   host.dataset.panelLoaded = "true";
   host.dataset.panelMetrics = String(KEY_LIMITS.filter((k) => byKey.has(k.key)).length);
   const api = byKey.get("DailyApiRequests");
@@ -620,6 +723,8 @@ async function fetchLimits(force = false) {
   if (result.success) {
     lastLimits = result.limits;
     lastFetchedAt = Date.now();
+    limitsVersion++;              // 数据变了 → 首页面板的渲染签名随之变化
+    itemsCache = { source: null, items: null };
     log.info(`Org Limits 获取成功，共 ${Object.keys(lastLimits).length} 项`);
     render();
     renderHomePanel();
@@ -636,11 +741,15 @@ async function fetchLimits(force = false) {
     // 首页面板给出轻量失败态（不弹通知，避免打扰首页）
     const homeHost = document.getElementById(HOME_HOST_ID);
     if (homeHost && appState.is_connected) {
+      disposeGaugeCharts(homeHost);
       homeHost.innerHTML = panelShell(`<div class="org-dash-placeholder">
                             <i class="fas fa-exclamation-triangle"></i>
                             <span>获取 Org 限额失败：${escapeHtml(result.error || "未知错误")}</span>
                             <button type="button" class="org-dash-connect-btn" data-action="open-detail">查看详情</button>
                         </div>`);
+      // 这里是绕过 renderHomePanel 直接写的 DOM，必须清掉签名，
+      // 否则下次 renderHomePanel 会以为面板还是旧内容而跳过重建
+      delete homeHost.dataset.panelRendered;
       replaceIcons();
     }
     showNotification("获取 Org Limits 失败：" + (result.error || "未知错误"), "error");
@@ -657,7 +766,7 @@ export function initOrgDashboard() {
   fetchLimits(false);
 }
 
-/** 供外部（如控制台调试）强制刷新 */
-export function loadOrgLimits() {
-  return fetchLimits(true);
-}
+// 已删除 loadOrgLimits()：它只是 fetchLimits(true) 的透传包装，全项目无引用。
+// 控制台需要强制刷新时，直接点 section-27 的「刷新」按钮，或用
+//   document.getElementById("org-limits-refresh-btn").click()
+// 避免再维护一个永远不会被调用的导出。

@@ -5,9 +5,7 @@ import { appState } from "./state.js";
 import { Icons } from "../common/icons.js";
 import { renderTable } from "../common/table_utils.js";
 import { showNotification, parseMarkdown, escapeHtml } from "../common/utils.js";
-import {
-    DEFAULT_LUNCH_PLACES
-} from "./ui_config.js";
+import { ensureECharts } from "../common/lib_loader.js";
 
 // 更新午餐 UI 状态
 export function updateLunchUIState() {
@@ -67,17 +65,7 @@ function renderLunchList() {
   });
 }
 
-// 全局Handsontable实例
-let dailyDataHot = null;
-let pcdDailyDataHot = null;
-let pcdPidFalloutDataHot = null;
-let pcdQCIssueDataHot = null;
-let reportDataHot = null;
-let t2DataHot = null;
-let t2AnalysisDataHot = null;
-let latestDataHot = null;
-let vvipDataHot = null;
-let analysisDataHot = null;
+// 图表实例（ECharts）
 let analysisChart = null;
 let analysisBarChart = null;
 let t2AnalysisChartStatus = null;
@@ -91,8 +79,9 @@ let t2AnalysisResizeListener = null;
 export function showSection(sectionNumber) {
   log.debug(`showSection called with sectionNumber=${sectionNumber}, is_connected=${appState.is_connected}`);
 
-  // 未连接时仅允许访问连接设置(1)、版本信息(6)、布局配置(20)与设置(21)
-  if (!appState.is_connected && ![1, 6, 20, 21].includes(sectionNumber)) {
+  // 未连接时仅允许访问连接设置(1)、版本信息(6)、午餐(14)、布局配置(20)与设置(21)
+  // 14（中午食乜）是纯本地功能，因此在白名单里，对应磁贴也声明了 requiresConnection: false
+  if (!appState.is_connected && ![1, 6, 14, 20, 21].includes(sectionNumber)) {
     log.debug(`Section ${sectionNumber} requires connection`);
     showNotification("请先完成 Salesforce 连接", "warning");
     showSection(1);
@@ -113,6 +102,16 @@ export function showSection(sectionNumber) {
   // 懒加载：LTS Summary
   if (sectionNumber === 5 && !appState.lts_summary_loaded) {
     loadLTSSummary();
+  }
+
+  // 懒加载：Bulk 操作（section-15）——首次进入拉一次"正在运行的 Job"列表，
+  // 之后由列表右上角的「刷新」按钮驱动（loadBulkJobsOnce 内部有一次性门闩）
+  if (sectionNumber === 15) {
+    import('./logic.js').then((logicModule) => {
+      if (logicModule.loadBulkJobsOnce) {
+        logicModule.loadBulkJobsOnce();
+      }
+    });
   }
 
   // 懒加载：Schedule Jobs 列表
@@ -247,19 +246,65 @@ function refreshSectionLocks() {
 }
 
 // 更新UI状态
+/**
+ * 「有数据 && 已连接」这类重复块共用的渲染逻辑。
+ *
+ * 背景：updateUIState() 原本逐块手写了 12 组结构完全相同的判断
+ *   （其中 has_t2_analysis_file 那一组被复制粘贴了两遍），
+ *   合计 260+ 行、52 次 getElementById。任何一处漏写分支，
+ *   表现都是「明明连上了、按钮却不出现」这类很难定位的故障。
+ *
+ * 语义（与原实现逐字对齐）：
+ *   - flag && 已连接  → 徽标显示为 ant-tag-success，附加元素显示为 inline-block，操作区显示为 block
+ *   - 未连接          → 上述全部隐藏
+ *   - 已连接但无数据  → 保持不动（不隐藏，避免把已有内容抹掉）
+ *
+ * @param {boolean} flag - 对应数据是否就绪
+ * @param {string|null} badgeId - 徽标元素 id（会带上 ant-tag-success 类）
+ * @param {string|null} actionsId - 操作区容器 id（显示值固定为 block）
+ * @param {string[]} elementIds - 其余需要同步显隐的元素 id（显示值 inline-block）
+ */
+function syncDataBlock({ flag, badgeId = null, actionsId = null, elementIds = [] }) {
+  const connected = appState.is_connected;
+
+  if (flag && connected) {
+    if (badgeId) {
+      const badge = document.getElementById(badgeId);
+      if (badge) {
+        badge.style.display = "inline-block";
+        badge.className = "ant-tag ant-tag-success";
+      }
+    }
+    for (const id of elementIds) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "inline-block";
+    }
+    if (actionsId) {
+      const actions = document.getElementById(actionsId);
+      if (actions) actions.style.display = "block";
+    }
+  } else if (!connected) {
+    for (const id of [badgeId, ...elementIds, actionsId]) {
+      if (!id) continue;
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    }
+  }
+}
+
 export function updateUIState() {
-  // 更新Session ID状态
+  // ---- 1. Session ID ----
   if (appState.session_id) {
     const sessionIdInput = document.getElementById("session_id");
     if (sessionIdInput) {
       sessionIdInput.value = appState.session_id;
     }
-    
+
     const sessionIdSuccess = document.getElementById("session-id-success");
     if (sessionIdSuccess) {
       sessionIdSuccess.style.display = "flex";
     }
-    
+
     const sessionIdBadge = document.getElementById("session-id-badge");
     if (sessionIdBadge) {
       sessionIdBadge.style.display = "inline-block";
@@ -267,359 +312,106 @@ export function updateUIState() {
     }
   }
 
-  // 更新连接状态
+  // ---- 2. 连接状态 ----
   if (appState.is_connected) {
     const connectionSuccess = document.getElementById("connection-success");
     if (connectionSuccess) {
       connectionSuccess.style.display = "flex";
     }
-    
-    // 更新连接状态徽章
+
     const connectionStatusBadge = document.getElementById("connection-status-badge");
     if (connectionStatusBadge) {
       connectionStatusBadge.textContent = "已连接";
       connectionStatusBadge.className = "ant-tag ant-tag-success";
     }
-    
-    // 更新统计数据
-    updateStats();
 
-    // 连接成功后，解锁所有功能section
-    refreshSectionLocks();
+    // 更新统计卡片数据
+    updateStats();
   } else {
-    // 未连接时，更新连接状态徽章为未连接
     const connectionStatusBadge = document.getElementById("connection-status-badge");
     if (connectionStatusBadge) {
       connectionStatusBadge.textContent = "未连接";
       connectionStatusBadge.className = "ant-tag";
     }
+  }
+  // 连接状态变化后统一刷新各 section 的锁定态
+  // （原实现在两个分支里各调一次，属于同一件事，这里只调一次）
+  refreshSectionLocks();
 
-    // 未连接时，锁定所有功能section
-    refreshSectionLocks();
+  // ---- 3. 各功能的数据就绪状态（同一套结构，用表驱动避免再次抄写） ----
+  const dataBlocks = [
+    { flag: appState.has_daily_data,            badgeId: "daily-data-badge",            actionsId: "daily-data-actions" },
+    { flag: appState.has_pcd_daily_data,        badgeId: "pcd-daily-data-badge",        actionsId: "pcd-daily-data-actions" },
+    { flag: appState.has_pcd_pid_fallout_data,  badgeId: "pcd-pid-fallout-data-badge",  actionsId: "pcd-pid-fallout-data-actions" },
+    { flag: appState.has_pcd_qc_issue_data,     badgeId: "pcd-qc-issue-data-badge",     actionsId: "pcd-qc-issue-data-actions" },
+    { flag: appState.has_report_data,           badgeId: "report-data-badge",           actionsId: "report-data-actions" },
+    { flag: appState.has_t2_data,               badgeId: "t2-data-badge",               actionsId: "t2-data-actions" },
+    // T-4 分析结果：只有导出按钮，没有徽标/操作区
+    { flag: appState.t2_analysis_data,          elementIds: ["export-t2-analysis-data"] },
+    // T-4 分析文件：徽标 + 「开始分析」按钮
+    { flag: appState.has_t2_analysis_file,      badgeId: "t2-analysis-file-upload-badge", elementIds: ["analyze-t2-data-btn"] },
+    // 当日数据文件：徽标 + 「显示最新数据」按钮
+    { flag: appState.has_file,                  badgeId: "file-upload-badge",           elementIds: ["get-latest-data-btn"] },
+    // VVIP 文件：只有「获取VVIP数据」按钮
+    { flag: appState.has_vvip_file,             elementIds: ["get-vvip-data-btn"] },
+    // 数据分析文件：徽标 + 「开始分析」+ 「导出」
+    { flag: appState.has_analysis_file,         badgeId: "analysis-file-upload-badge",  elementIds: ["analyze-data-btn", "export-analysis-data"] }
+  ];
+  for (const block of dataBlocks) {
+    syncDataBlock(block);
   }
 
-  // 更新当日数据状态
-  if (appState.has_daily_data && appState.is_connected) {
-    const dailyDataBadge = document.getElementById("daily-data-badge");
-    if (dailyDataBadge) {
-      dailyDataBadge.style.display = "inline-block";
-      dailyDataBadge.className = "ant-tag ant-tag-success";
-    }
-    
-    // 显示导出按钮区域
-    const dailyDataActions = document.getElementById("daily-data-actions");
-    if (dailyDataActions) {
-      dailyDataActions.style.display = "block";
-    }
-  } else if (!appState.is_connected) {
-    const dailyDataBadge = document.getElementById("daily-data-badge");
-    if (dailyDataBadge) {
-      dailyDataBadge.style.display = "none";
-    }
-    
-    const dailyDataActions = document.getElementById("daily-data-actions");
-    if (dailyDataActions) {
-      dailyDataActions.style.display = "none";
-    }
-  }
-
-  // 更新 PCD 当日数据状态
-  if (appState.has_pcd_daily_data && appState.is_connected) {
-    const pcdDailyDataBadge = document.getElementById("pcd-daily-data-badge");
-    if (pcdDailyDataBadge) {
-      pcdDailyDataBadge.style.display = "inline-block";
-      pcdDailyDataBadge.className = "ant-tag ant-tag-success";
-    }
-    
-    // 显示导出按钮区域
-    const pcdDailyDataActions = document.getElementById("pcd-daily-data-actions");
-    if (pcdDailyDataActions) {
-      pcdDailyDataActions.style.display = "block";
-    }
-  } else if (!appState.is_connected) {
-    const pcdDailyDataBadge = document.getElementById("pcd-daily-data-badge");
-    if (pcdDailyDataBadge) {
-      pcdDailyDataBadge.style.display = "none";
-    }
-    
-    const pcdDailyDataActions = document.getElementById("pcd-daily-data-actions");
-    if (pcdDailyDataActions) {
-      pcdDailyDataActions.style.display = "none";
-    }
-  }
-
-  // 更新 PCD PID Fallout 数据状态
-  if (appState.has_pcd_pid_fallout_data && appState.is_connected) {
-    const pcdPidFalloutDataBadge = document.getElementById("pcd-pid-fallout-data-badge");
-    if (pcdPidFalloutDataBadge) {
-      pcdPidFalloutDataBadge.style.display = "inline-block";
-      pcdPidFalloutDataBadge.className = "ant-tag ant-tag-success";
-    }
-    
-    // 显示导出按钮区域
-    const pcdPidFalloutDataActions = document.getElementById("pcd-pid-fallout-data-actions");
-    if (pcdPidFalloutDataActions) {
-      pcdPidFalloutDataActions.style.display = "block";
-    }
-  } else if (!appState.is_connected) {
-    const pcdPidFalloutDataBadge = document.getElementById("pcd-pid-fallout-data-badge");
-    if (pcdPidFalloutDataBadge) {
-      pcdPidFalloutDataBadge.style.display = "none";
-    }
-    
-    const pcdPidFalloutDataActions = document.getElementById("pcd-pid-fallout-data-actions");
-    if (pcdPidFalloutDataActions) {
-      pcdPidFalloutDataActions.style.display = "none";
-    }
-  }
-
-  // 更新 PCD QC Issue 数据状态
-  if (appState.has_pcd_qc_issue_data && appState.is_connected) {
-    const pcdQCIssueDataBadge = document.getElementById("pcd-qc-issue-data-badge");
-    if (pcdQCIssueDataBadge) {
-      pcdQCIssueDataBadge.style.display = "inline-block";
-      pcdQCIssueDataBadge.className = "ant-tag ant-tag-success";
-    }
-    
-    // 显示导出按钮区域
-    const pcdQCIssueDataActions = document.getElementById("pcd-qc-issue-data-actions");
-    if (pcdQCIssueDataActions) {
-      pcdQCIssueDataActions.style.display = "block";
-    }
-  } else if (!appState.is_connected) {
-    const pcdQCIssueDataBadge = document.getElementById("pcd-qc-issue-data-badge");
-    if (pcdQCIssueDataBadge) {
-      pcdQCIssueDataBadge.style.display = "none";
-    }
-    
-    const pcdQCIssueDataActions = document.getElementById("pcd-qc-issue-data-actions");
-    if (pcdQCIssueDataActions) {
-      pcdQCIssueDataActions.style.display = "none";
-    }
-  }
-
-  // 更新报表数据状态
-  if (appState.has_report_data && appState.is_connected) {
-    const reportDataBadge = document.getElementById("report-data-badge");
-    if (reportDataBadge) {
-      reportDataBadge.style.display = "inline-block";
-      reportDataBadge.className = "ant-tag ant-tag-success";
-    }
-    
-    // 显示导出按钮区域
-    const reportDataActions = document.getElementById("report-data-actions");
-    if (reportDataActions) {
-      reportDataActions.style.display = "block";
-    }
-  } else if (!appState.is_connected) {
-    const reportDataBadge = document.getElementById("report-data-badge");
-    if (reportDataBadge) {
-      reportDataBadge.style.display = "none";
-    }
-    
-    const reportDataActions = document.getElementById("report-data-actions");
-    if (reportDataActions) {
-      reportDataActions.style.display = "none";
-    }
-  }
-
-  // 更新T-4数据状态
-  if (appState.has_t2_data && appState.is_connected) {
-    const t2DataBadge = document.getElementById("t2-data-badge");
-    if (t2DataBadge) {
-      t2DataBadge.style.display = "inline-block";
-      t2DataBadge.className = "ant-tag ant-tag-success";
-    }
-    
-    // 显示导出按钮区域
-    const t2DataActions = document.getElementById("t2-data-actions");
-    if (t2DataActions) {
-      t2DataActions.style.display = "block";
-    }
-  } else if (!appState.is_connected) {
-    const t2DataBadge = document.getElementById("t2-data-badge");
-    if (t2DataBadge) {
-      t2DataBadge.style.display = "none";
-    }
-    
-    const t2DataActions = document.getElementById("t2-data-actions");
-    if (t2DataActions) {
-      t2DataActions.style.display = "none";
-    }
-  }
-
-  // 更新T-4分析状态
-  if (appState.t2_analysis_data && appState.is_connected) {
-    // 显示导出按钮
-    const exportT2AnalysisBtn = document.getElementById("export-t2-analysis-data");
-    if (exportT2AnalysisBtn) {
-      exportT2AnalysisBtn.style.display = "inline-block";
-    }
-  } else if (!appState.is_connected) {
-    const exportT2AnalysisBtn = document.getElementById("export-t2-analysis-data");
-    if (exportT2AnalysisBtn) {
-      exportT2AnalysisBtn.style.display = "none";
-    }
-  }
-
-  // 更新T-4分析文件上传状态
-  if (appState.has_t2_analysis_file && appState.is_connected) {
-    const t2AnalysisFileUploadBadge = document.getElementById("t2-analysis-file-upload-badge");
-    if (t2AnalysisFileUploadBadge) {
-      t2AnalysisFileUploadBadge.style.display = "inline-block";
-      t2AnalysisFileUploadBadge.className = "ant-tag ant-tag-success";
-    }
-
-    // 显示"开始分析"按钮
-    const analyzeT2DataBtn = document.getElementById("analyze-t2-data-btn");
-    if (analyzeT2DataBtn) {
-      analyzeT2DataBtn.style.display = "inline-block";
-    }
-  } else if (!appState.is_connected) {
-    const t2AnalysisFileUploadBadge = document.getElementById("t2-analysis-file-upload-badge");
-    if (t2AnalysisFileUploadBadge) {
-      t2AnalysisFileUploadBadge.style.display = "none";
-    }
-
-    // 隐藏"开始分析"按钮
-    const analyzeT2DataBtn = document.getElementById("analyze-t2-data-btn");
-    if (analyzeT2DataBtn) {
-      analyzeT2DataBtn.style.display = "none";
-    }
-  }
-
-  // 更新文件上传状态
-  if (appState.has_file && appState.is_connected) {
-    const fileUploadBadge = document.getElementById("file-upload-badge");
-    if (fileUploadBadge) {
-      fileUploadBadge.style.display = "inline-block";
-      fileUploadBadge.className = "ant-tag ant-tag-success";
-    }
-
-    // 显示"显示最新数据"按钮
-    const getLatestDataBtn = document.getElementById("get-latest-data-btn");
-    if (getLatestDataBtn) {
-      getLatestDataBtn.style.display = "inline-block";
-    }
-  } else if (!appState.is_connected) {
-    const fileUploadBadge = document.getElementById("file-upload-badge");
-    if (fileUploadBadge) {
-      fileUploadBadge.style.display = "none";
-    }
-
-    // 隐藏"显示最新数据"按钮
-    const getLatestDataBtn = document.getElementById("get-latest-data-btn");
-    if (getLatestDataBtn) {
-      getLatestDataBtn.style.display = "none";
-    }
-  }
-
-  // 更新VVIP文件上传状态
-  if (appState.has_vvip_file && appState.is_connected) {
-
-    // 显示"获取 PCD/LTS 状态"按钮
-    const getVVIPDataBtn = document.getElementById("get-vvip-data-btn");
-    if (getVVIPDataBtn) {
-      getVVIPDataBtn.style.display = "inline-block";
-    }
-  } else if (!appState.is_connected) {
-    
-    // 隐藏"获取 PCD/LTS 状态"按钮
-    const getVVIPDataBtn = document.getElementById("get-vvip-data-btn");
-    if (getVVIPDataBtn) {
-      getVVIPDataBtn.style.display = "none";
-    }
-  }
-
-  // 更新T-4分析文件上传状态
-  if (appState.has_t2_analysis_file && appState.is_connected) {
-    const t2AnalysisFileUploadBadge = document.getElementById("t2-analysis-file-upload-badge");
-    if (t2AnalysisFileUploadBadge) {
-      t2AnalysisFileUploadBadge.style.display = "inline-block";
-      t2AnalysisFileUploadBadge.className = "ant-tag ant-tag-success";
-    }
-
-    // 显示"开始分析"按钮
-    const analyzeT2DataBtn = document.getElementById("analyze-t2-data-btn");
-    if (analyzeT2DataBtn) {
-      analyzeT2DataBtn.style.display = "inline-block";
-    }
-  } else if (!appState.is_connected) {
-    const t2AnalysisFileUploadBadge = document.getElementById("t2-analysis-file-upload-badge");
-    if (t2AnalysisFileUploadBadge) {
-      t2AnalysisFileUploadBadge.style.display = "none";
-    }
-
-    // 隐藏"开始分析"按钮
-    const analyzeT2DataBtn = document.getElementById("analyze-t2-data-btn");
-    if (analyzeT2DataBtn) {
-      analyzeT2DataBtn.style.display = "none";
-    }
-  }
-
-  // 更新数据分析文件上传状态
-  if (appState.has_analysis_file && appState.is_connected) {
-    const analysisFileUploadBadge = document.getElementById("analysis-file-upload-badge");
-    if (analysisFileUploadBadge) {
-      analysisFileUploadBadge.style.display = "inline-block";
-      analysisFileUploadBadge.className = "ant-tag ant-tag-success";
-    }
-
-    // 显示"开始分析"按钮 (虽然目前只是显示数据)
-    const analyzeDataBtn = document.getElementById("analyze-data-btn");
-    if (analyzeDataBtn) {
-      analyzeDataBtn.style.display = "inline-block";
-    }
-    
-    // 显示导出按钮
-    const exportAnalysisBtn = document.getElementById("export-analysis-data");
-    if (exportAnalysisBtn) {
-      exportAnalysisBtn.style.display = "inline-block";
-    }
-  } else if (!appState.is_connected) {
-    const analysisFileUploadBadge = document.getElementById("analysis-file-upload-badge");
-    if (analysisFileUploadBadge) {
-      analysisFileUploadBadge.style.display = "none";
-    }
-
-    // 隐藏按钮
-    const analyzeDataBtn = document.getElementById("analyze-data-btn");
-    if (analyzeDataBtn) {
-      analyzeDataBtn.style.display = "none";
-    }
-    const exportAnalysisBtn = document.getElementById("export-analysis-data");
-    if (exportAnalysisBtn) {
-      exportAnalysisBtn.style.display = "none";
-    }
-  }
-  
-  // 更新用户信息
+  // ---- 4. 用户信息 ----
   updateUserInfo();
 }
 
-// 更新统计卡片数据
-export function updateStats() {
-  // 确保stats对象存在
+// stats / userInfo 的初始形状。
+// 这两份字面量以前在 updateStats() 和 updateUserInfo() 里各写了一遍，
+// 增删字段时很容易只改一处 —— 于是"某个计数永远是 undefined"这类问题就会冒出来。
+const DEFAULT_STATS = {
+  dailyOrders: 0,
+  reportRecords: 0,
+  uploadedOrders: 0,
+  fetchedData: 0,
+  uploadedAccounts: 0,
+  ltsAccounts: 0,
+  vvipOrders: 0,
+  ltsOrders: 0,
+  pcdDailyOrders: 0
+};
+
+const DEFAULT_USER_INFO = {
+  username: "",
+  email: "",
+  fullName: "",
+  thumbnail: ""
+};
+
+/** 兜底初始化 appState.stats / appState.userInfo（updateStats 与 updateUserInfo 共用） */
+function ensureStatsAndUserInfo() {
   if (!appState.stats) {
-    appState.stats = {
-      dailyOrders: 0,
-      reportRecords: 0,
-      uploadedOrders: 0,
-      fetchedData: 0,
-      uploadedAccounts: 0,
-      ltsAccounts: 0,
-      vvipOrders: 0,
-      ltsOrders: 0,
-      pcdDailyOrders: 0
-    };
+    appState.stats = { ...DEFAULT_STATS };
   }
-  
-  // 更新用户信息中的统计数据
+  if (!appState.userInfo) {
+    appState.userInfo = { ...DEFAULT_USER_INFO };
+  }
+}
+
+/**
+ * 刷新「统计 / 用户信息」区域的入口。
+ * 说明：它本身只负责兜底初始化，真正的 DOM 更新在 updateUserInfo() 里，
+ * 之所以保留这个名字，是因为数据获取流程里（logic.js 的各个 getXxxData）
+ * 都把它当作"取完数据后刷新一下界面"的语义来调用。
+ */
+export function updateStats() {
+  ensureStatsAndUserInfo();
   updateUserInfo();
 }
 
 // 更新用户信息
 export function updateUserInfo() {
+  ensureStatsAndUserInfo();
+
   // 更新头像
   const avatarEl = document.getElementById("user-avatar");
   
@@ -664,31 +456,6 @@ export function updateUserInfo() {
     }
   }
 
-  // 确保stats对象存在
-  if (!appState.stats) {
-    appState.stats = {
-      dailyOrders: 0,
-      reportRecords: 0,
-      uploadedOrders: 0,
-      fetchedData: 0,
-      uploadedAccounts: 0,
-      ltsAccounts: 0,
-      vvipOrders: 0,
-      ltsOrders: 0,
-      pcdDailyOrders: 0
-    };
-  }
-  
-  // 确保userInfo对象存在
-  if (!appState.userInfo) {
-    appState.userInfo = {
-      username: '',
-      email: '',
-      fullName: '',
-      thumbnail: ''
-    };
-  }
-  
   // 更新用户名显示
   const userNameEl = document.getElementById("user-name");
   if (userNameEl) {
@@ -755,50 +522,56 @@ export function updateUserInfo() {
 
 // 渲染当日数据
 export function renderDailyData(data) {
-  dailyDataHot = renderTable("daily-data-container", "daily-data-table", data, dailyDataHot);
+  renderTable("daily-data-container", "daily-data-table", data);
 }
 
 // 渲染 PCD 当日数据
 export function renderPCDDailyData(data) {
-  pcdDailyDataHot = renderTable("pcd-daily-data-container", "pcd-daily-data-table", data, pcdDailyDataHot);
+  renderTable("pcd-daily-data-container", "pcd-daily-data-table", data);
 }
 
 // 渲染 PCD PID Fallout 数据
 export function renderPCDPIDFalloutData(data) {
-
-  pcdPidFalloutDataHot = renderTable("pcd-pid-fallout-data-container", "pcd-pid-fallout-data-table" , data, pcdPidFalloutDataHot);
-  
+  renderTable("pcd-pid-fallout-data-container", "pcd-pid-fallout-data-table", data);
 }
 
 // 渲染 PCD QC Issue 数据
 export function renderPCDQCIssueData(data) {
-
-  // 渲染 QC issue 数据
-  pcdQCIssueDataHot = renderTable("pcd-qc-issue-data-container","pcd-qc-issue-data-table", data, pcdQCIssueDataHot);
+  renderTable("pcd-qc-issue-data-container", "pcd-qc-issue-data-table", data);
 }
 
 // 渲染报表数据
 export function renderReportData(data) {
-  reportDataHot = renderTable("report-data-container", "report-data-table", data, reportDataHot);
+  renderTable("report-data-container", "report-data-table", data);
 }
 
 // 渲染T-4数据
 export function renderT2Data(data) {
-  t2DataHot = renderTable("t2-data-container", "t2-data-table", data, t2DataHot);
+  renderTable("t2-data-container", "t2-data-table", data);
 }
 
 // 渲染T-4分析数据
 export function renderT2AnalysisData(data) {
-  t2AnalysisDataHot = renderTable("t2-analysis-data-container","t2-analysis-data-table" , data, t2AnalysisDataHot);
+  renderTable("t2-analysis-data-container", "t2-analysis-data-table", data);
 }
 
 // 渲染T-4分析图表
-export function renderT2AnalysisCharts(data) {
+export async function renderT2AnalysisCharts(data) {
   const container = document.getElementById("t2-analysis-charts-container");
   const statusChartDom = document.getElementById("t2-analysis-chart-status");
   const fulfillmentChartDom = document.getElementById("t2-analysis-chart-fulfillment");
   
   if (!data || data.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+
+  // ECharts 按需加载（index.html 不再同步引入 1MB）
+  try {
+    await ensureECharts();
+  } catch (error) {
+    log.error("加载 ECharts 失败:", error);
+    showNotification("加载图表库失败：" + (error.message || error), "error");
     container.style.display = "none";
     return;
   }
@@ -974,122 +747,38 @@ export function renderT2AnalysisCharts(data) {
 
 // 渲染最新数据
 export function renderLatestData(data) {
-  latestDataHot = renderTable("latest-data-container", "latest-data-table", data, latestDataHot);
+  renderTable("latest-data-container", "latest-data-table", data);
 }
 
 // 渲染VVIP数据
 export function renderVVIPData(data) {
-  const container = document.getElementById("vvip-data-container");
-  const table = document.getElementById("vvip-data-table");
-  
-  // 销毁旧实例
-  if (vvipDataHot) {
-    vvipDataHot.destroy();
-    vvipDataHot = null;
-  }
-  
-  if (!data || data.length === 0) {
-    container.style.display = "none";
-    return;
-  }
-  
-  // 准备Handsontable需要的数据格式
-  const tableColumns = Object.keys(data[0]).map(col => ({
-      title: col.replace(/__c/g, '').replace(/_/g, ' '),
-      data: col
-  }));
-  
-  // 配置Handsontable
-  const hotConfig = {
-    data: data,
-    columns: tableColumns,
-    colHeaders: true,
-    rowHeaders: true,
-    stretchH: 'all',
-    autoWrapRow: true,
-    autoWrapCol: true,
-    maxRows: 1000,
-    width: '100%',
-    height: '500px',
-    licenseKey: 'non-commercial-and-evaluation',
-    filters: true,
-    dropdownMenu: true,
-    sortIndicator: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    manualColumnMove: true,
-    search: true,
-    contextMenu: true
-  };
-  
-  // 创建Handsontable实例
-  vvipDataHot = new Handsontable(table, hotConfig);
-  
-  // 显示数据容器
-  container.style.display = "block";
+  renderTable("vvip-data-container", "vvip-data-table", data);
 }
 
 // 渲染数据分析数据
-export function renderAnalysisData(data) {
-  const container = document.getElementById("analysis-data-container");
-  const table = document.getElementById("analysis-data-table");
-  
-  // 销毁旧实例
-  if (analysisDataHot) {
-    analysisDataHot.destroy();
-    analysisDataHot = null;
-  }
-  
-  if (!data || data.length === 0) {
-    container.style.display = "none";
-    return;
-  }
-  
-  // 准备Handsontable需要的数据格式
-  const tableColumns = Object.keys(data[0]).map(col => ({
-      title: col,
-      data: col
-  }));
-  
-  // 配置Handsontable
-  const hotConfig = {
-    data: data,
-    columns: tableColumns,
-    colHeaders: true,
-    rowHeaders: true,
-    stretchH: 'all',
-    autoWrapRow: true,
-    autoWrapCol: true,
-    maxRows: 1000,
-    width: '100%',
-    height: '500px',
-    licenseKey: 'non-commercial-and-evaluation',
-    filters: true,
-    dropdownMenu: true,
-    sortIndicator: true,
-    manualColumnResize: true,
-    manualRowResize: true,
-    manualColumnMove: true,
-    search: true,
-    contextMenu: true
-  };
-  
-  // 创建Handsontable实例
-  analysisDataHot = new Handsontable(table, hotConfig);
-  
-  // 显示数据容器
-  container.style.display = "block";
+export async function renderAnalysisData(data) {
+  renderTable("analysis-data-container", "analysis-data-table", data);
 
-  // 渲染图表
-  renderAnalysisChart(data);
+  // 渲染图表（内部会确保 ECharts 已按需加载）
+  await renderAnalysisChart(data);
 }
 
 // 渲染数据分析图表
-export function renderAnalysisChart(data) {
+export async function renderAnalysisChart(data) {
   const container = document.getElementById("analysis-charts-container");
   const chartDom = document.getElementById("analysis-chart-main");
   
   if (!data || data.length === 0) {
+    container.style.display = "none";
+    return;
+  }
+
+  // ECharts 按需加载（index.html 不再同步引入 1MB）
+  try {
+    await ensureECharts();
+  } catch (error) {
+    log.error("加载 ECharts 失败:", error);
+    showNotification("加载图表库失败：" + (error.message || error), "error");
     container.style.display = "none";
     return;
   }
@@ -2351,76 +2040,41 @@ export function showLunchResult(place) {
     }, 50);
 }
 
-// 全局 Handsontable 实例 for Bulk Jobs
-let bulkJobsHot = null;
-
 // 渲染 Bulk Jobs 表格
 export function renderBulkJobsTable(data) {
     const container = document.getElementById("bulk-jobs-container");
-    const table = document.getElementById("bulk-jobs-table");
     const loadingEl = document.getElementById("bulk-jobs-loading");
     const emptyEl = document.getElementById("bulk-jobs-empty");
-    
+
     // 隐藏 loading
     if (loadingEl) {
         loadingEl.style.display = "none";
     }
-    
-    // 销毁旧实例
-    if (bulkJobsHot) {
-        bulkJobsHot.destroy();
-        bulkJobsHot = null;
-    }
-    
+
     if (!data || data.length === 0) {
+        renderTable("bulk-jobs-container", "bulk-jobs-table", []);
         if (container) container.style.display = "none";
         if (emptyEl) emptyEl.style.display = "block";
         return;
     }
-    
-    // 显示容器，隐藏空状态
-    if (container) container.style.display = "block";
+
+    // 隐藏空状态
     if (emptyEl) emptyEl.style.display = "none";
-    
-    // 准备表格列 - 只显示关键字段
+
+    // 只显示关键字段，缺失的字段自动跳过
     const displayFields = ['id', 'operation', 'state', 'query', 'createdDate', 'numberOfRecordsProcessed', 'numberOfRecordsFailed', 'totalProcessingTime'];
-    
-    // 过滤存在的字段
-    const availableFields = displayFields.filter(field => data.length > 0 && data[0].hasOwnProperty(field));
-    
-    // 如果没有可用字段，使用所有字段
-    const fieldsToUse = availableFields.length > 0 ? availableFields : Object.keys(data[0]);
-    
-    const tableColumns = fieldsToUse.map(col => ({
-        title: col,
-        data: col
-    }));
-    
-    // 配置 Handsontable
-    const hotConfig = {
-        data: data,
-        columns: tableColumns,
-        colHeaders: true,
-        rowHeaders: true,
-        stretchH: 'all',
-        autoWrapRow: true,
-        autoWrapCol: true,
+    const firstRow = data[0];
+    const availableFields = displayFields.filter(
+        (field) => Object.prototype.hasOwnProperty.call(firstRow, field)
+    );
+    // 没有任何匹配字段时回退到全部字段
+    const fieldsToUse = availableFields.length > 0 ? availableFields : Object.keys(firstRow);
+
+    renderTable("bulk-jobs-container", "bulk-jobs-table", data, {
+        columns: fieldsToUse,
         maxRows: 100,
-        width: '100%',
-        height: 'auto',
-        licenseKey: 'non-commercial-and-evaluation',
-        filters: true,
-        dropdownMenu: true,
-        sortIndicator: true,
-        manualColumnResize: true,
-        manualRowResize: true,
-        search: true,
-        contextMenu: true,
-        readOnly: true // 只读
-    };
-    
-    // 创建 Handsontable 实例
-    bulkJobsHot = new Handsontable(table, hotConfig);
+        rawHeader: true
+    });
 }
 
 // 显示 Bulk Jobs 加载状态

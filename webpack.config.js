@@ -64,11 +64,29 @@ module.exports = {
         },
         {
           from: 'src/lib/css',
-          to: 'lib/css'
+          to: 'lib/css',
+          // antd.full.css 是 vendored 源头（545KB 完整版），由
+          // tools/purge-antd-css.mjs 裁剪成 antd.min.css 后再发布。
+          // 把源头一起打进扩展只会白白让包变大，所以这里排除掉。
+          // .DS_Store 也一并忽略（macOS 元数据，曾经被原样复制进 dist）。
+          globOptions: {
+            ignore: ['**/antd.full.css', '**/.DS_Store']
+          }
         },
         {
           from: 'src/lib/js',
-          to: 'lib/js'
+          to: 'lib/js',
+          // cometd 是**原生 ESM**，inspector_tools.js 用
+          // `import("../lib/js/cometd/cometd.js")` 按需加载 —— 这是个静态字符串，
+          // webpack 能解析，所以它已经被打进懒加载 chunk（dist/551.js，约 43KB，
+          // 只有进 section-26 事件监听时才会请求）。再逐字复制一份 15 个源文件
+          // （84KB）进 dist 只会是死重量：dist 的代码走 chunk，永远不读这些文件。
+          // 注意：这条排除成立的前提是那个 import 保持**静态字符串字面量**。
+          // 若哪天改成 chrome.runtime.getURL("lib/js/cometd/cometd.js") 之类
+          // 绕过打包器的写法，必须同时把这一条排除删掉。
+          globOptions: {
+            ignore: ['**/.DS_Store', '**/cometd/**']
+          }
         },
         // login.html / popup.html 里的 <script type="module"> 直接
         // `import { replaceIcons } from "./common/icons.js"`。

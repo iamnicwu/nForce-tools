@@ -13,6 +13,9 @@ import { createLogger } from "../common/logger.js";
 const log = createLogger("SESSION");
 import { appState } from "./state.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
+// 本模块是「点了才渲染」的懒加载页，注入的 <i class="fas fa-*"> 需要手动替换成
+// SVG（项目没有 FontAwesome 字体，漏替换就是 3 个空白方块）。
+import { replaceIcons } from "../common/icons.js";
 
 const LIST_ID = "session-info-list";
 const MASK_TEXT = "•••••••••••••••••••••••• 已隐藏";
@@ -140,6 +143,8 @@ export function renderSessionInfo() {
   const host = document.getElementById(LIST_ID);
   if (!host) return;
   host.innerHTML = buildHtml();
+  // 动态渲染的 DOM 必须补一次图标替换，否则「复制」按钮与空态里的图标是空白方块
+  replaceIcons();
   bindListEvents(host);
 
   const copyAllBtn = document.getElementById("session-info-copy-all");

@@ -21,7 +21,6 @@ const _appState = {
   lunch_places: [],
   custom_rules: null,
   t2_custom_rules: null,
-  t2_default_rules: null,
   readme_loaded: false,
   lts_summary_loaded: false,
   order_numbers: [],
@@ -110,19 +109,14 @@ export const appState = new Proxy(_appState, {
 });
 
 /**
- * 清理大数据缓存，释放内存
- * @param {Array<string>} keys - 要清理的数据键名，不传则清理所有数据
+ * 已删除 clearDataCache()。
+ *
+ * 它原本是"释放大数据集内存"的唯一工具，但全项目没有任何调用方：
+ * 8 个 getXxxData() 拿到的全量数据都常驻在 _appState 里（供「导出」按钮重下载），
+ * 没有任何路径会把它们置空。一个无人调用的释放函数并不解决内存问题，
+ * 反而容易让人误以为"已经有回收机制了"。
+ *
+ * 如果后续要真正处理大数据量下的常驻内存，正确做法是给数据集加"生命周期"：
+ * 例如离开该 section 时释放，或导出完成后释放并让「导出」按钮重新拉取，
+ * 而不是留一个孤立函数在这里。详见 plans/review-2026-09-27.md §4 的最后一行。
  */
-export function clearDataCache(keys = null) {
-  const dataKeys = keys || [
-    'daily_data', 'pcd_daily_data', 'pcd_pid_fallout_data', 
-    'pcd_qc_issue_data', 'report_data', 't2_data', 
-    't2_analysis_data', 'latest_data', 'vvip_data', 'analysis_data'
-  ];
-  dataKeys.forEach(key => {
-    if (_appState[key] !== null && _appState[key] !== undefined) {
-      _appState[key] = null;
-    }
-  });
-  log.info('数据缓存已清除:', dataKeys);
-}

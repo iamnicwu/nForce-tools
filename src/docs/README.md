@@ -43,7 +43,7 @@
   - 全站统一从右上角 **⚙ 设置** 进入：连接设置 · 布局配置 · 项目说明。
   - 图标排列、分组、文案、配色均可通过 **设置 → 布局配置** 里的 JSON 自定义（改完即生效，无需重新打包）。
   - 实时状态通知和进度提示。
-  - 数据表格支持排序、筛选和列宽调整（基于 Handsontable）。
+  - 数据表格以**纯 HTML `<table>`** 渲染（`common/table_utils.js`，字符串拼装后一次性 `innerHTML`），只做分列与行数上限，**不支持排序 / 筛选 / 列宽拖拽**（早期版本用 Handsontable，该库已移除）。
 
 ## 安装步骤
 
@@ -163,16 +163,24 @@ nForce-tools/
 │   │   ├── ui.js                # 视图切换（首页 ↔ 详情页）、显示/隐藏、懒加载各功能模块
 │   │   ├── ui_layout.js         # 首页图标布局：渲染 / 常用功能 / 布局配置页
 │   │   ├── ui_layout_default.js # 首页布局内置默认值（兜底，禁止用 JSON 模块导入）
+│   │   ├── ui_config.js         # 连接与布局配置项的读写
+│   │   ├── org_limits.js        # Org 状态面板 + Org Limits 详情页（ECharts gauge）
+│   │   ├── inspector_tools.js   # SOQL / 导入 / 元数据 / 事件监听（CometD）
 │   │   └── session_info.js      # 「Session 链接」页面
 │   ├── common/            # 通用工具模块
-│   │   ├── excel_utils.js # Excel 处理工具
-│   │   ├── table_utils.js # 表格处理工具
+│   │   ├── logger.js      # 统一日志（唯一允许直接调 console 的地方）
+│   │   ├── dom.js         # DOM 访问收敛（$ / on / onAll，元素缺失只 warn 不抛）
+│   │   ├── lib_loader.js  # 第三方库按需加载（ensureJsForce / ensureECharts / ensureXLSX / ensureJSZip）
+│   │   ├── excel_utils.js # Excel 读写
+│   │   ├── table_utils.js # 表格渲染
 │   │   ├── utils.js       # 通用工具函数
-│   │   ├── icons.js       # 图标相关（FontAwesome 类名 → 内联 SVG）
-│   │   └── t2rules.js     # T2 规则逻辑
+│   │   ├── icons.js       # 图标（fa-* 类名 → 内联 SVG；本插件不含 FontAwesome 字体）
+│   │   ├── graph_token.js # Microsoft Graph 令牌存取（从 chrome.storage.local 读，不含硬编码凭据）
+│   │   ├── onedrive_service.js # OneDrive 工作簿读写（经 background.js 代理绕过页面 CSP）
+│   │   └── t2rules.js     # T2 / 到期订单规则引擎
 │   ├── lib/               # 第三方库
-│   │   ├── css/           # 样式库 (AntD, Handsontable 等)
-│   │   └── js/            # JS 库 (JSForce, SheetJS, Day.js 等)
+│   │   ├── css/           # antd.full.css（vendored 源头）+ antd.min.css（裁剪产物，构建时生成）
+│   │   └── js/            # JSForce / SheetJS / Day.js / ECharts / JSZip / Marked / CometD
 │   ├── icons/             # 图标资源
 │   ├── rules/             # 规则配置（含首页布局 ui_layout.json）
 │   └── docs/              # 文档（本文件）
@@ -203,11 +211,20 @@ nForce-tools/
 
 ## 技术栈
 
-- **Frontend**: HTML5, CSS3, JavaScript (ES6+)
+- **Frontend**: HTML5, CSS3, JavaScript (ES Module)，无框架
 - **Salesforce Integration**: JSForce
-- **Data Grid**: Handsontable
-- **Excel Processing**: SheetJS (xlsx)
+- **表格**: 自研纯 HTML 渲染（`common/table_utils.js`）
+- **Excel Processing**: SheetJS (xlsx) + JSZip
 - **Date Handling**: Day.js
+- **图表**: ECharts（Org 用量仪表盘）
+- **事件流**: CometD（Salesforce Streaming API，原生 ESM，按需 `import()`）
+
+第三方库**除 Day.js 外**都通过 `common/lib_loader.js` 按需加载，不进首屏。
+`Day.js` 是唯一留在 `index.html` 里的同步 `<script>`（约 7KB）。
+
+> 历史注记：早期版本用 **Handsontable** 做数据网格，并曾经把 FontAwesome 作为
+> 外部 CDN 依赖；两者都已移除（图标改为 `common/icons.js` 的内联 SVG，
+> 表格改自研渲染），所以下文更新日志里 v1.x 的 Handsontable 描述属于当时的事实。
 
 ## 注意事项
 

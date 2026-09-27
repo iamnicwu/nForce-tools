@@ -1,37 +1,59 @@
-export function applyExpiryRules(data) {
+/**
+ * T-4 / 到期订单规则引擎。
+ *
+ * `applyExpiryRules` 与 `applyT2Rules` 本来是两个 95% 相同的副本（连注释都一样），
+ * 唯一的差别只有两处：
+ *   ① 第 4 步用哪个 Sales 覆盖规则（`applySalesOverrideForExpiry` / `applySalesOverride`）；
+ *   ② 命中的 action 最终写到哪些列（"Latest Action By"+"Issue Status" / "Action"）。
+ * 所以主流程只留一份，把这两处差异参数化。改判定逻辑只需要改一处，
+ * 不会再出现"两个函数的行为悄悄漂移"。
+ */
+
+/** M1 判定用的 DRC 编号（只读，别在规则函数里改它） */
+const M1_CRITERIA = [
+  "DRC: [31]", "DRC: [50]", "DRC: [28]", "DRC: [38]",
+  "DRC: [34]", "DRC: [40]", "DRC: [57]", "DRC: [58]",
+  "DRC: [65]", "DRC: [69]", "DRC: [77]", "DRC: [79]",
+];
+
+/** 需要人工介入的关键词（只读） */
+const BAND_KEYWORDS = [
+  "MANUAL ASSIGNMENT REQUIRED",
+  "NOT ALLOW AUTO ASSIGN FOR THIS SB",
+  "NO AVAILABLE DP",
+  "Speical Handle Order",
+];
+
+/**
+ * 规则引擎主流程。
+ * @param {Array<object>} data 原始行
+ * @param {(action: string|null, ctx: object, criteria: string[]) => string|null} salesOverride 第 4 步的 Sales 覆盖规则
+ * @param {(row: object, keyIndex: Map, action: string, ctx: object) => void} writeResult 命中 action 时如何落列
+ * @returns {Array<object>} 新数组（行对象是原地改的，与原实现一致）
+ */
+function runRuleEngine(data, { salesOverride, writeResult }) {
   if (!data || data.length === 0) return data;
 
-  const m1Criteria = [
-    "DRC: [31]", "DRC: [50]", "DRC: [28]", "DRC: [38]",
-    "DRC: [34]", "DRC: [40]", "DRC: [57]", "DRC: [58]",
-    "DRC: [65]", "DRC: [69]", "DRC: [77]", "DRC: [79]",
-  ];
-
-  const BANDKeywords = [
-    "MANUAL ASSIGNMENT REQUIRED",
-    "NOT ALLOW AUTO ASSIGN FOR THIS SB",
-    "NO AVAILABLE DP",
-    "Speical Handle Order"
-  ];
-
-
   const jsonData = [...data];
+  // 列名索引按「本行」解析（同结构的相邻行复用），详见 createKeyIndexResolver 的说明
+  const indexFor = createKeyIndexResolver();
 
   jsonData.forEach((row) => {
+    const keyIndex = indexFor(row);
     const debugInfo = [];
     const log = (msg) => debugInfo.push(msg);
 
     // 1. 提取上下文信息
-    const ctx = extractContext(row, log);
-    
+    const ctx = extractContext(row, keyIndex, log);
+
     log(`[Init] Status='${ctx.status}', Fulfilment='${ctx.fulfillStatus}', RemarkLen=${ctx.fulfillRemark ? ctx.fulfillRemark.length : 0}`);
 
     // 2. 根据状态评估规则
-    let action = evaluateStatusRules(ctx, BANDKeywords);
+    let action = evaluateStatusRules(ctx, BAND_KEYWORDS);
 
     // 3. 如果状态规则未匹配，则根据备注评估规则
     if (!action) {
-      action = evaluateRemarkRules(ctx, m1Criteria);
+      action = evaluateRemarkRules(ctx, M1_CRITERIA);
     }
 
     if (!action) {
@@ -39,125 +61,211 @@ export function applyExpiryRules(data) {
     }
 
     // 4. 应用 Sales 覆盖规则 (例如 CS 订单、DRC 检测)
-    action = applySalesOverrideForExpiry(action, ctx, m1Criteria);
+    action = salesOverride(action, ctx, M1_CRITERIA);
 
-    // 5. 分配issue status
-    let issueStatus =  '';
-    if (action === "COM" || action === "COM(LTS)" || action === "COM(PCD)" || action === "NORA" || action === "FS" || action === "RBS" || action === "N/A") {
-      issueStatus = "In Progress";
-    } 
-    else if (action === "Vicki" || action === "OPS" || action === "Sales" || action === "CS") {
-      issueStatus = "Waiting for user";
-    }
-    else{
-      issueStatus = "Pending";
-    }
-
-
-    // 6. 应用结果到行
+    // 5. 落列（Debug_Log 无论有没有命中都要写，便于排查"为什么没命中"）
     if (action) {
-      setValue(row, "Latest Action By", action);
-      setValue(row, "Issue Status", issueStatus);
+      writeResult(row, keyIndex, action, ctx);
     }
-    setValue(row, "Debug_Log", debugInfo.join(" | "));
+    setValue(row, keyIndex, "Debug_Log", debugInfo.join(" | "));
   });
 
   return jsonData;
 }
 
-export function applyT2Rules(data) {
-  if (!data || data.length === 0) return data;
-
-  const m1Criteria = [
-    "DRC: [31]", "DRC: [50]", "DRC: [28]", "DRC: [38]",
-    "DRC: [34]", "DRC: [40]", "DRC: [57]", "DRC: [58]",
-    "DRC: [65]", "DRC: [69]", "DRC: [77]", "DRC: [79]",
-  ];
-
-  const BANDKeywords = [
-    "MANUAL ASSIGNMENT REQUIRED",
-    "NOT ALLOW AUTO ASSIGN FOR THIS SB",
-    "NO AVAILABLE DP",
-    "Speical Handle Order"
-  ];
-
-  const jsonData = [...data];
-
-  jsonData.forEach((row) => {
-    const debugInfo = [];
-    const log = (msg) => debugInfo.push(msg);
-
-    // 1. 提取上下文信息
-    const ctx = extractContext(row, log);
-    
-    log(`[Init] Status='${ctx.status}', Fulfilment='${ctx.fulfillStatus}', RemarkLen=${ctx.fulfillRemark ? ctx.fulfillRemark.length : 0}`);
-
-    // 2. 根据状态评估规则
-    let action = evaluateStatusRules(ctx, BANDKeywords);
-
-    // 3. 如果状态规则未匹配，则根据备注评估规则
-    if (!action) {
-      action = evaluateRemarkRules(ctx, m1Criteria);
-    }
-
-    if (!action) {
-      log(`[Info] No Main Rule matched for Status='${ctx.status}', Fulfilment='${ctx.fulfillStatus}'`);
-    }
-
-    // 4. 应用 Sales 覆盖规则 (例如 CS 订单、DRC 检测)
-    action = applySalesOverride(action, ctx, m1Criteria);
-
-    // 5. 应用结果到行
-    if (action) {
-      setValue(row, "Action", action);
-    }
-    setValue(row, "Debug_Log", debugInfo.join(" | "));
+/**
+ * 到期订单：把结果写成"Latest Action By" + "Issue Status"。
+ * @param {Array<object>} data
+ */
+export function applyExpiryRules(data) {
+  return runRuleEngine(data, {
+    salesOverride: applySalesOverrideForExpiry,
+    writeResult(row, keyIndex, action) {
+      setValue(row, keyIndex, "Latest Action By", action);
+      setValue(row, keyIndex, "Issue Status", expiryIssueStatus(action));
+    },
   });
+}
 
-  return jsonData;
+/**
+ * T-4 分析：把结果写成"Action"。
+ * @param {Array<object>} data
+ */
+export function applyT2Rules(data) {
+  return runRuleEngine(data, {
+    salesOverride: applySalesOverride,
+    writeResult(row, keyIndex, action) {
+      setValue(row, keyIndex, "Action", action);
+    },
+  });
+}
+
+/**
+ * action → Issue Status 的映射（原先内联在 applyExpiryRules 里）
+ * @param {string} action
+ * @returns {string}
+ */
+function expiryIssueStatus(action) {
+  if (
+    action === "COM" || action === "COM(LTS)" || action === "COM(PCD)" ||
+    action === "NORA" || action === "FS" || action === "RBS" || action === "N/A"
+  ) {
+    return "In Progress";
+  }
+  if (action === "Vicki" || action === "OPS" || action === "Sales" || action === "CS") {
+    return "Waiting for user";
+  }
+  return "Pending";
 }
 
 // ==========================================
 // 辅助函数
 // ==========================================
 
-function getValue(row, ...possibleNames) {
-  const keys = Object.keys(row);
+/**
+ * 备注类字段的「包含」判断。
+ *
+ * `Fulfillment Remark` / `FulfillmentDetail` 在真实数据里可能不是字符串：
+ *   - Salesforce 侧：字段为空时 `flattenRecords` 出来是 **null**；
+ *   - Excel 侧：`sheet_to_json` 会把纯数字单元格解析成 number。
+ * 旧实现直接 `.includes(...)`，碰到这类值就抛 TypeError，**整批订单的分析会中断**
+ * （外层只会显示"分析失败"，排查成本很高）。
+ *
+ * 这里对字符串输入保持与被替换代码**逐字节相同**的语义（`typeof` + 原生 `includes`），
+ * 非字符串一律视为"不包含"，把崩溃降级成一个确定的判定结果。
+ * 因此这个改动不可能改变任何原本能正常跑通的输入。
+ *
+ * @param {*} value 待检查的值
+ * @param {string} needle 子串
+ * @returns {boolean}
+ */
+function hasText(value, needle) {
+  return typeof value === "string" && value.includes(needle);
+}
+
+/**
+ * 列名归一化（忽略大小写、空格、下划线）
+ * @param {*} str
+ * @returns {string}
+ */
+function normalizeKey(str) {
+  return String(str).toLowerCase().replace(/[\s_]/g, "");
+}
+
+/**
+ * 列名索引：把「逻辑列名 → 真实 key」的匹配结果一次性算好
+ *
+ * 性能说明（2026-09-27）：
+ * 原来 getValue / setValue 每次调用都 `Object.keys(row)` 再逐键做 normalize 比较。
+ * extractContext 每行调用 getValue 11 次、setValue 2~3 次 → 每行约 14 次键数组分配
+ * 加数百次字符串比较，5000 行就是 7 万次数组分配。现在每行只建一次，随后 O(1) 查表。
+ *
+ * 匹配规则与旧实现逐条对齐，保证行为不变：
+ *   getValue：① 精确同名 ② 归一化同名 ③ 归一化 `<name>__c`
+ *   setValue：仅忽略大小写（历史上两者规则就不同，这里保持原样）
+ *
+ * @param {string[]} keys 某一行的键序列
+ */
+function buildKeyIndex(keys) {
+  const exact = new Set(keys);
+  const norm = new Map();
+  const lower = new Map();
+  for (const k of keys) {
+    const n = normalizeKey(k);
+    if (!norm.has(n)) norm.set(n, k);   // 保留首个出现的 key，与 keys.find 语义一致
+    const l = String(k).toLowerCase();
+    if (!lower.has(l)) lower.set(l, k);
+  }
+  return {
+    /**
+     * 按 getValue 的三段规则解析出真实 key
+     * @param {string} name
+     * @returns {string|null}
+     */
+    find(name) {
+      if (exact.has(name)) return name;
+      const n = normalizeKey(name);
+      if (norm.has(n)) return norm.get(n);
+      const nc = normalizeKey(name + "__c");
+      if (norm.has(nc)) return norm.get(nc);
+      return null;
+    },
+    /**
+     * 按 setValue 的规则解析出真实 key（只忽略大小写）
+     * @param {string} colName
+     * @returns {string|null}
+     */
+    findForWrite(colName) {
+      const l = String(colName).toLowerCase();
+      return lower.has(l) ? lower.get(l) : null;
+    },
+  };
+}
+
+/**
+ * 返回「按行取列名索引」的解析器。
+ *
+ * ⚠️ 索引必须按**本行自己的键**来建，不能只用首行的键建一次。
+ * 2026-09-27 踩过：曾用 `buildKeyIndex(Object.keys(jsonData[0]))` 建一份全局索引，
+ * 于是「首行没有的列，后续所有行都读不到」——
+ * 例如首行 `Fulfillment Remark` 为空、后面几行才有值的表（XLSX 上传 + 手工补备注的场景），
+ * 后续行的备注规则会**全部静默失效**。旧实现 getValue 每次 `Object.keys(row)`，
+ * 天然按行解析，不存在这个问题；缓存索引属于"优化引入的正确性回归"。
+ *
+ * 现在的做法：以「键序列」为签名，签名相同的相邻行复用同一份索引，否则重建。
+ * 同一批 SOQL/工作表数据的列集合一致 → 绝大多数行命中快路径，仍是 O(k) 比较；
+ * 列集合一旦不同就立刻回退到正确行为。
+ *
+ * 注意：签名是**写入 Debug_Log / Action 之前**的快照，因此同一行后续被加了列
+ * 不会影响下一行的比较（下一行比较的也是它自己"加列前"的键序列）。
+ *
+ * @returns {(row: object) => ReturnType<typeof buildKeyIndex>}
+ */
+function createKeyIndexResolver() {
+  let lastKeys = null;
+  let lastIndex = null;
+  return function indexFor(row) {
+    const keys = Object.keys(row);
+    if (lastKeys !== null && keys.length === lastKeys.length) {
+      let same = true;
+      for (let i = 0; i < keys.length; i++) {
+        if (keys[i] !== lastKeys[i]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return lastIndex;
+    }
+    lastKeys = keys;
+    lastIndex = buildKeyIndex(keys);
+    return lastIndex;
+  };
+}
+
+function getValue(row, index, ...possibleNames) {
   for (const name of possibleNames) {
-    // 1. 精确匹配
-    let key = keys.find((k) => k === name);
-    if (key) return row[key];
-
-    // 2. 忽略大小写和下划线/空格匹配
-    const normalize = (str) => str.toLowerCase().replace(/[\s_]/g, "");
-    const target = normalize(name);
-    key = keys.find((k) => normalize(k) === target);
-    if (key) return row[key];
-
-    // 3. 尝试匹配包含 __c 的情况 (Salesforce 字段)
-    key = keys.find((k) => normalize(k) === normalize(name + "__c"));
+    const key = index.find(name);
     if (key) return row[key];
   }
   return null;
 }
 
-function setValue(row, colName, value) {
-  const keys = Object.keys(row);
-  let key = keys.find((k) => k.toLowerCase() === colName.toLowerCase());
-  row[key || colName] = value;
+function setValue(row, index, colName, value) {
+  const key = index.findForWrite(colName) || colName;
+  row[key] = value;
 }
 
-function extractContext(row, log) {
-  const status = getValue(row, "Order Status", "Custom_OrderStatus", "Custom_OrderStatus__c", "Order.Custom_OrderStatus__c");
-  const fulfillStatus = getValue(row, "Fulfillment Status", "Custom_FulfilmentStatus", "Custom_FulfilmentStatus__c", "Order.Custom_FulfilmentStatus__c");
-  const fulfillRemark = getValue(row, "Fulfillment Remark", "FulfillmentRemark", "FulfillmentRemark__c");
-  const fulfilldetail = getValue(row, "FulfillmentDetail", "FulfillmentDetail__c");
-  const fulfillId = getValue(row, "FulfillmentId__c");
-  const orderName = getValue(row, "Order Name", "OrderNumber", "Name", "Order.Name");
-  const orderNature = getValue(row, "Order Nature", "OrderNature", "OrderNature__c", "Order.Order_Nature__c");
-  const createdBy = getValue(row, "Created By", "CreatedBy", "CreatedById", "Order.CreatedBy.Name");
-  const apptId = getValue(row, "Appointment ID", "AppointmentId", "Appointment__c", "AppointmentId__c");
-  const lob = getValue(row, "Order.LOB__c");
+function extractContext(row, index, log) {
+  const status = getValue(row, index, "Order Status", "Custom_OrderStatus", "Custom_OrderStatus__c", "Order.Custom_OrderStatus__c");
+  const fulfillStatus = getValue(row, index, "Fulfillment Status", "Custom_FulfilmentStatus", "Custom_FulfilmentStatus__c", "Order.Custom_FulfilmentStatus__c");
+  const fulfillRemark = getValue(row, index, "Fulfillment Remark", "FulfillmentRemark", "FulfillmentRemark__c");
+  const fulfilldetail = getValue(row, index, "FulfillmentDetail", "FulfillmentDetail__c");
+  const fulfillId = getValue(row, index, "FulfillmentId__c");
+  const orderName = getValue(row, index, "Order Name", "OrderNumber", "Name", "Order.Name");
+  const orderNature = getValue(row, index, "Order Nature", "OrderNature", "OrderNature__c", "Order.Order_Nature__c");
+  const createdBy = getValue(row, index, "Created By", "CreatedBy", "CreatedById", "Order.CreatedBy.Name");
+  const apptId = getValue(row, index, "Appointment ID", "AppointmentId", "Appointment__c", "AppointmentId__c");
+  const lob = getValue(row, index, "Order.LOB__c");
   const orderType = lob === "FixedLine" ? "COM(LTS)" : "COM(PCD)";
   
 
@@ -168,7 +276,7 @@ function extractContext(row, log) {
 // 规则逻辑模块
 // ==========================================
 
-function evaluateStatusRules(ctx, BANDKeywords) {
+function evaluateStatusRules(ctx, bandKeywords) {
   const { status,  fulfillStatus, fulfilldetail, fulfillRemark, fulfillId, apptId, createdBy, orderType, orderNature, lob, log } = ctx;
 
   if (status === "Ready To Submit") {
@@ -242,16 +350,16 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       fulfillStatus === "Inventory Fallout"|| 
       fulfillStatus === "Manual Assign Inventory") {
       
-      if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
+      if (bandKeywords.some(keyword => hasText(fulfillRemark, keyword))) {
         log(`[Remark Rule 1.5.1] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
         return "BAND";
       }
-      else if (fulfillRemark.includes("UIM")) {
-        if(fulfillRemark.includes("SALES FOLLOW-UP)")){
+      else if (hasText(fulfillRemark, "UIM")) {
+        if(hasText(fulfillRemark, "SALES FOLLOW-UP)")){
           log(`[Remark Rule 1.5.2] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
           return "Sales";
         }
-        else if(fulfillRemark.includes("504 Gateway Time-out")){
+        else if(hasText(fulfillRemark, "504 Gateway Time-out")){
           log(`[Remark Rule 1.5.4] INVENTORY FALLOUT + 504 Gateway Time-out -> NORA`);
           return "NORA";
         }
@@ -341,7 +449,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
   if (status === "In Progress") {
 
     if(orderNature == 'Resumption'){
-      if(lob === 'FixedLine' && !fulfilldetail.includes("fallout")){
+      if(lob === 'FixedLine' && !hasText(fulfilldetail, "fallout")){
         log(`[Status Rule 3.0.0] In Progress + Resumption -> N/A`);
         return "N/A";
       }
@@ -349,7 +457,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
 
     if(orderNature === 'Termination'){
       if(fulfillStatus === 'In Progress'){
-        if (fulfillRemark != null && typeof fulfillRemark == "string" && fulfillRemark.includes("ORDER ABORT")) {
+        if (hasText(fulfillRemark, "ORDER ABORT")) {
           log(`[Remark Rule 3.0.0] NORA updated "ORDER ABORT" -> ${orderType}`);
           return orderType + " - order abort";
         }
@@ -422,39 +530,39 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       fulfillStatus === "Inventory Fallout"|| 
       fulfillStatus === "Manual Assign Inventory") {
       
-      if (BANDKeywords.some(keyword => fulfillRemark.includes(keyword))) {
+      if (bandKeywords.some(keyword => hasText(fulfillRemark, keyword))) {
           log(`[Remark Rule 3.7.3] INVENTORY FALLOUT + UIM + MANUAL ASSIGNMENT REQUIRED -> BAND`);
           return "BAND";
       }
-      else if (fulfillRemark.includes("UIM")) {
-        if(fulfillRemark.includes("SALES FOLLOW-UP)")){
+      else if (hasText(fulfillRemark, "UIM")) {
+        if(hasText(fulfillRemark, "SALES FOLLOW-UP)")){
           log(`[Remark Rule 3.7.4] INVENTORY FALLOUT + UIM + SALES FOLLOW-UP -> Sales`);
           return "Sales";
         }
-        else if(fulfillRemark.includes("504 Gateway Time-out")){
+        else if(hasText(fulfillRemark, "504 Gateway Time-out")){
           log(`[Remark Rule 3.7.4.1] INVENTORY FALLOUT + 504 Gateway Time-out -> NORA`);
           return "NORA";
         }
         log(`[Status Rule 3.7.1] In Progress + Waiting For Inventory + Remark(UIM) -> UIM`);
         return "UIM";
       }
-      else if (fulfillRemark.includes("504 Gateway Time-out")) {
+      else if (hasText(fulfillRemark, "504 Gateway Time-out")) {
         log(`[Remark Rule 3.7.5] 504 Gateway Time-out -> NORA`);
         return "NORA";
       }
-      else if (fulfillRemark.includes("OPG updated \"CANCELLED\"")) {
+      else if (hasText(fulfillRemark, "OPG updated \"CANCELLED\"")) {
         log(`[Remark Rule 3.7.6] OPG updated \"CANCELLED\" -> ${orderType}`);
         return orderType;
       }
       else if (lob !== "FixedLine"){
-        if(fulfillRemark.includes("Cable assignment issue")){
+        if(hasText(fulfillRemark, "Cable assignment issue")){
           log(`[Remark Rule 3.7.7.1] PCD order + fulfillment status = Inventory Fallout + Cable assignment issue from EOPI`);
           return "OPS";
         }
         log(`[Remark Rule 3.7.7] PCD order + fulfillment status = Inventory Fallout + ${lob}`);
         return "BAND";
       }
-      else if(fulfillRemark.includes("INVENTORY REPLENISHMENT")){
+      else if(hasText(fulfillRemark, "INVENTORY REPLENISHMENT")){
         log(`[Remark Rule 3.7.8] PCD order + fulfillment status = Waiting For Inventory + INVENTORY REPLENISHMENT`);
         return "N/A";
       }
@@ -469,7 +577,7 @@ function evaluateStatusRules(ctx, BANDKeywords) {
       }
     }
     if(fulfillStatus === "In Progress" || fulfillStatus === "In Progress-Distributed" ){
-      if (fulfillRemark.includes("ORDER ABORT")) {
+      if (hasText(fulfillRemark, "ORDER ABORT")) {
         log(`[Remark Rule 3.9.0] NORA updated "ORDER ABORT" -> ${orderType}`);
         return orderType + " - order abort";
       }

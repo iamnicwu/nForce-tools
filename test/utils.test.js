@@ -16,7 +16,11 @@ describe('utils.js - 工具函数测试', () => {
     });
 
     test('解析链接', () => {
-      expect(parseInline('[链接](https://example.com)')).toBe('<a href="https://example.com" target="_blank">链接</a>');
+      // 实现会给外链补 rel="noopener noreferrer"（防 tabnabbing）。
+      // 早期测试只断言了 href/target，实现加上 rel 后这条就一直红着。
+      expect(parseInline('[链接](https://example.com)')).toBe(
+        '<a href="https://example.com" target="_blank" rel="noopener noreferrer">链接</a>'
+      );
     });
 
     test('解析多个样式', () => {
@@ -106,8 +110,8 @@ describe('utils.js - 工具函数测试', () => {
       ];
       const result = flattenRecords(records);
       expect(result[0]).toHaveProperty('name');
-      expect(result[0]).toHaveProperty('nested.level');
-      expect(result[0]).toHaveProperty('nested.value');
+      expect(result[0]).toHaveProperty(['nested.level']);
+      expect(result[0]).toHaveProperty(['nested.value']);
     });
 
     test('移除 Salesforce attributes 属性', () => {
@@ -151,9 +155,9 @@ describe('utils.js - 工具函数测试', () => {
         }
       ];
       const result = flattenRecords(records);
-      expect(result[0]).toHaveProperty('Order.Id');
-      expect(result[0]).toHaveProperty('Order.Account.Name');
-      expect(result[0]).toHaveProperty('Order.Account.nested.deep');
+      expect(result[0]).toHaveProperty(['Order.Id']);
+      expect(result[0]).toHaveProperty(['Order.Account.Name']);
+      expect(result[0]).toHaveProperty(['Order.Account.nested.deep']);
     });
   });
 

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nForce Tools - 登录</title>
-    <!-- 引入 jsforce 库 (本地) -->
-    <script src="lib/js/jsforce.min.js"></script>
+    <!-- Salesforce 客户端已换成自研的 common/sf_rest_client.js（约 8KB，普通 ESM，
+         由 login_app.js 直接 import）。原先 1.37MB 的 jsforce 已移除，本页不再需要任何惰性加载。 -->
     <!-- 共享设计令牌 + 表单控件字体继承（原先这里只引了 FontAwesome CDN，
          既没有 antd 也没有 main.css，导致所有 button/input 回退成 Arial） -->
     <link rel="stylesheet" href="lib/css/main.css">
@@ -378,8 +378,13 @@
     
     <!-- Login App Script（login_app.js 引入 common/logger.js，需以 ESM 方式加载；
          webpack 产物为 IIFE，module 方式加载同样兼容） -->
-    <script src="login_app.js" type="module">
-    <!-- <script type="module"> -->
+    <script src="login_app.js" type="module"></script>
+    <!-- 注意：这一段**必须**是独立的 <script> 标签。
+         以前它和上面那行挤在同一个开标签里（`<script src="login_app.js" type="module">` 后面
+         直接跟内联代码），而带 src 的 script 会**整段忽略内联内容** —— 后果是
+         replaceIcons() 从来没执行过（登录页 7 个图标一直是空白方块），
+         #login-version 也一直停在占位符 "v-"。check-ui 的 J 组现在会拦这种写法。 -->
+    <script type="module">
         // 图标改用共享的 common/icons.js 内联 SVG。
         // 原先登录页从 cdnjs 拉 FontAwesome 6.4.0，是扩展里唯一的外部网络依赖，
         // 断网/CDN 不可用时会退化成 7 个方框。CSS 不受 script-src 'self' 约束所以它一直"能用"，

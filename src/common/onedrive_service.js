@@ -1,7 +1,8 @@
 /**
  * OneDrive Workbook Service
  * 通过 Microsoft Graph API 连接 OneDrive 中的 Excel Workbook
- * 使用 graph_token 作为 access_token 进行身份验证
+ * 使用 chrome.storage.local 中的 graph_token 作为 access_token 进行身份验证
+ * （令牌存取见 common/graph_token.js，源码里不保存任何凭据）
  *
  * 读取功能：
  * - 连接 OneDrive Workbook
@@ -19,11 +20,10 @@
  * https://learn.microsoft.com/zh-cn/graph/api/resources/excel?view=graph-rest-1.0
  */
 
-// 导入 graph_token.js 中的默认 token
 import { createLogger, maskSecret } from "./logger.js";
+import { getGraphToken } from './graph_token.js';
 
 const log = createLogger("OD");
-import defaultGraphToken from './graph_token.js';
 
 const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0';
 const ExpiredWorkbook = '017WP3WBAYGP7HS2I3XJDKF6Q2PL24MSOD';
@@ -33,13 +33,44 @@ const ExpiredWorkbook = '017WP3WBAYGP7HS2I3XJDKF6Q2PL24MSOD';
  */
 export class OneDriveWorkbookService {
   constructor(graphToken = null) {
-    // 优先使用传入的 token，否则使用 graph_token 文件的值
-    this.graphToken = graphToken || defaultGraphToken || null;
+    // 传参优先；否则留空，由 _ensureToken() 惰性从 chrome.storage.local 取
+    this.graphToken = graphToken || null;
+    /** @type {Promise<string|null>|null} 令牌解析的进行中 Promise，避免并发重复读 */
+    this._tokenPromise = null;
     // 使用 ExpiredWorkbook 作为默认 workbookId
     this.workbookId = ExpiredWorkbook;
     this.sessionId = null;
     this.workbookPath = null;
     this.baseUrl = null;
+  }
+
+  /**
+   * 惰性解析 Graph Token
+   *
+   * 令牌不再硬编码在源码里（会被 git 永久记录），而是存放在
+   * chrome.storage.local 的 `graph_token` 键中，由 graph_token.js 读取。
+   * 因此构造函数不可能同步拿到令牌 —— 所有需要鉴权的入口都要先 await 本方法。
+   *
+   * @returns {Promise<string|null>}
+   */
+  async _ensureToken() {
+    if (this.graphToken) return this.graphToken;
+    if (!this._tokenPromise) {
+      this._tokenPromise = getGraphToken()
+        .then((token) => {
+          if (token) this.graphToken = token;
+          return token;
+        })
+        .catch((error) => {
+          log.warn('读取 Graph Token 失败:', error);
+          return null;
+        })
+        // 失败也要清空缓存，否则一次读失败会永久卡住后续重试
+        .finally(() => {
+          if (!this.graphToken) this._tokenPromise = null;
+        });
+    }
+    return this._tokenPromise;
   }
 
   /**
@@ -51,10 +82,13 @@ export class OneDriveWorkbookService {
       throw new Error('Invalid graph token: token must be a non-empty string');
     }
     this.graphToken = token;
+    this._tokenPromise = null;
   }
 
   /**
    * 检查是否已设置 token
+   * 注意：这是**同步**的即时状态，不触发 storage 读取。
+   * 首次调用前请先 await _ensureToken()，否则可能误判为未认证。
    * @returns {boolean}
    */
   isAuthenticated() {
@@ -110,8 +144,9 @@ export class OneDriveWorkbookService {
    * @returns {Promise<Object>} 响应数据
    */
   async _request(url, method = 'GET', body = null) {
+    await this._ensureToken();
     if (!this.isAuthenticated()) {
-      throw new Error('Not authenticated: graph token is required');
+      throw new Error('Not authenticated: 未配置 Graph Token（chrome.storage.local.graph_token）');
     }
 
     try {
@@ -231,8 +266,9 @@ export class OneDriveWorkbookService {
     const workbookPath = options.workbookPath || this.workbookPath || null;
     const persistChanges = options.persistChanges !== undefined ? options.persistChanges : true;
 
+    await this._ensureToken();
     if (!this.isAuthenticated()) {
-      throw new Error('Graph token is required. Call setGraphToken() first.');
+      throw new Error('Graph token is required. 请先配置 chrome.storage.local.graph_token');
     }
 
     if (!workbookId && !workbookPath) {
@@ -821,6 +857,7 @@ export class OneDriveWorkbookService {
    * @returns {Promise<Array>} 文件列表（含 id, name, size, lastModifiedDateTime）
    */
   async listRecentFiles(limit = 10) {
+    await this._ensureToken();
     if (!this.isAuthenticated()) {
       throw new Error('Graph token is required');
     }
@@ -841,6 +878,7 @@ export class OneDriveWorkbookService {
    * @returns {Promise<Array>} 匹配的文件列表
    */
   async searchWorkbookByName(fileName) {
+    await this._ensureToken();
     if (!this.isAuthenticated()) {
       throw new Error('Graph token is required');
     }
@@ -858,7 +896,7 @@ export class OneDriveWorkbookService {
 
   /**
    * 测试 OneDrive Workbook 连接
-   * 使用 constructor 中已配置的默认值（graph_token.js + ExpiredWorkbook）
+   * 使用 constructor 中已配置的默认值（storage 中的 graph_token + ExpiredWorkbook）
    * 分步验证：token → drive → workbook → worksheets
    *
    * @returns {Promise<Object>} 测试结果
@@ -875,9 +913,10 @@ export class OneDriveWorkbookService {
     };
 
     try {
-      // 1. 检查 Token（来自 graph_token.js）
+      // 1. 检查 Token（来自 chrome.storage.local.graph_token）
+      await this._ensureToken();
       if (!this.isAuthenticated()) {
-        result.message = '未找到 Graph Token，请更新 src/common/graph_token.js';
+        result.message = '未找到 Graph Token，请先执行 chrome.storage.local.set({ graph_token: "eyJ..." })';
         return result;
       }
       result.tokenOk = true;

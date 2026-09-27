@@ -2,7 +2,7 @@ import { createLogger } from "./common/logger.js";
 
 const log = createLogger("APP");
 import { sfConn } from "./biz/sf_service.js";
-import { showNotification } from "./common/utils.js";
+import { showNotification, describeError } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
 import { $, on } from "./common/dom.js";
 import { appState } from "./biz/state.js";
@@ -18,7 +18,6 @@ import {
   exportSoqlResults,
   handleImportFileChange,
   handleImportObjectChange,
-  renderImportMapping,
   runDataImport,
   loadMetadataTypes,
   listMetadataMembers,
@@ -37,13 +36,9 @@ import {
   showSection,
   updateUIState,
   renderRulesList,
-  moveRule,
-  moveRuleTo,
   renderMarkdownContent,
-  showBulkJobsLoading,
   initLauncher,
-  goHome,
-  renderScheduleJobsData
+  goHome
 } from "./biz/ui.js";
 import { 
   fetchUserInfo,
@@ -79,6 +74,7 @@ import {
   handleCreateBulkJob,
   handleCheckBulkJob,
   handleDownloadBulkResult,
+  fetchBulkJobs,
   executeAnonymousCode,
   loadScheduleJobs,
   createScheduleJob,
@@ -216,8 +212,189 @@ async function onSessionRestored(message) {
   if (message) showNotification(message, "success");
 }
 
+/* ============================================================
+ * 显示宿主：浏览器侧边栏 ⇄ 普通标签页
+ *
+ * 侧边栏与标签页加载的是同一个 index.html（manifest 的
+ * side_panel.default_path 指向它），所以必须在运行时区分宿主：
+ *   · 侧边栏 → 顶栏给「完整应用」（在新标签页打开，宽屏更适合看表格与图表）
+ *   · 标签页 → 顶栏给「侧边栏」（chrome.sidePanel.open 停靠到窗口右侧）
+ * 排版本身由 main.css 末尾的「浏览器侧边栏排版层」按宽度生效，与这里的判定
+ * 无关 —— 判定失败最多是少一个顶栏按钮，不会退化成难用的界面。
+ * ============================================================ */
+const HOST_PANEL = "panel";
+const HOST_TAB = "tab";
+let activeHost = HOST_TAB;
+let hostSwitchBound = false;
+
+async function detectHost() {
+  // 信号 1（决定性）：chrome.tabs.getCurrent() 只在「标签页」上下文里返回 tab 对象；
+  // 侧边栏不属于任何标签页，返回 undefined。
+  //
+  // 这里必须先用它、而不是先比对 documentUrl —— 侧边栏与标签页加载的是同一个
+  // index.html，两者的 documentUrl 完全相同。若先按 URL 比对就会把「另一个宿主存在的
+  // 事实」误读成「我就是那个宿主」：标签页与侧边栏同时打开时，标签页会误判自己是
+  // 侧边栏，顶栏按钮方向反过来（实测复现过）。
+  // getCurrent() 回答的是「我是谁」，URL 比对只能回答「有没有别的宿主」，故以前者为准。
+  try {
+    const tab = await chrome.tabs.getCurrent();
+    return tab ? HOST_TAB : HOST_PANEL;
+  } catch (e) {
+    log.debug("tabs.getCurrent 不可用，改用 runtime.getContexts 判定宿主:", e);
+  }
+
+  // 信号 2（Chrome 116+ 兜底）：拿不到 tab 又查不到自己这个 SIDE_PANEL 上下文时，
+  // 按普通标签页处理更安全 —— 判错的代价只是顶栏多/少一个按钮。
+  try {
+    if (typeof chrome.runtime.getContexts === "function") {
+      const self = location.href.split(/[?#]/)[0];
+      const contexts = await chrome.runtime.getContexts({ contextTypes: ["SIDE_PANEL"] });
+      if (contexts.some((c) => String(c.documentUrl || "").split(/[?#]/)[0] === self)) {
+        return HOST_PANEL;
+      }
+    }
+  } catch (e) {
+    log.debug("runtime.getContexts 判定失败，按普通标签页处理:", e);
+  }
+  return HOST_TAB;
+}
+
+/** 按宿主设置 body 标记 + 顶栏「完整应用 / 侧边栏」切换按钮 */
+function applyHostChrome(host) {
+  const isPanel = host === HOST_PANEL;
+  activeHost = host;
+  document.body.classList.toggle("host-panel", isPanel);
+  document.body.classList.toggle("host-tab", !isPanel);
+
+  const btn = $("host-switch-btn");
+  if (!btn) {
+    log.warn("未找到 #host-switch-btn，跳过宿主切换按钮初始化");
+    return;
+  }
+  // 直接注入 Icons 里的 SVG 字面量：顶栏是动态渲染的，replaceIcons() 已经跑过
+  btn.innerHTML = isPanel
+    ? `${Icons.externalLink}<span>完整应用</span>`
+    : `${Icons.outdent}<span>侧边栏</span>`;
+  btn.title = isPanel
+    ? "在新标签页中打开完整应用（宽屏更适合看数据表格与图表）"
+    : "在浏览器侧边栏中打开（可固定在右侧，也可随时隐藏）";
+  btn.hidden = false;
+
+  // initApp 可能被重复调用（点顶部标题会重新初始化），事件只绑一次
+  if (hostSwitchBound) return;
+  hostSwitchBound = true;
+
+  on("host-switch-btn", "click", async () => {
+    if (activeHost === HOST_PANEL) {
+      // 侧边栏 → 标签页：同一个 index.html，只是换成宽屏宿主
+      await chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
+      return;
+    }
+    // 标签页 → 侧边栏：sidePanel.open 必须在用户手势里调用（这次点击就是），
+    // 且必须显式指定 windowId，否则 Chrome 无法确定停靠到哪个窗口
+    try {
+      const win = await chrome.windows.getCurrent();
+      await chrome.sidePanel.open({ windowId: win.id });
+      log.info("已把 nForce Tools 停靠到当前窗口的侧边栏");
+    } catch (e) {
+      log.error("打开侧边栏失败:", e);
+      showNotification("当前浏览器不支持侧边栏，或侧边栏已被禁用", "warning");
+    }
+  });
+}
+
+function sameJson(a, b) {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * 跨宿主同步会话状态。
+ * 侧边栏与标签页可以同时开着（用户可固定侧边栏、再另开一个完整应用），
+ * 两边共享 chrome.storage.local。若不同步，就会出现「在标签页登录成功了，
+ * 侧边栏还停在未连接」，反之亦然。
+ * 注意：这个监听只读 storage、从不回写，所以不存在互相触发的死循环。
+ */
+let sessionWatchBound = false;
+function watchSessionStorage() {
+  if (sessionWatchBound) return;
+  sessionWatchBound = true;
+
+  try {
+    chrome.storage.onChanged.addListener(async (changes, area) => {
+      if (area !== "local") return;
+      const keys = ["sf_session_id", "sf_instance_url", "is_connected", "userInfo", "orgInfo"];
+      if (!keys.some((k) => k in changes)) return;
+
+      const next = {
+        session_id: "sf_session_id" in changes ? changes.sf_session_id.newValue || null : appState.session_id,
+        instance_url: "sf_instance_url" in changes ? changes.sf_instance_url.newValue || null : appState.instance_url,
+        is_connected: "is_connected" in changes ? changes.is_connected.newValue === true : appState.is_connected,
+        userInfo: "userInfo" in changes ? changes.userInfo.newValue || null : appState.userInfo,
+        orgInfo: "orgInfo" in changes ? changes.orgInfo.newValue || null : appState.orgInfo
+      };
+
+      // 与当前内存状态一致就什么都不做（本页自己写入 storage 时会走到这里）
+      const changed =
+        next.session_id !== appState.session_id ||
+        next.instance_url !== appState.instance_url ||
+        next.is_connected !== appState.is_connected ||
+        !sameJson(next.userInfo, appState.userInfo) ||
+        !sameJson(next.orgInfo, appState.orgInfo);
+      if (!changed) return;
+
+      const wasConnected = appState.is_connected;
+      appState.session_id = next.session_id;
+      appState.instance_url = next.instance_url;
+      appState.is_connected = next.is_connected;
+      appState.userInfo = next.userInfo;
+      appState.orgInfo = next.orgInfo;
+
+      log.info(
+        `另一处（标签页/侧边栏）更新了连接信息，同步本页：is_connected=${appState.is_connected}`
+      );
+
+      // session 刚变为可用：打开 Org 状态面板的请求门闩（时序约束见 org_limits.js）
+      if (appState.is_connected) markSessionReady();
+
+      // updateUIState 内部会刷新连接徽标与各 section 的解锁状态
+      updateUIState();
+      try {
+        await renderLauncher();
+      } catch (e) {
+        log.warn("同步连接状态后刷新首页失败:", e);
+      }
+
+      if (!wasConnected && appState.is_connected) {
+        showNotification("已同步另一处建立的 Salesforce 连接", "success");
+      } else if (wasConnected && !appState.is_connected) {
+        showNotification("Salesforce 连接已在另一处断开", "warning");
+      }
+    });
+  } catch (e) {
+    log.warn("注册连接状态同步监听失败:", e);
+  }
+}
+
 // 初始化应用
 async function initApp() {
+  // 先判定显示宿主（侧边栏 / 标签页）并配置顶栏切换按钮。
+  // 放在最前面：body 上的宿主标记越早打上越好，避免排版闪一下再变。
+  let host = HOST_TAB;
+  try {
+    host = await detectHost();
+  } catch (e) {
+    log.warn("宿主判定异常，按普通标签页处理:", e);
+  }
+  applyHostChrome(host);
+  log.info(`当前显示宿主：${host === HOST_PANEL ? "浏览器侧边栏" : "标签页"}`);
+
+  // 侧边栏与标签页可能同时开着，连接状态要双向同步
+  watchSessionStorage();
+
   // 从 chrome.storage.local 读取登录状态
   try {
     const stored = await chrome.storage.local.get([
@@ -340,7 +517,13 @@ async function initApp() {
 
   // 会话恢复 / 自动刷新都结束后，仍未连接才提示（避免先弹警告又马上连接成功的噪音）
   if (!appState.is_connected) {
-    showNotification("尚未连接 Salesforce，请点击「连接设置」完成连接", "warning");
+    if (host === HOST_PANEL) {
+      // 侧边栏又窄又高，一个 toast 很容易被忽略，而且首页全是「需连接」的灰磁贴。
+      // 直接把用户送到「连接设置」卡片，打开侧边栏就能立刻填 Session ID / 跑登录流程。
+      log.info("侧边栏内尚未连接，直接进入「连接设置」");
+      showSection(1);
+    }
+    showNotification("尚未连接 Salesforce，请先完成连接", "warning");
   }
 }
 
@@ -653,6 +836,25 @@ function bindEvents() {
   if (exportReportDataBtn) {
     exportReportDataBtn.addEventListener("click", exportReportData);
   }
+
+  // 「同时同步到 OneDrive」开关（默认关闭，显式选择后才会上传报表数据）
+  const reportSyncCheckbox = $("report-sync-onedrive-checkbox");
+  if (reportSyncCheckbox) {
+    // 启动时回填上次的选择；读不到就保持未勾选
+    chrome.storage.local
+      .get("onedrive_report_sync")
+      .then((stored) => {
+        reportSyncCheckbox.checked = stored?.onedrive_report_sync === true;
+      })
+      .catch((error) => log.warn("读取 OneDrive 同步开关失败:", error));
+  }
+  on("report-sync-onedrive-checkbox", "change", (event) => {
+    const enabled = event.target.checked === true;
+    chrome.storage.local
+      .set({ onedrive_report_sync: enabled })
+      .catch((error) => log.warn("保存 OneDrive 同步开关失败:", error));
+    log.info(`报表 OneDrive 同步已${enabled ? "开启" : "关闭"}`);
+  });
 
   // 导出T-4数据按钮点击事件
   const exportT2DataBtn = $("export-t2-data");
@@ -1141,6 +1343,10 @@ function bindEvents() {
     checkBulkJobBtn.addEventListener("click", handleCheckBulkJob);
   }
 
+  // 「正在运行的 Bulk Job」列表刷新按钮
+  // （这个按钮以前是死的：没接线，且它依赖的 getAllBulkQueryJobs 打错了端点）
+  on("refresh-bulk-jobs-btn", "click", fetchBulkJobs);
+
   const downloadBulkCsvBtn = $("download-bulk-csv-btn");
   if (downloadBulkCsvBtn) {
     downloadBulkCsvBtn.addEventListener("click", () => handleDownloadBulkResult('csv'));
@@ -1224,15 +1430,11 @@ function bindEvents() {
   const eventExportBtn = $("event-export-btn");
   if (eventExportBtn) eventExportBtn.addEventListener("click", exportEventLog);
 
-  // 绑定重新初始化事件
-  const pageHeader = document.querySelector(".page-header");
-  if (pageHeader) {
-    pageHeader.addEventListener("click", function () {
-      showNotification("正在重新初始化...", "info");
-      initApp();
-      showNotification("应用已重新初始化", "success");
-    });
-  }
+  // 注：这里曾绑定 `.page-header` 的点击「重新初始化」，
+  // 但该元素在 index.html 里已不存在（顶栏改为 .top-nav），属于永不执行的死代码。
+  // 更要紧的是：一旦有人把 .page-header 加回来，它会重复执行 initApp() → bindEvents()
+  // 再次注册一遍 document 上的点击委托，导致每个点击被处理两次。
+  // 如需「重新初始化」，请改用显式按钮（如 #launcher-retry-btn 的做法）。
 
   // Tab 切换事件
   const tabBtns = document.querySelectorAll('.tab-btn');
@@ -1377,9 +1579,11 @@ window.searchOneDriveWorkbook = async function(fileName) {
 };
 
 // 全局错误处理：捕获未处理的Promise拒绝
+// 注意：reason 可能是 undefined（Promise.reject() 无理由），必须走 describeError 兜底，
+// 否则「错误处理器自己抛错」会把真正的错误信息吞掉。
 window.addEventListener('unhandledrejection', function(event) {
-  log.error('未处理的 Promise 拒绝:', event.reason);
-  showNotification(`发生未处理的错误：${event.reason.message || event.reason}`, 'error');
+  log.error('未处理的 Promise 拒绝:', event?.reason);
+  showNotification(`发生未处理的错误：${describeError(event?.reason)}`, 'error');
   
   // 隐藏所有可能的loading mask
   const loadingMasks = document.querySelectorAll('#loading-mask');
@@ -1389,9 +1593,11 @@ window.addEventListener('unhandledrejection', function(event) {
 });
 
 // 全局错误处理：捕获未处理的错误
+// 资源加载失败（img/script 404）时 event.error 为 null，此时文字信息在 event.message 上。
 window.addEventListener('error', function(event) {
-  log.error('全局未捕获异常:', event.error);
-  showNotification(`发生全局错误：${event.error.message || event.error}`, 'error');
+  log.error('全局未捕获异常:', event?.error ?? event?.message);
+  const detail = event?.error ? describeError(event.error) : (event?.message || '未知错误');
+  showNotification(`发生全局错误：${detail}`, 'error');
   
   // 隐藏所有可能的loading mask
   const loadingMasks = document.querySelectorAll('#loading-mask');

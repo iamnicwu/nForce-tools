@@ -2,6 +2,26 @@ import { createLogger } from "./logger.js";
 
 const log = createLogger("EXCEL");
 import { showNotification, loadingLog } from "./utils.js";
+import { ensureXLSX } from "./lib_loader.js";
+
+/**
+ * 按需加载 SheetJS（xlsx.full.min.js，0.85MB）
+ *
+ * index.html 不再同步引入该库（侧边栏每打开一次就要多解析 0.85MB），
+ * 因此所有用到 XLSX 的入口都必须先 await 本函数。
+ *
+ * @returns {Promise<boolean>} 是否可用
+ */
+async function requireXLSX() {
+  try {
+    await ensureXLSX();
+    return true;
+  } catch (error) {
+    log.error("加载 XLSX 库失败:", error);
+    showNotification("加载 Excel 处理库失败：" + (error.message || error), "error");
+    return false;
+  }
+}
 
 /**
  * 导出数据到 Excel
@@ -9,11 +29,13 @@ import { showNotification, loadingLog } from "./utils.js";
  * @param {string} fileNamePrefix - 文件名前缀
  * @param {string} sheetName - 工作表名称
  */
-export function exportToExcel(data, fileNamePrefix, sheetName) {
+export async function exportToExcel(data, fileNamePrefix, sheetName) {
   if (!data || data.length === 0) {
     showNotification("没有可导出的数据", "info");
     return;
   }
+
+  if (!(await requireXLSX())) return;
 
   try {
     // 使用SheetJS将数据转换为Excel文件
@@ -51,7 +73,7 @@ export function exportToExcel(data, fileNamePrefix, sheetName) {
 // 文件大小限制：50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
-export function processExcelFile(file, onSuccess, onError) {
+export async function processExcelFile(file, onSuccess, onError) {
   if (!file) return;
     if (!file.name.endsWith(".xlsx")) {
     log.error("文件格式不正确，请上传Excel文件(.xlsx)");
@@ -73,6 +95,12 @@ export function processExcelFile(file, onSuccess, onError) {
   log.info("开始处理Excel文件:", file.name);
   loadingLog(`开始处理Excel文件: ${file.name}`, "info");
   showNotification("正在处理文件...", "success");
+
+  // XLSX 按需加载：必须在 reader.onload 触发前就绪
+  if (!(await requireXLSX())) {
+    if (onError) onError("Excel 处理库加载失败");
+    return;
+  }
 
   // 使用SheetJS读取Excel文件
   const reader = new FileReader();
@@ -259,7 +287,7 @@ export function processExcelFile(file, onSuccess, onError) {
  * @param {Function} onSuccess - 成功回调，参数为 Account ID 数组
  * @param {Function} onError - 失败回调，参数为错误信息
  */
-export function processVVIPExcelFile(file, onSuccess, onError) {
+export async function processVVIPExcelFile(file, onSuccess, onError) {
   if (!file) return;
 
   if (!file.name.endsWith(".xlsx")) {
@@ -279,6 +307,12 @@ export function processVVIPExcelFile(file, onSuccess, onError) {
 
   log.info("开始处理VVIP Excel文件:", file.name);
   showNotification("正在处理文件...", "success");
+
+  // XLSX 按需加载：必须在 reader.onload 触发前就绪
+  if (!(await requireXLSX())) {
+    if (onError) onError("Excel 处理库加载失败");
+    return;
+  }
 
   // 使用SheetJS读取Excel文件
   const reader = new FileReader();
@@ -581,9 +615,29 @@ export function applyRules(data, rules) {
     if (cleanS1 === cleanS2) return true;
     
     // 3. 包含匹配 (应对 "Order - Status" vs "Status" 或 "LOB" vs "Order LOB")
-    // 只有当长度大于2时才进行包含匹配，避免误判
-    if (cleanS1.length > 2 && cleanS2.length > 2) {
-      if (cleanS1.endsWith(cleanS2) || cleanS2.endsWith(cleanS1)) return true;
+    //    只有当长度大于2时才进行包含匹配，避免误判。
+    //
+    //    **必须落在词边界上**（2026-09-27 修）：这里以前是拿"去掉全部分隔符"的
+    //    cleanS1/cleanS2 直接 endsWith，于是 "EmptyStatus" 也满足
+    //    `"emptystatus".endsWith("status")` → 规则想**新建**的列被判定成已有的
+    //    "Status" 列，action 直接覆盖源数据（test 里 `{Status:''}` 会变成
+    //    `{Status:'Marked'}`，EmptyStatus 压根没被创建）。
+    //    现在用**保留分隔符**的串做后缀判断，并要求后缀前一个字符是分隔符：
+    //      "order - status" 以 "status" 结尾且前面是空格 → 命中（原意）
+    //      "emptystatus"    以 "status" 结尾但前面是 "y"  → 不命中（修复）
+    //    注意：这条启发式仍然偏宽松。真实规则里的 "Issue Status" 遇到表里已有
+    //    "Status" 列（前面是空格，算边界）依旧会命中那一列 —— 这是"按名字找列"
+    //    这个设计的固有取舍，要改就得改成"动作列只允许精确匹配，否则新建"，
+    //    那属于产品决策，不在这里顺手改。
+    const sep1 = stripSF(s1);
+    const sep2 = stripSF(s2);
+    const isSuffixOnBoundary = (longStr, shortStr) => {
+      if (longStr.length <= shortStr.length) return false;
+      if (!longStr.endsWith(shortStr)) return false;
+      return /[\s_\-\.]/.test(longStr[longStr.length - shortStr.length - 1]);
+    };
+    if (sep1.length > 2 && sep2.length > 2) {
+      if (isSuffixOnBoundary(sep1, sep2) || isSuffixOnBoundary(sep2, sep1)) return true;
     }
 
     return false;
@@ -625,6 +679,19 @@ export function applyRules(data, rules) {
     }
   });
 
+  // 注意：这里**刻意不**把所有目标列预置到每一行上。
+  //
+  // 曾经试过"按固定顺序给每行补齐 outputKeys（补 ""）"来避免
+  // `row[targetKey] = value` 反复给对象加属性导致的 V8 hidden class 变形。
+  // 那确实能稳住行对象的形状，但它**改变了输出数据的形状**：
+  // 没有任何规则命中的行，本来不该带目标列，预置后会多出一个 "" 的列，
+  // 导出 Excel 时凭空多出空列。test/excel_utils.test.js 的
+  // "基本规则 - in 操作符" 用 `expect(result[1].Matched).toBeUndefined()`
+  // 把这个契约钉住了 —— 想重新加回预置，必须同时改测试并说明是有意为之，
+  // 不能当成"纯性能优化"。
+  //
+  // （实测：这个改动会让该用例从通过变失败，是 2026-09-27 重构里唯一
+  //   被测试抓到的行为回归，已回退。）
   jsonData.forEach(row => {
     let rowUpdated = false;
 
@@ -805,7 +872,7 @@ export function applyRules(data, rules) {
  * @param {Function} onSuccess - 成功回调，参数为解析后的 JSON 数据
  * @param {Function} onError - 失败回调，参数为错误信息
  */
-export function processAnalysisExcelFile(file, onSuccess, onError) {
+export async function processAnalysisExcelFile(file, onSuccess, onError) {
   if (!file) return;
 
   if (!file.name.endsWith(".xlsx")) {
@@ -825,6 +892,12 @@ export function processAnalysisExcelFile(file, onSuccess, onError) {
 
   log.info("开始处理数据分析 Excel 文件:", file.name);
   showNotification("正在处理文件...", "success");
+
+  // XLSX 按需加载：必须在 reader.onload 触发前就绪
+  if (!(await requireXLSX())) {
+    if (onError) onError("Excel 处理库加载失败");
+    return;
+  }
 
   // 使用SheetJS读取Excel文件
   const reader = new FileReader();
@@ -881,7 +954,10 @@ export function processAnalysisExcelFile(file, onSuccess, onError) {
  * @param {File} file - 上传的文件
  * @returns {Promise<Object>} - Workbook 对象
  */
-export function readExcelFile(file) {
+export async function readExcelFile(file) {
+  if (!(await requireXLSX())) {
+    throw new Error("Excel 处理库加载失败");
+  }
   return new Promise((resolve, reject) => {
     if (!file) {
       reject("文件为空");
@@ -915,10 +991,11 @@ export function readExcelFile(file) {
  * @param {string} sheetName - Sheet 名称
  * @returns {Array} - JSON 数据
  */
-export function parseSheetData(workbook, sheetName) {
+export async function parseSheetData(workbook, sheetName) {
   if (!workbook || !workbook.Sheets || !workbook.Sheets[sheetName]) {
     return [];
   }
+  if (!(await requireXLSX())) return [];
   const worksheet = workbook.Sheets[sheetName];
   // defval: '' 选项确保即使单元格为空，生成的 JSON 对象也会包含该列的键（表头）
   return XLSX.utils.sheet_to_json(worksheet, { defval: '' });

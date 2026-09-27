@@ -1,116 +1,123 @@
 /**
- * 使用原生 HTML table 渲染数据表格
- * @param {string} containerId - 容器元素ID
- * @param {string} tableId - 表格元素ID
- * @param {Array} data - 要显示的数据
+ * 原生 HTML table 渲染工具
+ *
+ * 性能说明（重要）：
+ * 早期实现是「逐单元格 createElement + appendChild + 每格 4 次内联样式写」，
+ * 1000 行 × 13 列 ≈ 1.3 万次 createElement、1.3 万次 appendChild、5.2 万次样式写，
+ * 每次都触发布局计算。
+ *
+ * 现在改为「拼接 HTML 字符串 + 一次 innerHTML 赋值」，并把单元格样式提到 CSS 类
+ * （见 main.css 的 .ut-* 规则），斑马纹用 :nth-child(odd) 而非逐行写内联背景色。
+ * 预期 3~10× 提升，且不再因内联样式阻碍 CSS 缓存。
+ *
+ * 注意：因为走 innerHTML，所有来自数据的文本必须经 escapeHtml() 转义。
  */
-export function renderTable(containerId, tableId, data) {
-  const container = document.getElementById(containerId);
-  const table = document.getElementById(tableId);
-  
-  // 清理旧表格内容
-  if (table) {
-    table.innerHTML = "";
-  }
-  
-  if (!data || data.length === 0) {
-    if (container) container.style.display = "none";
-    return;
-  }
-  
-  // 显示数据容器
-  if (container) {
-    container.style.display = "block";
-    container.style.overflowX = "auto";
-    container.style.overflowY = "auto";
-    container.style.maxHeight = "500px";
-    container.style.position = "relative";
-  }
-  
-  // 创建表头
-  const thead = document.createElement("thead");
-  thead.className = "ant-table-thead";
-  
-  const headerRow = document.createElement("tr");
-  const columns = Object.keys(data[0]);
-  
-  columns.forEach(col => {
-    const th = document.createElement("th");
-    // 格式化列名：移除 __c, Order_, 替换下划线为空格
-    th.textContent = col.replace(/__c/g, '').replace(/Order_/g, '').replace(/_/g, ' ');
-    th.style.whiteSpace = "nowrap";
-    th.style.overflow = "hidden";
-    th.style.textOverflow = "ellipsis";
-    headerRow.appendChild(th);
-  });
-  
-  thead.appendChild(headerRow);
-  
-  // 创建表体
-  const tbody = document.createElement("tbody");
-  tbody.className = "ant-table-tbody";
-  
-  // 限制显示行数
-  const maxRows = 1000;
-  const displayData = data.slice(0, maxRows);
-  
-  displayData.forEach((row, rowIndex) => {
-    const tr = document.createElement("tr");
-    tr.style.cursor = "default";
-    
-    // 斑马纹
-    if (rowIndex % 2 === 1) {
-      tr.style.backgroundColor = "var(--bg-tertiary)";
+
+import { escapeHtml } from "./utils.js";
+
+/** 默认最多渲染的行数（防止一次插入十几万行把页面卡死） */
+const DEFAULT_MAX_ROWS = 1000;
+
+/**
+ * 把单元格原始值转成用于显示的字符串
+ * @param {*} value
+ * @returns {string}
+ */
+function cellText(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
     }
-    
-    columns.forEach(col => {
-      const td = document.createElement("td");
-      const value = row[col];
-      td.textContent = value !== null && value !== undefined ? value : "";
-      td.style.maxWidth = "300px";
-      td.style.overflow = "hidden";
-      td.style.textOverflow = "ellipsis";
-      td.style.whiteSpace = "nowrap";
-      tr.appendChild(td);
-    });
-    
-    tbody.appendChild(tr);
-  });
-  
-  // 组装表格
-  table.appendChild(thead);
-  table.appendChild(tbody);
-  
-  // 添加溢出容器样式到 table
-  table.className = "ant-table ant-table-bordered ant-table-default";
-  table.style.tableLayout = "auto";
-  // 使用 min-width 替代 width，确保表格在列过多时产生横向滚动
-  table.style.minWidth = "100%";
-  table.style.width = "auto";
+  }
+  return String(value);
 }
 
 /**
- * 使用原生 HTML table 渲染数据表格（通用版本）
- * @param {HTMLElement|string} container - 容器元素或ID
- * @param {HTMLElement|string} table - 表格元素或ID
- * @param {Array} data - 要显示的数据
+ * 把列名格式化成表头文案
+ * 移除 Salesforce 字段后缀 __c，去掉 Order_ 前缀，下划线转空格
+ * @param {string} col
+ * @returns {string}
  */
-export function renderHtmlTable(container, table, data) {
-  // 获取元素
-  const containerEl = typeof container === 'string' ? document.getElementById(container) : container;
-  const tableEl = typeof table === 'string' ? document.getElementById(table) : table;
-  
-  if (!tableEl) return;
-  
-  // 清理旧表格内容
-  tableEl.innerHTML = "";
-  
-  if (!data || data.length === 0) {
+function formatHeader(col) {
+  return String(col).replace(/__c/g, "").replace(/Order_/g, "").replace(/_/g, " ");
+}
+
+/**
+ * 渲染数据表（内部统一实现）
+ *
+ * @param {HTMLElement|string} container - 容器元素或 ID
+ * @param {HTMLElement|string} table - table 元素或 ID
+ * @param {Array<Object>} data - 数据行
+ * @param {Object} [options]
+ * @param {string[]|null} [options.columns] - 只渲染指定列（默认取首行的全部键）
+ * @param {number} [options.maxRows] - 最多渲染行数
+ * @param {boolean} [options.rawHeader] - 为 true 时表头不过滤 __c / Order_ / 下划线
+ * @returns {number} 实际渲染的行数（0 表示未渲染）
+ */
+export function renderDataTable(container, table, data, options = {}) {
+  const containerEl =
+    typeof container === "string" ? document.getElementById(container) : container;
+  const tableEl = typeof table === "string" ? document.getElementById(table) : table;
+
+  if (!tableEl) return 0;
+
+  const {
+    columns = null,
+    maxRows = DEFAULT_MAX_ROWS,
+    rawHeader = false,
+  } = options;
+
+  // 空数据：清空并隐藏容器
+  if (!Array.isArray(data) || data.length === 0) {
+    tableEl.innerHTML = "";
     if (containerEl) containerEl.style.display = "none";
-    return;
+    return 0;
   }
-  
-  // 显示数据容器
+
+  const cols = Array.isArray(columns) && columns.length > 0
+    ? columns
+    : Object.keys(data[0]);
+
+  if (cols.length === 0) {
+    tableEl.innerHTML = "";
+    if (containerEl) containerEl.style.display = "none";
+    return 0;
+  }
+
+  const displayData = data.slice(0, maxRows);
+
+  // ── 表头 ──
+  const headCells = cols
+    .map((col) => `<th class="ut-th">${escapeHtml(rawHeader ? col : formatHeader(col))}</th>`)
+    .join("");
+
+  // ── 表体（一次性拼接，走单次 innerHTML）──
+  const rows = new Array(displayData.length);
+  for (let r = 0; r < displayData.length; r++) {
+    const row = displayData[r];
+    let cells = "";
+    for (let c = 0; c < cols.length; c++) {
+      const value = row[cols[c]];
+      // 空值不加 title，避免为空格子生成无意义的属性
+      if (value === null || value === undefined || value === "") {
+        cells += `<td class="ut-td"></td>`;
+      } else {
+        const text = escapeHtml(cellText(value));
+        cells += `<td class="ut-td" title="${text}">${text}</td>`;
+      }
+    }
+    rows[r] = `<tr class="ut-tr">${cells}</tr>`;
+  }
+
+  tableEl.className = "ant-table ant-table-bordered ant-table-default";
+  tableEl.innerHTML =
+    `<thead class="ant-table-thead"><tr>${headCells}</tr></thead>` +
+    `<tbody class="ant-table-tbody ut-tbody">${rows.join("")}</tbody>`;
+
+  // 容器滚动设置
   if (containerEl) {
     containerEl.style.display = "block";
     containerEl.style.overflowX = "auto";
@@ -118,63 +125,39 @@ export function renderHtmlTable(container, table, data) {
     containerEl.style.maxHeight = "500px";
     containerEl.style.position = "relative";
   }
-  
-  // 创建表头
-  const thead = document.createElement("thead");
-  thead.className = "ant-table-thead";
-  
-  const headerRow = document.createElement("tr");
-  const columns = Object.keys(data[0]);
-  
-  columns.forEach(col => {
-    const th = document.createElement("th");
-    th.textContent = col;
-    th.style.whiteSpace = "nowrap";
-    th.style.overflow = "hidden";
-    th.style.textOverflow = "ellipsis";
-    headerRow.appendChild(th);
-  });
-  
-  thead.appendChild(headerRow);
-  
-  // 创建表体
-  const tbody = document.createElement("tbody");
-  tbody.className = "ant-table-tbody";
-  
-  // 限制显示行数
-  const maxRows = 1000;
-  const displayData = data.slice(0, maxRows);
-  
-  displayData.forEach((row, rowIndex) => {
-    const tr = document.createElement("tr");
-    
-    // 斑马纹
-    if (rowIndex % 2 === 1) {
-      tr.style.backgroundColor = "var(--bg-tertiary)";
-    }
-    
-    columns.forEach(col => {
-      const td = document.createElement("td");
-      const value = row[col];
-      td.textContent = value !== null && value !== undefined ? value : "";
-      td.style.maxWidth = "300px";
-      td.style.overflow = "hidden";
-      td.style.textOverflow = "ellipsis";
-      td.style.whiteSpace = "nowrap";
-      tr.appendChild(td);
-    });
-    
-    tbody.appendChild(tr);
-  });
-  
-  // 组装表格
-  tableEl.appendChild(thead);
-  tableEl.appendChild(tbody);
-  
-  // 添加样式
-  tableEl.className = "ant-table ant-table-bordered ant-table-default";
-  tableEl.style.tableLayout = "auto";
-  // 使用 min-width 替代 width，确保表格在列过多时产生横向滚动
-  tableEl.style.minWidth = "100%";
-  tableEl.style.width = "auto";
+
+  return displayData.length;
 }
+
+/**
+ * 渲染数据表格（业务侧主入口）
+ *
+ * 注意：签名为 (containerId, tableId, data, options)。
+ * 历史上第 4 个参数被当成 "Handsontable 实例" 传入并被静默忽略，
+ * 现已改为 options 对象 —— 如果看到旧代码传实例，那是残留，删掉即可。
+ *
+ * @param {string} containerId - 容器元素 ID
+ * @param {string} tableId - 表格元素 ID
+ * @param {Array<Object>} data - 要显示的数据
+ * @param {Object} [options] - { columns, maxRows, rawHeader }
+ * @returns {number} 实际渲染行数
+ */
+export function renderTable(containerId, tableId, data, options = {}) {
+  return renderDataTable(containerId, tableId, data, options);
+}
+
+/**
+ * 通用版本：容器/表格可传元素或 ID，且表头不做字段名美化
+ * （保留此导出是为了兼容既有调用方；新代码建议直接用 renderDataTable）
+ *
+ * @param {HTMLElement|string} container
+ * @param {HTMLElement|string} table
+ * @param {Array<Object>} data
+ * @param {Object} [options]
+ * @returns {number} 实际渲染行数
+ */
+export function renderHtmlTable(container, table, data, options = {}) {
+  return renderDataTable(container, table, data, { rawHeader: true, ...options });
+}
+
+export default renderTable;

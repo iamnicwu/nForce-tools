@@ -57,6 +57,7 @@ async function savePausedTasks(pausedTasks) {
 // 监听扩展安装
 chrome.runtime.onInstalled.addListener(() => {
   log.info("扩展已安装");
+  initSidePanel();
 });
 
 // 监听 alarm 触发
@@ -399,8 +400,37 @@ async function handleClearAllAlarms(sendResponse) {
   }
 }
 
-// 监听标签页点击
+// ===== 侧边栏（Chrome 114+ Side Panel API）=====
+// 目标：点扩展工具栏图标即「开 / 关」浏览器右侧栏，用户可固定也可隐藏。
+// 侧边栏内容就是 index.html 本体（同一套应用），由 app.js 侦测面板宿主后
+// 叠加 body.host-panel 与面板专属排版（见 main.css 末尾的侧边栏排版层）。
+// 侧边栏默认在 Chrome 设置里可选左 / 右，扩展不干预。
+//
+// 注意：一旦 setPanelBehavior({ openPanelOnActionClick: true }) 生效，
+// chrome.action.onClicked 就**不会**再触发（Chrome 的既定行为）。
+// 因此下面的 onClicked 监听天然只是「不支持 Side Panel 的浏览器」的回退路径。
+async function initSidePanel() {
+  if (!chrome.sidePanel || typeof chrome.sidePanel.setPanelBehavior !== "function") {
+    log.warn("当前浏览器不支持 Side Panel API，回退为「点图标打开新标签页」");
+    return false;
+  }
+  try {
+    await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    log.info("侧边栏已启用：点击工具栏图标开关侧边栏");
+    return true;
+  } catch (e) {
+    log.error("启用侧边栏失败，将回退为「点图标打开新标签页」:", e);
+    return false;
+  }
+}
+
+// Service Worker 每次唤醒都重申一次（幂等），避免用户改过设置后被重置
+initSidePanel();
+
+// ===== 回退路径：不支持 Side Panel 的浏览器 =====
+// 上面 setPanelBehavior 成功时这个监听不会触发，所以不会出现双重行为。
 chrome.action.onClicked.addListener((tab) => {
+  log.info("未启用侧边栏（或浏览器不支持），改为在新标签页打开登录页");
   chrome.tabs.create({
     url: chrome.runtime.getURL('login.html')
   });

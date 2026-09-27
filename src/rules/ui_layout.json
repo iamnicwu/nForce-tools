@@ -91,7 +91,7 @@
       "icon": "fa-ellipsis-h",
       "color": "teal",
       "tiles": [
-        { "id": "lunch", "step": 14, "label": "中午食乜", "icon": "fa-utensils", "desc": "随机挑选午餐" }
+        { "id": "lunch", "step": 14, "label": "中午食乜", "icon": "fa-utensils", "desc": "随机挑选午餐", "requiresConnection": false }
       ]
     }
   ]

@@ -1,14 +1,15 @@
-import { createLogger, maskSecret } from "../common/logger.js";
+import { createLogger } from "../common/logger.js";
 
 const log = createLogger("LOGIC");
 import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
 import { showNotification, loadingLog } from "../common/utils.js";
-import { processExcelFile as processExcelFileUtil, processVVIPExcelFile as processVVIPExcelFileUtil, processAnalysisExcelFile as processAnalysisExcelFileUtil, analyzeData as analyzeDataUtil, analyzeT2Data as analyzeT2DataUtil, exportToExcel, getUniqueOrderCount, readExcelFile, parseSheetData } from "../common/excel_utils.js";
-import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState, goHome } from "./ui.js";
+import { processExcelFile as processExcelFileUtil, processVVIPExcelFile as processVVIPExcelFileUtil, processAnalysisExcelFile as processAnalysisExcelFileUtil, analyzeData as analyzeDataUtil, exportToExcel, getUniqueOrderCount, readExcelFile, parseSheetData } from "../common/excel_utils.js";
+import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState, renderBulkJobsTable, showBulkJobsLoading } from "./ui.js";
 import {applyT2Rules} from "../common/t2rules.js"
 import { DEFAULT_LUNCH_PLACES } from "./ui_config.js";
 import { OneDriveWorkbookService } from "../common/onedrive_service.js";
+import { ensureJSZip } from "../common/lib_loader.js";
 
 // 初始化午餐功能
 export function initLunch() {
@@ -19,142 +20,12 @@ export function initLunch() {
   updateLunchUIState();
 }
 
-// 加载默认 T-4 规则
-async function loadDefaultT2Rules() {
-  try {
-    const response = await fetch(chrome.runtime.getURL('rules/t2_rules_default.json'));
-    if (response.ok) {
-      const rules = await response.json();
-      appState.t2_default_rules = rules;
-      log.debug('默认 T-4 规则加载成功:', rules);
-    } else {
-      log.error('加载默认 T-4 规则失败:', response.statusText);
-    }
-  } catch (error) {
-    log.error('加载默认 T-4 规则出错:', error);
-  }
-}
-
-
-export function getDomain(currentTabUrl){
-  
-    if (currentTabUrl) {
-      if (currentTabUrl.includes(".lightning.force.com")) {
-        return currentTabUrl.split(".lightning.force.com")[0] + ".my.salesforce.com"
-      } else if (currentTabUrl.includes(".my.salesforce.com")) {
-        return currentTabUrl.split(".my.salesforce.com")[0] + ".my.salesforce.com"
-      }
-    }
-}
-
-// 自动检测Session
-export async function autoDetectSession() {
-  // 加载默认规则
-  loadDefaultT2Rules();
-
-  if (appState.is_connected) return;
-
-  try {
-    log.info("开始自动检测Salesforce Session...");
-    const tabs = await chrome.tabs.query({
-      url: [
-        "https://*.salesforce.com/*",
-        "https://*.force.com/*",
-        "https://*.salesforce-setup.com/*",
-      ],
-    });
-    
-    if (tabs.length > 0) {
-      log.info(`找到 ${tabs.length} 个Salesforce标签页`);
-      
-      const processedDomains = new Set();
-
-      for (const tab of tabs) {
-        try {
-          // 获取 instanceUrl
-          const url = new URL(tab.url);
-          const instanceUrl = url.origin;
-          const hostname = url.hostname;
-
-          // 提取核心域名标识
-          // 例如: here2serve--vlocity-cmt.vf.force.com -> here2serve
-          //       here2serve.my.salesforce.com -> here2serve
-          let domainKey = hostname;
-          if (hostname.includes('--')) {
-            domainKey = hostname.split('--')[0];
-          } else {
-            domainKey = hostname.split('.')[0];
-          }
-
-          // 如果该域名已经检测过，则跳过
-          if (processedDomains.has(domainKey)) {
-            log.info(`Domain Key ${domainKey} (from ${instanceUrl}) 已经检测过，跳过`);
-            continue;
-          }
-          processedDomains.add(domainKey);
-
-          // 尝试从cookie获取session id
-          const cookies = await chrome.cookies.getAll({ url: getDomain(tab.url), name: "sid" });
-          log.debug("Cookie 名称:", cookies.map(c => `${c.name}@${c.domain}`));
-          if (cookies.length > 0) {
-            const sid = cookies[0].value.split("!")[1];
-            log.info("从Cookie中找到Session ID");
-            log.debug("Session ID:", maskSecret(sid));
-            log.debug("Instance URL:", instanceUrl);
-
-            // 尝试连接
-            const isConnected = await sfConn.testConnection(sid, instanceUrl);
-            
-            if (isConnected) {
-              log.info("自动连接成功");
-              appState.session_id = sid;
-              appState.is_connected = true;
-              // Session 信息仅保存在 chrome.storage.local 中，不再使用 localStorage
-              
-              // 获取用户信息和组织信息
-              await fetchUserInfo();
-              await fetchOrgInfo();
-              // await fetchLTSAccountCount();
-              
-              updateUIState();
-              goHome();
-              showNotification("已自动连接到Salesforce", "success");
-              return;
-            }
-          }
-        } catch (err) {
-          log.error("处理标签页时出错:", err);
-        }
-      }
-    } else {
-      log.info("未找到Salesforce标签页");
-    }
-
-    // 如果上面的逻辑没有成功连接，且有保存的 Session ID，尝试使用保存的 Session ID
-    if (!appState.is_connected && appState.session_id) {
-      log.info("尝试使用保存的 Session ID 连接...");
-      const isConnected = await sfConn.testConnection(appState.session_id);
-      
-      if (isConnected) {
-        log.info("使用保存的 Session ID 连接成功");
-        appState.is_connected = true;
-        
-        // 获取用户信息和组织信息
-        await fetchUserInfo();
-        await fetchOrgInfo();
-        
-        updateUIState();
-        goHome();
-        showNotification("已自动连接到Salesforce (使用保存的Session)", "success");
-        return;
-      } else {
-        log.info("使用保存的 Session ID 连接失败");
-      }
-    }
-  } catch (error) {
-    log.error("自动检测Session失败:", error);
-  }
-}
+// 注：这里曾有 loadDefaultT2Rules() / getDomain() / autoDetectSession() 三个函数，已删除。
+//   - 后两个与 login_app.js 里的实现重复，且 logic.js 这版没有任何调用方；
+//   - loadDefaultT2Rules() 写入的 appState.t2_default_rules 全项目无人读取，
+//     因为当前 T-4 规则引擎是 t2rules.js 里的硬编码实现（applyT2Rules() 不接收 rules 参数）。
+//     连带删除了失去引用的 rules/t2_rules_default.json 与它对应的 web_accessible_resources 条目。
+//   - getDomain() 的唯一调用方就是上面那个死函数；login_app.js 有自己的同名实现。
 
 // 获取用户信息
 export async function fetchUserInfo() {
@@ -252,6 +123,65 @@ function jsonTo2DArray(data) {
   });
 
   return rows;
+}
+
+/**
+ * 「报表同步到 OneDrive」开关在 chrome.storage.local 里的键（默认关闭）
+ * @type {string}
+ */
+const ONEDRIVE_SYNC_STORAGE_KEY = "onedrive_report_sync";
+
+/**
+ * 读取「报表同步到 OneDrive」开关状态。
+ *
+ * 优先读界面上的勾选框（用户本次会话刚改过时最准确），
+ * 页面上没有该元素时回退到 chrome.storage.local。
+ *
+ * @returns {Promise<boolean>} 是否开启（读不到时按「关闭」处理）
+ */
+async function isReportOneDriveSyncEnabled() {
+  const checkbox = document.getElementById("report-sync-onedrive-checkbox");
+  if (checkbox) return checkbox.checked === true;
+
+  try {
+    const stored = await chrome.storage.local.get(ONEDRIVE_SYNC_STORAGE_KEY);
+    return stored?.[ONEDRIVE_SYNC_STORAGE_KEY] === true;
+  } catch (error) {
+    log.warn("读取 OneDrive 同步开关失败，按关闭处理:", error);
+    return false;
+  }
+}
+
+/**
+ * 可选的 OneDrive 报表同步（fire-and-forget）。
+ *
+ * 为什么不用 `await`：
+ *   `writeReportDataToOneDrive` 默认 batchSize=200 / batchDelay=300ms，
+ *   5000 行 = 25 批 ≈ 7.2 秒的固定延迟 + 25 次网络往返。
+ *   若 await，用户会「既看不到文件下载、也不知道在等什么」。
+ *
+ * 因此这里不阻塞导出，结果用通知单独汇报；本函数永不抛出。
+ *
+ * @param {Array<Object>} data - Salesforce report data
+ * @returns {Promise<void>}
+ */
+async function syncReportDataToOneDrive(data) {
+  if (!(await isReportOneDriveSyncEnabled())) {
+    log.debug("OneDrive 同步开关未开启，跳过写入");
+    return;
+  }
+
+  try {
+    const writeResult = await writeReportDataToOneDrive(data);
+    if (writeResult.success) {
+      showNotification(`${writeResult.message}，Worksheet: ${writeResult.worksheet}`, "success");
+    } else {
+      showNotification(`OneDrive 同步失败：${writeResult.error || "未知错误"}`, "warning");
+    }
+  } catch (error) {
+    log.error("OneDrive 同步出现异常:", error);
+    showNotification("OneDrive 同步失败，请在控制台用 testOneDrive() 检查配置", "warning");
+  }
 }
 
 /**
@@ -418,18 +348,16 @@ export async function getReportData() {
         // 更新统计数据
         updateStats();
 
-        // 将报表数据同步写入 OneDrive Workbook
-        const writeResult = await writeReportDataToOneDrive(result.data);
-        if (writeResult.success) {
-          showNotification(`${writeResult.message}，Worksheet: ${writeResult.worksheet}`, "success");
-        } else {
-          showNotification(`报表数据获取成功，共 ${appState.stats.reportRecords} 条记录`, "success");
-        }
-
         log.info("报表数据获取成功");
 
         // 获取成功后直接导出文件，用户无需再点「导出Excel」
-        exportReportData();
+        // （exportToExcel 内部自带 try/catch，不会产生未处理的 rejection）
+        await exportReportData();
+
+        // OneDrive 同步是可选行为（默认关闭，见 section-3 的勾选框）。
+        // 这里刻意不 await：分批写入的固定延迟会拖慢用户看到文件的时机，
+        // 同步结果由 syncReportDataToOneDrive 自己用通知汇报。
+        void syncReportDataToOneDrive(result.data);
     }
   } catch (error) {
     log.error("获取报表数据失败:", error);
@@ -495,7 +423,7 @@ export async function getT2Data() {
         log.info("T-4数据获取成功");
 
         // 获取成功后直接导出文件，用户无需再点「导出Excel」
-        exportT2Data();
+        await exportT2Data();
     }
   } catch (error) {
     log.error("获取T-4数据失败:", error);
@@ -570,7 +498,7 @@ export async function getSalesforceData() {
         showNotification(`最新数据获取成功，共 ${result.data.length} 条记录`, "success");
 
         // 获取成功后直接导出文件，用户无需再点「导出数据」
-        exportLatestData();
+        await exportLatestData();
     }
   } catch (error) {
     log.error("获取Salesforce数据失败:", error);
@@ -667,7 +595,7 @@ export async function getDailyData() {
         log.info("当日数据获取成功");
 
         // 获取成功后直接导出文件，用户无需再点「导出Excel」
-        exportDailyData();
+        await exportDailyData();
     } else {
       showNotification(`获取当日数据失败: ${result.error}`, "error");
     }
@@ -745,7 +673,7 @@ export async function getPCDDailyData() {
         log.info("PCD 当日数据获取成功");
 
         // 获取成功后直接导出文件，用户无需再点「导出Excel」
-        exportPCDDailyData();
+        await exportPCDDailyData();
     } else {
       showNotification(`获取 PCD 当日数据失败: ${result.error}`, "error");
       // 隐藏loading mask
@@ -914,13 +842,13 @@ export async function getPCDQCIssueData() {
 }
 
 // 导出当日数据
-export function exportDailyData() {
-  exportToExcel(appState.daily_data, "当日数据", "当日数据");
+export async function exportDailyData() {
+  await exportToExcel(appState.daily_data, "当日数据", "当日数据");
 }
 
 // 导出 PCD 当日数据
-export function exportPCDDailyData() {
-  exportToExcel(appState.pcd_daily_data, "PCD当日数据", "PCD当日数据");
+export async function exportPCDDailyData() {
+  await exportToExcel(appState.pcd_daily_data, "PCD当日数据", "PCD当日数据");
 }
 
 // 导出 PCD PID Fallout 数据 (CSV格式)
@@ -1024,33 +952,33 @@ export function exportPCDQCIssueData() {
 }
 
 // 导出报表数据
-export function exportReportData() {
-  exportToExcel(appState.report_data, "报表数据", "报表数据");
+export async function exportReportData() {
+  await exportToExcel(appState.report_data, "报表数据", "报表数据");
 }
 
 // 导出T-4数据
-export function exportT2Data() {
-  exportToExcel(appState.t2_data, "T-4数据", "T-4数据");
+export async function exportT2Data() {
+  await exportToExcel(appState.t2_data, "T-4数据", "T-4数据");
 }
 
 // 导出最新数据
-export function exportLatestData() {
-  exportToExcel(appState.latest_data, "最新数据", "最新数据");
+export async function exportLatestData() {
+  await exportToExcel(appState.latest_data, "最新数据", "最新数据");
 }
 
 // 导出VVIP数据
-export function exportVVIPData() {
-  exportToExcel(appState.vvip_data, "VVIP数据", "VVIP数据");
+export async function exportVVIPData() {
+  await exportToExcel(appState.vvip_data, "VVIP数据", "VVIP数据");
 }
 
 // 导出数据分析数据
-export function exportAnalysisData() {
-  exportToExcel(appState.analysis_data, "数据分析结果", "数据分析");
+export async function exportAnalysisData() {
+  await exportToExcel(appState.analysis_data, "数据分析结果", "数据分析");
 }
 
 // 导出T-4分析数据
-export function exportT2AnalysisData() {
-  exportToExcel(appState.t2_analysis_data, "T-4分析结果", "T-4分析");
+export async function exportT2AnalysisData() {
+  await exportToExcel(appState.t2_analysis_data, "T-4分析结果", "T-4分析");
 }
 
 // 处理Excel文件
@@ -1305,7 +1233,7 @@ export async function getVVIPData() {
         showNotification(`VVIP数据获取成功，共 ${result.data.length} 条记录`, "success");
 
         // 获取成功后直接导出文件，用户无需再点「导出数据」
-        exportVVIPData();
+        await exportVVIPData();
     }
   } catch (error) {
     log.error("获取VVIP数据失败:", error);
@@ -1411,13 +1339,13 @@ export function processT2AnalysisExcelFile(file) {
 }
 
 // 处理 T-4 Sheet 选择
-function handleT2SheetSelection(sheetName) {
+async function handleT2SheetSelection(sheetName) {
   if (!appState.t2_workbook) return;
 
   log.info(`正在切换到工作表: ${sheetName}`);
   
-  // 解析选中 Sheet 的数据
-  const data = parseSheetData(appState.t2_workbook, sheetName);
+  // 解析选中 Sheet 的数据（XLSX 按需加载 → parseSheetData 是异步的）
+  const data = await parseSheetData(appState.t2_workbook, sheetName);
   
   // 更新应用状态
   appState.t2_analysis_data = data;
@@ -1675,7 +1603,8 @@ export async function handleDownloadBulkResult(format = 'csv') {
       showNotification("获取数据成功，正在生成文件...", "success");
       
       if (format === 'zip') {
-        // 使用 JSZip 压缩数据
+        // 使用 JSZip 压缩数据（按需加载，只有选 ZIP 时才拉这 95KB）
+        await ensureJSZip();
         const zip = new JSZip();
         zip.file(`bulk_result_${jobId}.csv`, result.csvData);
         
@@ -1741,15 +1670,21 @@ export function shakeLunch() {
     }, 800);
 }
 
-// 获取所有 Bulk Query Jobs
+// 获取所有 Bulk Query Jobs（由 section-15「Bulk 操作」的「刷新」按钮与首次进入触发）
+let bulkJobsLoaded = false;
+
 export async function fetchBulkJobs() {
     try {
         log.info("开始获取 Bulk Jobs...");
-        
+
+        // 显示加载态（表格/空态由 renderBulkJobsTable 收起）
+        showBulkJobsLoading();
+
         const result = await sfConn.getAllBulkQueryJobs();
         
         if (result.success) {
             const jobs = result.jobs || [];
+            bulkJobsLoaded = true;
             log.info(`获取到 ${jobs.length} 个 Bulk Job`);
             
             // 渲染表格
@@ -1785,6 +1720,16 @@ export async function fetchBulkJobs() {
         log.error("获取 Bulk Jobs 出错:", error);
         showNotification("获取 Bulk Jobs 出错", "error");
     }
+}
+
+/**
+ * 首次进入 section-15 时自动拉一次 Bulk Job 列表（之后由「刷新」按钮控制）。
+ * 放在这里而不是 showSection 里，是为了让 section-15 的懒加载逻辑保持一行。
+ */
+export function loadBulkJobsOnce() {
+    if (bulkJobsLoaded) return;
+    bulkJobsLoaded = true;
+    fetchBulkJobs();
 }
 
 // 执行 Anonymous Apex 代码

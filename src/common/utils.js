@@ -195,15 +195,56 @@ export function loadingLog(message, type = 'info') {
 
 /**
  * HTML 转义函数，防止 XSS 攻击
- * @param {string} text - 需要转义的文本
+ *
+ * 性能说明：早期实现用 `document.createElement('div')` + textContent/innerHTML 转义，
+ * 每次调用都创建一个 DOM 节点。renderSoqlResults 里每个单元格要调 2 次（title + 文本），
+ * 500 行 × 10 列 = 10000 次节点创建。改成纯字符串替换后为 O(n) 无 DOM 开销。
+ *
+ * 与旧实现的差异：现在同时转义 `"` 和 `'`，因此可以安全地用在 HTML 属性值里
+ * （旧实现只转义 & < >，放进去会截断属性）。
+ *
+ * @param {*} text - 需要转义的文本（会先 String() 强制转换）
  * @returns {string} 转义后的安全文本
  */
 export function escapeHtml(text) {
   if (text === null || text === undefined) return '';
   const str = String(text);
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  // 顺序重要：& 必须最先替换，否则会把后面生成的实体再转义一次
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * 把「被拒绝的理由 / 抛出的错误」转成一段安全可读的文案。
+ *
+ * 为什么需要它：全局错误处理器里曾经直接写 `event.reason.message`。
+ * 但 `Promise.reject()` 不带理由时 `reason === undefined`，
+ * 读 `.message` 会抛 TypeError —— 错误处理器把自己搞挂，真正的错误反而丢了。
+ *
+ * 本函数对任何输入都不抛错。
+ *
+ * @param {*} value - 任意值（Error / string / undefined / object …）
+ * @returns {string} 可读文案，最差情况返回 "未知错误"
+ */
+export function describeError(value) {
+  if (value === null || value === undefined) return '未知错误';
+  if (typeof value === 'string') return value || '未知错误';
+  if (typeof value === 'object' && typeof value.message === 'string' && value.message) {
+    return value.message;
+  }
+  try {
+    const text = String(value);
+    if (text === '[object Object]') {
+      return JSON.stringify(value) || '未知错误';
+    }
+    return text;
+  } catch (_) {
+    return '未知错误';
+  }
 }
 
 /**

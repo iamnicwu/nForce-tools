@@ -115,7 +115,13 @@
     --radius-sm: 4px;
     --radius-md: 6px;
     --radius-lg: 12px;
-    --transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
+    /* 过渡「时长 + 缓动」令牌。注意它**只含时长与缓动**，属性名由使用处显式声明：
+       写成 transition: <property> … var(--transition-base);
+       历史写法是 `--transition: all …`，`all` 会让浏览器监听该元素所有可动画属性
+       （含布局属性），在不必要的重排上付出代价，且 `transition: all` 也无法表达意图。
+       各处的属性名是按其 :hover / .active / :focus / .dragover 变体逐条反推出来的，
+       新增会变化的属性时记得同步补进来。 */
+    --transition-base: 0.3s cubic-bezier(0.645, 0.045, 0.355, 1);
 }
 
 /* 自定义滚动条 */
@@ -224,8 +230,9 @@ optgroup {
     padding: 2px 8px;
 }
 
-/* 顶部导航「设置」入口 */
-.nav-settings-btn {
+/* 顶部导航「设置」入口 / 显示宿主切换（侧边栏 ⇄ 标签页） */
+.nav-settings-btn,
+.nav-host-btn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -236,15 +243,18 @@ optgroup {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: color 0.2s, border-color 0.2s, background-color 0.2s;
 }
 
 .nav-settings-btn i,
-.nav-settings-btn .svg-icon {
+.nav-settings-btn .svg-icon,
+.nav-host-btn i,
+.nav-host-btn .svg-icon {
     color: var(--primary-color);
 }
 
-.nav-settings-btn:hover {
+.nav-settings-btn:hover,
+.nav-host-btn:hover {
     color: var(--primary-color);
     border-color: var(--primary-color);
     background: var(--primary-bg);
@@ -291,7 +301,7 @@ optgroup {
     align-items: center;
     justify-content: center;
     font-size: var(--fs-2xl);
-    transition: all 0.2s ease-in-out;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
     box-shadow: var(--shadow-sm);
 }
 
@@ -496,7 +506,7 @@ optgroup {
     font-size: var(--fs-base);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease-in-out;
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
 .tab-btn:hover {
@@ -530,7 +540,7 @@ optgroup {
     margin-bottom: 24px;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
-    transition: var(--transition);
+    transition: box-shadow var(--transition-base);
     border: 1px solid rgba(0,0,0,0.06);
 }
 
@@ -566,7 +576,7 @@ optgroup {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     font-size: var(--fs-base);
-    transition: var(--transition);
+    transition: border-color, box-shadow, background-color var(--transition-base);
     width: 250px;
     background-color: var(--bg-secondary);
 }
@@ -686,7 +696,7 @@ optgroup {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     font-size: var(--fs-lg);
-    transition: var(--transition);
+    transition: border-color, box-shadow var(--transition-base);
     background-color: var(--bg-primary);
 }
 
@@ -719,7 +729,7 @@ optgroup {
     border-radius: var(--radius-md);
     padding: 3rem 2rem;
     text-align: center;
-    transition: var(--transition);
+    transition: border-color, background-color, transform, box-shadow var(--transition-base);
     margin-bottom: 1rem;
     min-height: 200px;
     display: flex;
@@ -746,7 +756,7 @@ optgroup {
     font-size: var(--icon-2xl);
     color: var(--text-light);
     margin-bottom: 1rem;
-    transition: var(--transition);
+    transition: color, transform var(--transition-base);
 }
 
 .file-upload:hover .icon,
@@ -815,10 +825,11 @@ optgroup {
     animation: pulse 0.3s ease-in-out;
 }
 
-/* 步骤section样式 - 详情页内一次只显示一个 */
+/* 步骤section样式 - 详情页内一次只显示一个
+   原此处有 transition: all 0.3s，但该元素在 active 前后只改 display（不可动画），
+   是一次不会生效的声明，故移除；入场动画由 .active 上的 @keyframes slideDown 承担 */
 .step-section {
     display: none;
-    transition: all 0.3s ease-in-out;
 }
 
 .step-section.active {
@@ -829,7 +840,7 @@ optgroup {
 /* 步骤指示器交互 */
 .step {
     cursor: pointer;
-    transition: all 0.2s ease-in-out;
+    transition: opacity 0.2s ease-in-out;
 }
 
 .step:hover {
@@ -1127,7 +1138,7 @@ optgroup {
     color: var(--text-secondary);
     padding: 4px;
     border-radius: 4px;
-    transition: all 0.2s;
+    transition: color 0.2s, background-color 0.2s;
 }
 
 .rule-action-btn:hover {
@@ -1279,8 +1290,14 @@ optgroup {
 
 #schedule-jobs-table thead th {
     background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-    font-weight: 600;
+    /* 表头的字号/字重/文字色刻意比正文轻一档。
+       这三个值原先写在 6 个 <th> 的内联样式里，把本规则的 600 / --text-primary
+       压成了死值；沉到 CSS 时按"内联赢"的既有效果合并回这里，所以现在这里是
+       唯一事实来源 —— 不要再往 <th> 上加 u-fs-* / u-fw-* / u-text-* 类，
+       单类工具类（0,1,0）压不过这条（1,0,2），加了也不生效。 */
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: var(--fs-sm);
     white-space: nowrap;
 }
 
@@ -1507,7 +1524,11 @@ optgroup {
     margin-bottom: 1.5rem;
 }
 
-.section-icon i {
+/* 图标尺寸：FontAwesome 的 <i> 会被 common/icons.js 换成 <svg class="svg-icon">，
+   所以每条「容器 i」规则都必须同时写「容器 .svg-icon」——只写 i 的话替换后
+   永远匹配不到，图标会缩回 1em（14px）并丢掉容器给的颜色。 */
+.section-icon i,
+.section-icon .svg-icon {
     font-size: var(--icon-xl);
 }
 
@@ -1599,7 +1620,7 @@ optgroup {
     border-radius: var(--radius-md);
     padding: 3rem 2rem;
     text-align: center;
-    transition: var(--transition);
+    transition: border-color, background-color var(--transition-base);
     cursor: pointer;
     background: var(--bg-primary);
 }
@@ -1614,7 +1635,7 @@ optgroup {
     font-size: var(--icon-2xl);
     color: var(--text-light);
     margin-bottom: 1rem;
-    transition: var(--transition);
+    transition: color, transform var(--transition-base);
 }
 
 .upload-drag-wrapper:hover .upload-icon {
@@ -1700,6 +1721,14 @@ optgroup {
     font-size: var(--fs-base);
 }
 
+/* 表单字段下方的补充说明（例如开关类选项的风险提示） */
+.unified-form .form-hint {
+    margin: 4px 0 0;
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
 /* 日期选择器容器 */
 .date-range-container {
     display: flex;
@@ -1745,7 +1774,8 @@ optgroup {
     margin: 0 auto 1.5rem;
 }
 
-.module-icon i {
+.module-icon i,
+.module-icon .svg-icon {
     font-size: var(--icon-xl);
 }
 
@@ -1777,7 +1807,8 @@ optgroup {
     color: var(--text-secondary);
 }
 
-.empty-state i {
+.empty-state i,
+.empty-state .svg-icon {
     font-size: var(--icon-2xl);
     margin-bottom: 1rem;
     color: var(--text-light);
@@ -1794,7 +1825,8 @@ optgroup {
     color: var(--text-secondary);
 }
 
-.loading-state i {
+.loading-state i,
+.loading-state .svg-icon {
     font-size: var(--fs-3xl);
     margin-bottom: 0.5rem;
 }
@@ -1805,7 +1837,8 @@ optgroup {
     padding: 2rem;
 }
 
-.success-state i {
+.success-state i,
+.success-state .svg-icon {
     font-size: var(--icon-2xl);
     color: var(--success-color);
     margin-bottom: 1rem;
@@ -1827,7 +1860,8 @@ optgroup {
         height: 64px;
     }
     
-    .section-icon i {
+    .section-icon i,
+    .section-icon .svg-icon {
         font-size: var(--fs-3xl);
     }
     
@@ -1960,7 +1994,7 @@ optgroup {
     border: 1px solid var(--border-color);
     border-radius: 12px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
 
 .settings-row:hover {
@@ -2113,7 +2147,7 @@ optgroup {
     border: 1px solid var(--border-color);
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: color 0.2s, border-color 0.2s, background-color 0.2s;
 }
 
 .kv-btn:hover {
@@ -2198,7 +2232,7 @@ optgroup {
     border: 1px solid rgba(76, 91, 212, 0.3);
     border-radius: 999px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
 }
 
 .fav-head-btn:hover {
@@ -2257,7 +2291,8 @@ optgroup {
     color: var(--accent-indigo);
 }
 
-.favorites-title i {
+.favorites-title i,
+.favorites-title .svg-icon {
     color: var(--warning-color);
 }
 
@@ -2328,7 +2363,7 @@ optgroup {
     border: 1px solid var(--border-light);
     border-radius: 10px;
     text-decoration: none;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
 .tile:hover {
@@ -2462,7 +2497,7 @@ optgroup {
     border-radius: 6px;
     cursor: pointer;
     user-select: none;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
 }
 
 .tile-edit-btn:hover {
@@ -2876,7 +2911,7 @@ optgroup {
     border: 1px solid transparent;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
 }
 
 .org-dash-more:hover {
@@ -3018,7 +3053,7 @@ optgroup {
     border: 1px solid var(--primary-border);
     border-radius: 6px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .org-dash-connect-btn:hover {
@@ -3095,3 +3130,409 @@ optgroup {
     background: var(--error-bg);
     border-color: var(--error-strong);
 }
+
+/* ============================================================
+   数据表格（table_utils.js 渲染的 .ut-* 结构）
+   ------------------------------------------------------------
+   2026-09-27：表格从「逐单元格内联样式」改为「批量字符串 + 一次 innerHTML」，
+   原先每个 <td> 上写的 4 条内联样式全部下沉到这里。
+   好处：① 少 5 万次样式写；② 样式可被缓存；③ 主题切换只需改这里。
+   注意：check-ui 的样式守卫要求字号用 var(--fs-*)，不要写死 px。
+   ============================================================ */
+
+.ut-th {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.ut-td {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 斑马纹改用结构选择器，避免逐行写内联背景色 */
+.ut-tbody > tr:nth-child(odd) {
+    background-color: var(--bg-tertiary);
+}
+
+/* 侧边栏等窄容器里，限制单元格宽度以免横向滚动过宽 */
+@media (max-width: 560px) {
+    .ut-td {
+        max-width: 180px;
+    }
+}
+
+/* ============================================================
+   浏览器侧边栏排版层（Side Panel · 2026-09-27）
+   ------------------------------------------------------------
+   侧边栏与标签页加载的是同一个 index.html（manifest 的
+   side_panel.default_path 指向它），所以这一层**只按宽度生效**，
+   不依赖 app.js 的宿主判定 —— 判定失败也只是少一个顶栏按钮，
+   不会退化成难用的排版。
+
+   宿主宽度：Chrome 侧边栏默认可拖拽约 240–560px（下限由浏览器定），
+   因此 560 是最关键的断点：
+     · ≤768px 的既有降级（隐藏状态标签/环境指示器、磁贴两列、
+       隐藏磁贴描述）在这一层继续生效，此处只补"更窄"的部分。
+     · 只做压缩与重排，配色/字号刻度一律复用 :root 令牌。
+   ============================================================ */
+
+@media (max-width: 560px) {
+    /* 顶栏：40px logo + 设置 + 宿主切换 + 头像在 400px 里会横向顶出。
+       整条降级为紧凑模式，并允许折行兜底（.admin-body 是 overflow:hidden，
+       一旦顶出会被直接裁掉，所以宁可折行也不能溢出）。 */
+    .top-nav {
+        flex-wrap: wrap;
+        row-gap: 6px;
+        height: auto;
+        min-height: 52px;
+        padding: 6px 10px;
+        column-gap: 8px;
+    }
+
+    .top-nav-left,
+    .top-nav-right {
+        gap: 8px;
+    }
+
+    .top-nav-right {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .top-nav-logo {
+        height: 26px;
+    }
+
+    /* 「设置」「完整应用 / 侧边栏」在窄栏里只留图标，文案宽度让给状态徽标 */
+    .nav-settings-btn span,
+    .nav-host-btn span {
+        display: none;
+    }
+
+    .nav-settings-btn,
+    .nav-host-btn {
+        padding: 5px 9px;
+    }
+
+    .avatar {
+        width: 30px;
+        height: 30px;
+        font-size: var(--fs-lg);
+    }
+
+    /* 状态徽标在 768px 以下被整体隐藏了；在侧边栏里它是"该不该先连接"
+       的第一眼信息，放回来并把尺寸收小。 */
+    .nav-status {
+        display: flex;
+    }
+
+    .nav-status .ant-tag {
+        margin: 0;
+        padding: 0 6px;
+        line-height: 20px;
+        font-size: var(--fs-xs);
+    }
+
+    /* 用户信息下拉是固定 300px，在最窄的侧边栏里会撑出横向滚动条 */
+    .user-menu {
+        width: min(300px, calc(100vw - 24px));
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+
+    /* 内容区与卡片：24 → 12px，把宽度还给内容 */
+    .page-content {
+        padding: 12px;
+    }
+
+    .ant-card-body {
+        padding: 12px;
+    }
+
+    .ant-card-head {
+        min-height: 44px;
+        padding: 0 12px;
+    }
+
+    .ant-card-head-wrapper,
+    .launcher-group-head,
+    .favorites-head {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* 磁贴：默认 minmax(176px) 在 560px 以下要么只排 1 列、要么挤爆，
+       放宽到 138px 让 340px 以上稳定排两列（列数由 auto-fill 自己算，
+       再窄会自动退回单列，不必为每一档写死列数）。 */
+    .tile-grid {
+        grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+        gap: 6px;
+    }
+
+    .tile {
+        gap: 8px;
+        padding: 8px 10px;
+    }
+
+    /* 磁贴右侧给 ☆ 保留的位置同步收窄，否则文字可用宽度只剩几十像素 */
+    .tile-cell > .tile {
+        padding-right: 28px;
+    }
+
+    .tile-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+    }
+
+    /* 数据表格：.table-container-body 是 overflow:hidden，宽表在侧边栏里
+       会被直接裁掉（列看不见、又没法滚）。改成"表格保持自身最小宽度 +
+       容器横向滚动"，数据一个都不丢。 */
+    .table-container-body {
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .table-container-body .data-table {
+        min-width: max-content;
+    }
+
+    /* 表单在窄栏里一律纵向堆叠 */
+    .action-buttons {
+        flex-direction: column;
+        width: 100%;
+        max-width: none;
+    }
+
+    .date-range-container {
+        flex-direction: column;
+    }
+
+    /* index.html 里有 22 处内联 `display: flex` 的行式布局（label 与控件左右并排、
+       「标题 + 下拉」等），窄栏里 label 会被挤成两行。允许换行即可 ——
+       放得下时 wrap 不生效，只有真的挤不下才换行，不会把本来就合适的行拆开。
+       排除 column 方向的两处（分析页左右分栏），wrap 在定高容器里会横向炸开。 */
+    .ant-card-body [style*="display: flex"]:not([style*="flex-direction: column"]),
+    .ant-card-body [style*="display:flex"]:not([style*="flex-direction:column"]) {
+        flex-wrap: wrap;
+        row-gap: 4px;
+    }
+
+    /* 上传区与图表给一个可读的最小高度 */
+    .upload-drag-wrapper {
+        padding: 1.25rem 0.75rem;
+        min-height: 140px;
+    }
+
+    .css-chart-bars {
+        height: 200px;
+    }
+}
+
+/* 最窄一档（≤380px）：
+   两列磁贴每格只剩 ~110px、两个仪表盘并排会挤成一团，都收敛成单列。 */
+@media (max-width: 380px) {
+    .org-dash-grid,
+    .org-limits-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .page-content,
+    .ant-card-body {
+        padding: 10px;
+    }
+
+    /* 环境徽标（Production / Sandbox）让位，保证顶栏还是一条。
+       必须 !important：ui.js 的 updateUIState 是直接写 `envIndicator.style.display
+       = "flex"` 的**内联样式**，优先级高于任何样式表规则 —— 这也意味着 main.css
+       里 768px 那条 `.env-indicator { display: none }`（"移动端隐藏环境指示器"）
+       其实从来没生效过。环境信息在「头像菜单 → 系统环境」和「连接设置 /
+       Session 链接」里都还能看到。 */
+    .env-indicator {
+        display: none !important;
+    }
+}
+
+/* 极窄档（≤300px）：一列只能到 ~278px 内容宽，两列会把标签压到读不出 */
+@media (max-width: 300px) {
+    .tile-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 极窄档（≤280px）：Chrome 的侧边栏头部本来就显示扩展名与图标，
+   而品牌 logo 是固定宽高比的图形没法再压小，留着只会把顶栏顶成两行。 */
+@media (max-width: 280px) {
+    .top-nav-logo {
+        display: none;
+    }
+}
+
+/* ====================================================================
+   内联样式下沉后的原子工具类（由 tools/ 的一次性脚本生成，手工维护同样可以）
+   ------------------------------------------------------------------
+   位置很重要：本块**必须留在文件最末尾**。内联样式原本赢过样式表里的一切声明；
+   工具类与普通规则同特异性时靠"更靠后"取胜，语义最接近原来的内联样式。
+   真正会失手的只有特异性高于 (0,1,0) 的规则（#id、多层后代选择器）。
+   这些类只做"把原来写死在 HTML 里的值搬进 CSS"，不引入任何新视觉。
+   动它们之前先读 index.html 里对应的 section 语义，别当成通用框架去用。
+
+   块内**顺序也有语义**：同一元素上多个工具类命中同一条 CSS 属性时，靠后的赢
+   （例子：`u-border-0` 与 `u-border-top` 同时存在，后者必须更靠后，才能还原
+   原来 `border: 0; border-top: 1px solid` 的效果）。插入新类时注意别打乱。
+   ==================================================================== */
+.u-hidden { display: none; }
+.u-block { display: block; }
+.u-flex { display: flex; }
+.u-relative { position: relative; }
+.u-absolute { position: absolute; }
+.u-top-half { top: 50%; }
+.u-left-half { left: 50%; }
+.u-left-16 { left: 1rem; }
+.u-translate-center { transform: translate(-50%, -50%); }
+.u-translate-y-half { transform: translateY(-50%); }
+.u-z-1 { z-index: 1; }
+.u-ov-hidden { overflow: hidden; }
+.u-ov-y-auto { overflow-y: auto; }
+.u-border-box { box-sizing: border-box; }
+.u-pointer { cursor: pointer; }
+.u-resize-y { resize: vertical; }
+.u-flex-1 { flex: 1; }
+.u-flex-4 { flex: 4; }
+.u-flex-6 { flex: 6; }
+.u-flex-none { flex: 0 0 auto; }
+.u-flex-fixed-140 { flex: 0 0 140px; }
+.u-flex-fixed-150 { flex: 0 0 150px; }
+.u-flex-fixed-180 { flex: 0 0 180px; }
+.u-flex-fixed-220 { flex: 0 0 220px; }
+.u-flex-col { flex-direction: column; }
+.u-flex-wrap { flex-wrap: wrap; }
+.u-items-center { align-items: center; }
+.u-items-end { align-items: flex-end; }
+.u-justify-center { justify-content: center; }
+.u-justify-between { justify-content: space-between; }
+.u-justify-end { justify-content: flex-end; }
+.u-gap-6 { gap: 6px; }
+.u-gap-8 { gap: 0.5rem; }
+.u-gap-10 { gap: 10px; }
+.u-gap-12 { gap: 12px; }
+.u-gap-16 { gap: 1rem; }
+.u-gap-20 { gap: 20px; }
+.u-w-full { width: 100%; }
+.u-w-25p { width: 25%; }
+.u-w-15p { width: 15%; }
+.u-w-10p { width: 10%; }
+.u-w-300 { width: 300px; }
+.u-h-full { height: 100%; }
+.u-h-40 { height: 40px; }
+.u-h-50 { height: 50px; }
+.u-h-400 { height: 400px; }
+.u-minh-auto { min-height: auto; }
+.u-minh-24 { min-height: 24px; }
+.u-maxh-200 { max-height: 200px; }
+.u-maxh-300 { max-height: 300px; }
+.u-maxh-400 { max-height: 400px; }
+.u-minw-200 { min-width: 200px; }
+.u-minw-220 { min-width: 220px; }
+.u-minw-240 { min-width: 240px; }
+.u-minw-260 { min-width: 260px; }
+.u-maxw-full { max-width: 100%; }
+.u-maxw-360 { max-width: 360px; }
+.u-maxw-480 { max-width: 480px; }
+.u-maxw-600 { max-width: 600px; }
+.u-maxw-800 { max-width: 800px; }
+.u-maxw-900 { max-width: 900px; }
+.u-maxw-1000 { max-width: 1000px; }
+.u-maxw-1200 { max-width: 1200px; }
+.u-m-0 { margin: 0; }
+.u-mx-auto { margin: 0 auto; }
+.u-my-32 { margin: 2rem 0; }
+.u-mt-0 { margin-top: 0; }
+.u-mt-6 { margin-top: 6px; }
+.u-mt-8 { margin-top: 0.5rem; }
+.u-mt-16 { margin-top: 1rem; }
+.u-mt-32 { margin-top: 2rem; }
+.u-ml-auto { margin-left: auto; }
+.u-mr-auto { margin-right: auto; }
+.u-mb-0 { margin-bottom: 0; }
+.u-mb-8 { margin-bottom: 0.5rem; }
+.u-mb-12 { margin-bottom: 0.75rem; }
+.u-mb-16 { margin-bottom: 1rem; }
+.u-mb-24 { margin-bottom: 1.5rem; }
+.u-mb-32 { margin-bottom: 2rem; }
+.u-p-0 { padding: 0; }
+.u-p-10 { padding: 10px; }
+.u-p-12-16 { padding: 12px 16px; }
+.u-p-16 { padding: 1rem; }
+.u-p-32 { padding: 2rem; }
+.u-px-16 { padding: 0 1rem; }
+.u-px-40 { padding: 0 40px; }
+.u-pl-48 { padding-left: 3rem; }
+.u-pb-8 { padding-bottom: 8px; }
+.u-fs-xs { font-size: var(--fs-xs); }
+.u-fs-sm { font-size: var(--fs-sm); }
+.u-fs-base { font-size: var(--fs-base); }
+.u-fs-xl { font-size: var(--fs-xl); }
+.u-fs-3xl { font-size: var(--fs-3xl); }
+.u-fs-icon-2xl { font-size: var(--icon-2xl); }
+.u-fw-500 { font-weight: 500; }
+.u-fw-600 { font-weight: 600; }
+.u-font-mono { font-family: monospace; }
+.u-font-code { font-family: 'Consolas', 'Monaco', monospace; }
+.u-lh-1-6 { line-height: 1.6; }
+.u-text-left { text-align: left; }
+.u-text-center { text-align: center; }
+.u-text-right { text-align: right; }
+.u-pre-wrap { white-space: pre-wrap; }
+.u-break-all { word-break: break-all; }
+.u-list-none { list-style: none; }
+.u-text-secondary { color: var(--text-secondary); }
+.u-text-light { color: var(--text-light); }
+.u-text-brand { color: var(--theme-color); }
+.u-text-success { color: var(--success-color); }
+.u-text-error { color: var(--error-color); }
+.u-text-code { color: var(--code-fg); }
+.u-bg-theme { background: var(--theme-bg); }
+.u-bg-tertiary { background: var(--bg-tertiary); }
+.u-bg-code { background: var(--code-bg); }
+.u-bg-white { background: #fff; }
+.u-bg-brand { background-color: var(--theme-color); }
+.u-bg-success { background-color: var(--success-color); }
+.u-bg-indigo { background-color: var(--accent-indigo); }
+.u-border-brand { border-color: var(--theme-color); }
+.u-border-success { border-color: var(--success-color); }
+.u-border-indigo { border-color: var(--accent-indigo); }
+.u-border-error { border-color: var(--error-color); }
+.u-border-0 { border: 0; }
+.u-border { border: 1px solid var(--border-color); }
+.u-border-top { border-top: 1px solid var(--border-color); }
+.u-border-bottom { border-bottom: 1px solid var(--border-color); }
+.u-radius-sm { border-radius: var(--radius-sm); }
+.u-radius-md { border-radius: var(--radius-md); }
+.u-collapse { border-collapse: collapse; }
+.u-table-fixed { table-layout: fixed; }
+.u-tint-gray { --row-accent: var(--text-secondary); --row-tint: var(--accent-gray-tint); }
+.u-tint-purple { --row-accent: var(--accent-purple); --row-tint: var(--accent-purple-tint); }
+.u-tint-blue { --row-accent: var(--accent-blue); --row-tint: var(--accent-blue-tint); }
+
+/* ---------------------------------------------------------------------------
+   少数工具类需要压过组件规则
+   ---------------------------------------------------------------------------
+   内联样式原本赢过样式表里的一切声明；工具类只有 (0,1,0)，遇到
+   `.unified-card .ant-card-body`（0,2,0）、`.upload-drag-wrapper .upload-text`
+   （0,2,0）这类规则就会输。这三条是"渲染快照逐属性比对"抓出来的全部冲突，
+   逐一显式声明，而不是给工具类加 !important ——
+   .u-hidden 一旦变成 display:none !important，JS 里的 `el.style.display = ...`
+   就再也盖不住它，整套显示/隐藏逻辑会立刻失灵。
+   改这几条之前，先跑一遍带样式快照的预览验证。
+--------------------------------------------------------------------------- */
+.unified-card .ant-card-body.u-p-32 { padding: 2rem; }
+.unified-card .ant-card-body.u-p-0 { padding: 0; }
+.upload-drag-wrapper .upload-text.u-m-0 { margin-bottom: 0; }

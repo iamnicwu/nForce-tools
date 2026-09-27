@@ -11,7 +11,9 @@
  *    jsforce 连接（globalConn），会话管理完全复用 nForce-tools 现有逻辑。
  *  - 原版 React UI 改写为本项目的 vanilla JS + antd 风格。
  *  - Event Monitor 的 CometD 库取自 build/general/lib/cometd（已复制到
- *    src/lib/js/cometd），握手 / 订阅 / Replay 逻辑与原版一致。
+ *    src/lib/js/cometd）。该库是**原生 ESM**（cometd.js 直接 export class CometD），
+ *    因此按需 dynamic import，不往 index.html 塞 <script>：既不会因"忘了引入"
+ *    而在运行时报 ReferenceError，也不会给首屏增加 ~40KB 解析成本。
  */
 import { createLogger } from "../common/logger.js";
 const logSoql = createLogger("SOQL");
@@ -21,10 +23,42 @@ const logEvent = createLogger("EVENT");
 import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
+import { ensureXLSX, ensureJSZip } from "../common/lib_loader.js";
 
 const SOQL_MAX_RECORDS = 50000; // Data Export 单次查询的记录数上限（安全阀）
 const IMPORT_MAX_BATCH = 10000; // Data Import 单次导入的总行数上限
 const EVENT_LOG_MAX = 200;      // Event Monitor 界面最多保留的事件条数
+
+/**
+ * 按需加载 SheetJS（index.html 不再同步引入 0.85MB）
+ * @returns {Promise<boolean>} 是否可用
+ */
+async function requireXLSX() {
+  try {
+    await ensureXLSX();
+    return true;
+  } catch (error) {
+    logSoql.error("加载 XLSX 库失败:", error);
+    showNotification("加载 Excel 处理库失败：" + (error.message || error), "error");
+    return false;
+  }
+}
+
+/**
+ * 按需加载 CometD（模块级 Promise 记忆化，多次调用只加载一次）
+ * @returns {Promise<{CometD: Function}>}
+ */
+let cometdModulePromise = null;
+function loadCometD() {
+  if (!cometdModulePromise) {
+    cometdModulePromise = import("../lib/js/cometd/cometd.js").catch((error) => {
+      // 失败要清空缓存，否则一次加载失败会永久卡住重试
+      cometdModulePromise = null;
+      throw error;
+    });
+  }
+  return cometdModulePromise;
+}
 
 /** 当前生效的 jsforce 连接（连接建立后 sfConn.connection 即被赋值） */
 function getConn() {
@@ -131,13 +165,16 @@ export async function runSoqlQuery() {
   soqlColumns = [];
 
   try {
-    const fetcher = queryAll && queryAll.checked ? "queryAll" : "query";
-    let result = await conn[fetcher](soql);
-    soqlRecords.push(...result.records);
+    // 「含已删除记录」用 scanAll 选项，**不要**调 conn.queryAll()：
+    // jsforce 2.x 起已移除 queryAll 方法（改由 query(soql,{scanAll:true}) 承担），
+    // 之前的写法 `conn["queryAll"](soql)` 一勾选就抛 TypeError。
+    const scanAll = !!(queryAll && queryAll.checked);
+    let result = await conn.query(soql, { scanAll });
+    soqlRecords.push(...(result.records || []));
     // queryMore 轮询直到取完（或达到安全上限）
     while (!result.done && soqlRecords.length < SOQL_MAX_RECORDS && result.nextRecordsUrl) {
       result = await conn.request(result.nextRecordsUrl);
-      soqlRecords.push(...result.records);
+      soqlRecords.push(...(result.records || []));
     }
 
     // 去掉 jsforce 的 attributes 元数据列
@@ -177,8 +214,9 @@ export function renderSoqlResults() {
 }
 
 /** 导出查询结果：xlsx 直接下载，csv 手工拼装（避免公式注入风险） */
-export function exportSoqlResults(format) {
+export async function exportSoqlResults(format) {
   if (!soqlRecords.length) { showNotification("没有可导出的数据，请先执行查询", "warning"); return; }
+  if (format === "xlsx" && !(await requireXLSX())) return;
   try {
     if (format === "xlsx") {
       const ws = XLSX.utils.json_to_sheet(soqlRecords, { header: soqlColumns });
@@ -232,6 +270,7 @@ export async function handleImportFileChange(input) {
   }
   try {
     const buf = await file.arrayBuffer();
+    await ensureXLSX();
     const wb = XLSX.read(buf, { type: "array", raw: false });
     const sheetName = wb.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "" });
@@ -366,11 +405,7 @@ export async function runDataImport() {
     showNotification("字段映射为空，请至少映射一列", "warning");
     return;
   }
-  // delete 操作只需要 Id
-  if (op === "delete" && !records[0].hasOwnProperty("Id")) {
-    showNotification("delete 操作的文件必须包含映射到 Id 的列", "warning");
-    return;
-  }
+  // 注：不提供 delete 操作 —— 按安全策略扩展不做删除（见 sf_rest_client.js 文件头）
 
   const conn = getConn();
   runBtn.disabled = true;
@@ -389,7 +424,6 @@ export async function runDataImport() {
       if (op === "insert") batchResults = await sobj.insert(batch, { allowRecursive: true });
       else if (op === "update") batchResults = await sobj.update(batch, { allowRecursive: true });
       else if (op === "upsert") batchResults = await sobj.upsert(batch, extIdField, { allowRecursive: true });
-      else if (op === "delete") batchResults = await sobj.destroy(batch.map(r => r.Id), { allowRecursive: true });
       else throw new Error("未知操作类型：" + op);
       (Array.isArray(batchResults) ? batchResults : [batchResults]).forEach((r, idx) => {
         results.push({
@@ -447,8 +481,9 @@ function renderImportErrors(fails) {
   document.getElementById("export-import-errors-btn").addEventListener("click", exportImportErrors);
 }
 
-function exportImportErrors() {
+async function exportImportErrors() {
   if (!importFailResults.length) return;
+  if (!(await requireXLSX())) return;
   const ws = XLSX.utils.json_to_sheet(importFailResults);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Errors");
@@ -571,7 +606,15 @@ export async function retrieveMetadataPackage() {
     }
 
     // 单包直接下载；多包用 JSZip 合并成一个 zip
-    const files = blobs.map(b => new Uint8Array(atob(b).split("").map(c => c.charCodeAt(0))));
+    // 多包场景才需要 JSZip，所以只在这里按需加载
+    if (blobs.length > 1) {
+      try {
+        await ensureJSZip();
+      } catch (error) {
+        throw new Error("加载 JSZip 库失败：" + (error.message || error));
+      }
+    }
+    const files = blobs.map(base64ToUint8Array);
     const finalBuf = files.length === 1 ? files[0] : await mergeZips(files);
     const blob = new Blob([finalBuf], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
@@ -589,6 +632,27 @@ export async function retrieveMetadataPackage() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/**
+ * base64 字符串 → Uint8Array
+ *
+ * 性能说明：原实现 `new Uint8Array(atob(b).split("").map(c => c.charCodeAt(0)))`
+ * 会先构造一个与 base64 字符串**等长**的中间字符数组 —— 40MB 的 base64 会产生
+ * 4000 万个元素的数组，极易卡死或爆内存。这里直接在等长 Uint8Array 上逐字节写入，
+ * 空间占用只剩解码结果本身。
+ *
+ * @param {string} base64
+ * @returns {Uint8Array}
+ */
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 /** 用 JSZip 把多份 zip 解包再重新打包合并 */
@@ -683,6 +747,28 @@ function cometdReplayExtension() {
   };
 }
 
+/** 单条事件的 HTML（新事件在 <pre> 里做懒序列化由调用方决定） */
+function eventLogItemHtml(ev) {
+  return `
+        <div class="event-log-item" style="border:1px solid var(--border-color);border-radius:4px;margin-bottom:8px;background:var(--bg-tertiary);">
+            <div style="padding:6px 12px;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--text-secondary);">
+                <span>#${escapeHtml(ev._replayId)} · ${escapeHtml(ev._channel)}</span>
+                <span>${escapeHtml(ev._receivedAt)}</span>
+            </div>
+            <pre style="margin:0;padding:12px;font-size:var(--fs-xs);overflow:auto;max-height:240px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(JSON.stringify(ev._data, null, 2))}</pre>
+        </div>`;
+}
+
+function updateEventLogCount() {
+  const countEl = document.getElementById("event-log-count");
+  if (countEl) countEl.textContent = `${eventLog.length} 条`;
+}
+
+/**
+ * 全量重渲染事件日志
+ * 仅在「开始/停止监听」「清空」这类低频操作时调用。
+ * 高频事件到达请用 prependEventToLog()。
+ */
 function renderEventLog() {
   const host = document.getElementById("event-log-container");
   if (!host) return;
@@ -691,21 +777,45 @@ function renderEventLog() {
             <i class="fas fa-satellite-dish" style="font-size:var(--fs-3xl);margin-bottom:8px;"></i>
             <p>${eventListening ? "正在监听，等待事件到达…" : "尚未开始监听"}</p>
         </div>`;
+    updateEventLogCount();
     return;
   }
-  host.innerHTML = eventLog.map((ev, idx) => `
-        <div style="border:1px solid var(--border-color);border-radius:4px;margin-bottom:8px;background:var(--bg-tertiary);">
-            <div style="padding:6px 12px;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--text-secondary);">
-                <span>#${ev._replayId} · ${escapeHtml(ev._channel)}</span>
-                <span>${escapeHtml(ev._receivedAt)}</span>
-            </div>
-            <pre style="margin:0;padding:12px;font-size:var(--fs-xs);overflow:auto;max-height:240px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(JSON.stringify(ev._data, null, 2))}</pre>
-        </div>`).join("");
-  document.getElementById("event-log-count").textContent = `${eventLog.length} 条`;
+  host.innerHTML = eventLog.map(eventLogItemHtml).join("");
+  updateEventLogCount();
+}
+
+/**
+ * 增量插入一条新事件
+ *
+ * 性能说明：原实现每来一条事件就把最多 200 条全部重新 JSON.stringify 并重建 DOM，
+ * 单事件 O(N)，高频事件流下退化为 O(N²)。现在只插入 1 个节点、超出上限时删尾部。
+ *
+ * @param {Object} ev - 事件对象（已 unshift 进 eventLog）
+ */
+function prependEventToLog(ev) {
+  const host = document.getElementById("event-log-container");
+  if (!host) return;
+  // 之前是空状态占位（或从未渲染过）→ 退化成一次全量渲染
+  if (!host.querySelector(".event-log-item")) {
+    renderEventLog();
+    return;
+  }
+  const tpl = document.createElement("template");
+  tpl.innerHTML = eventLogItemHtml(ev);
+  const node = tpl.content.firstElementChild;
+  if (!node) return;
+  host.prepend(node);
+
+  // 超出上限时从尾部删除，避免 DOM 无限增长
+  const items = host.querySelectorAll(".event-log-item");
+  for (let i = items.length - 1; i >= EVENT_LOG_MAX; i--) {
+    items[i].remove();
+  }
+  updateEventLogCount();
 }
 
 /** 订阅事件通道：CometD 长轮询（与 SIR 相同的握手 / 鉴权方式） */
-export function subscribeEventChannel() {
+export async function subscribeEventChannel() {
   const channelSelect = document.getElementById("event-channel-select");
   const customInput = document.getElementById("event-custom-channel-input");
   const replayInput = document.getElementById("event-replay-input");
@@ -725,6 +835,18 @@ export function subscribeEventChannel() {
     return;
   }
 
+  // 所有校验通过后再按需拉取 CometD 库
+  if (statusEl) statusEl.textContent = "正在加载 CometD 库…";
+  let CometD;
+  try {
+    ({ CometD } = await loadCometD());
+  } catch (error) {
+    logEvent.error("加载 CometD 库失败:", error);
+    if (statusEl) statusEl.textContent = "";
+    showNotification("加载 CometD 库失败：" + error.message, "error");
+    return;
+  }
+
   const cometd = new CometD();
   cometd.configure({
     url: conn.instanceUrl + "/cometd/" + apiVersion,
@@ -738,33 +860,35 @@ export function subscribeEventChannel() {
   replayExt.setReplay(replayId);
   cometd.registerExtension("SalesforceReplayExtension", replayExt);
 
-  statusEl.textContent = "握手中…";
+  if (statusEl) statusEl.textContent = "握手中…";
   cometd.handshake(h => {
     if (!h.successful) {
-      statusEl.textContent = "";
+      if (statusEl) statusEl.textContent = "";
       showNotification("CometD 握手失败：" + (h.error || "未知错误"), "error");
       return;
     }
     eventCometd = cometd;
     eventSubscription = cometd.subscribe(channelPath, message => {
-      eventLog.unshift({
+      const ev = {
         _channel: channelPath,
         _replayId: message.data && message.data.event ? message.data.event.replayId : "-",
         _receivedAt: new Date().toLocaleTimeString(),
         _data: message.data
-      });
+      };
+      eventLog.unshift(ev);
       if (eventLog.length > EVENT_LOG_MAX) eventLog.length = EVENT_LOG_MAX;
-      renderEventLog();
+      // 增量插入单条，避免每条事件都整表重渲染
+      prependEventToLog(ev);
     }, reply => {
       if (reply.successful) {
         eventListening = true;
-        statusEl.textContent = `正在监听 ${channelPath} …`;
+        if (statusEl) statusEl.textContent = `正在监听 ${channelPath} …`;
         setEventButtons(true);
         renderEventLog();
         showNotification("事件监听已启动", "success");
       } else {
         cometd.disconnect();
-        statusEl.textContent = "";
+        if (statusEl) statusEl.textContent = "";
         showNotification("订阅失败：" + (reply.error || "未知错误"), "error");
       }
     });

@@ -256,15 +256,38 @@ export const IconMap = {
 };
 
 /**
+ * 把 `<i>` 上的内联 style 转写到 SVG 字面量上（style 值里的 " 需转义）
+ */
+function withInlineStyle(svg, style) {
+    if (!style) return svg;
+    return svg.replace("<svg ", `<svg style="${String(style).replace(/"/g, "&quot;")}" `);
+}
+
+/**
  * 替换页面中的 FontAwesome 图标为 SVG
+ *
+ * 重要：`<i>` 上的**内联 style 必须搬到替换后的 `<svg>` 上**。
+ * `el.outerHTML = ...` 会整体丢弃 `<i>` 的所有属性，而 index.html 里有 31 处
+ * 图标是靠自身内联样式生效的，丢掉就会出现"图标在、但样式没了"的隐性走形：
+ *   · `color: var(--theme-color)`（29 处）—— 27 个功能页的圆形主题图标全靠它上色，
+ *     丢掉后全部退化成正文黑，`--theme-color` 只剩背景 tint 还留着
+ *   · `position: absolute` —— 例如 session_id 输入框左侧那把钥匙，丢掉定位后会
+ *     掉进正常流，跑到输入框上方去
+ *   · `font-size` / `margin-bottom` —— 大号图标会缩成 1em
+ * SVG 用 `fill: currentColor` + `1em` 尺寸，语义与 FontAwesome 字体图标一致，
+ * 内联样式直接搬过去即可复原原设计。
+ *
+ * 配套约束：CSS 里所有 `<某容器> i { ... }` 形式的图标尺寸规则，都必须同时写
+ * `<某容器> .svg-icon`，否则替换后永远匹配不到（项目里已有若干处漏写，见 main.css
+ * 的 .section-icon / .module-icon / .empty-state 等）。
  */
 export function replaceIcons() {
     for (const [className, iconName] of Object.entries(IconMap)) {
         const elements = document.querySelectorAll(`.${className}`);
         elements.forEach(el => {
-            if (Icons[iconName]) {
-                el.outerHTML = Icons[iconName];
-            }
+            if (!Icons[iconName]) return;
+            const style = el.getAttribute("style");
+            el.outerHTML = withInlineStyle(Icons[iconName], style);
         });
     }
 }

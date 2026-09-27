@@ -4,6 +4,7 @@ import { createLogger } from "../common/logger.js";
 const log = createLogger("SF");
 import { flattenRecords, remove_duplicates, loadingLog } from "../common/utils.js";
 import { applyExpiryRules, applyT2Rules } from "../common/t2rules.js";
+import { SfRestConnection } from "../common/sf_rest_client.js";
 
 export let defaultApiVersion = "65.0";
 export let globalConn = null;
@@ -43,7 +44,10 @@ export let sfConn = {
       if (finalInstanceUrl === "https://here2serve.lightning.force.com") {
         finalInstanceUrl = "https://here2serve.my.salesforce.com";
       }
-      const conn = new jsforce.Connection({
+
+      // Salesforce 客户端是自研的普通 ESM（common/sf_rest_client.js），
+      // 直接 import 即可，不再需要惰性注入 1.37MB 的 jsforce
+      const conn = new SfRestConnection({
         instanceUrl: finalInstanceUrl,
         serverUrl: `${finalInstanceUrl}/services/Soap/u/${defaultApiVersion}`,
         sessionId: session_id,
@@ -943,10 +947,12 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
         return { success: false, error: "Salesforce connection not established" };
       }
       
-      let allCsvData = "";
+      // 分页结果用数组累积，最后一次性 join。
+      // 原先写 `allCsvData += csvText`：几十 MB 的 CSV 分多页返回时，
+      // 每次 += 都要重新分配并拷贝整段字符串，页数越多退化越明显（O(n²) 拷贝量）。
+      const csvChunks = [];
       let locator = null;
       let isFirstPage = true;
-      
       // 使用原生 fetch 以便获取 response headers 中的 Sforce-Locator
       do {
         let fetchUrl = `${this.connection.instanceUrl}/services/data/v${defaultApiVersion}/jobs/query/${jobId}/results`;
@@ -978,72 +984,18 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
           }
         }
 
-        allCsvData += csvText;
+        csvChunks.push(csvText);
         isFirstPage = false;
 
       } while (locator && locator !== "null");
 
-      return { success: true, csvData: allCsvData };
+      return { success: true, csvData: csvChunks.join("") };
     } catch (error) {
       log.error("获取 Bulk Job 结果失败:", error);
       return { success: false, error: error.message };
     }
   },
 
-  async getPCDExpiryData() {
-    try {
-      if (!this.connection) {
-        return {
-          success: false,
-          error: "Salesforce connection not established",
-        };
-      }
-
-      let dailyQuery = `SELECT
-          order.Name,
-          order.OrderNumber,
-          order.Order_Nature__c,
-          order.Service_Request_Date__c,
-          order.Attention__c,
-          FulfillmentRemark__c,
-          order.id,
-          order.Custom_OrderStatus__c,
-          order.Custom_FulfilmentStatus__c,
-          FulfillmentId__c,
-          AppointmentId__c,
-          vlocity_cmt__FulfilmentStatus__c,
-          BRM_Request_Id__c,
-          LOB__c
-      FROM OrderItem
-      WHERE
-          (MainProduct__c = TRUE OR Product2.vlocity_cmt__SubType__c = 'NowTV Standalone Starter Offer') AND
-          LOB__c !='' AND
-          order.Service_Request_Date__c <= TODAY AND
-          order.Service_Request_Date__c > 2026-01-01 AND
-          order.Custom_OrderStatus__c NOT IN (
-              'Ready To Submit', 'Superseded', 'Activated',
-              'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
-      
-              log.debug("dailyQuery: ", dailyQuery);
-      const result = await this.connection.query(dailyQuery, { autoFetch: true, maxFetch: 99999 });
-      const records = result.records || [];
-      
-      if (records.length > 0) {
-        return {
-          success: true,
-          data: records,
-        };
-      } else {
-        return {
-            success: true,
-            data: [],
-        };
-      }
-    } catch (error) {
-      log.error("获取 PCD expiry 当日数据失败:", error);
-      return { success: false, error: error.message };
-    }
-  },
 
   async getPCDPIDFalloutData() {
     try {
@@ -1298,23 +1250,34 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
    * 获取所有正在运行的 Bulk Query Job
    * 使用 Bulk API 2.0 的 jobs/query 端点来查询所有任务
    */
+  /**
+   * 列出 Bulk API 2.0 的 **查询型** job（`GET /jobs/query`）。
+   *
+   * 注意：这里必须打 `/jobs/query`，不是 `/jobs/ingest`。
+   * 本扩展的 Bulk 功能（createBulkQueryJob / checkBulkJobStatus / getBulkJobResults）
+   * 全部走 `/jobs/query`，而列表要展示的字段（query / numberOfRecordsProcessed /
+   * totalProcessingTime）也都是 query job 的字段。
+   * 之前误写成 `/jobs/ingest/`，列表永远是空的 —— 这也是它一直没被接线的根因。
+   */
   async getAllBulkQueryJobs() {
     try {
       if (!this.connection) {
         return { success: false, error: "Salesforce connection not established" };
       }
-      
+
       const response = await this.connection.request({
         method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/jobs/ingest/`
+        url: `/services/data/v${defaultApiVersion}/jobs/query`
       });
-      
-      // 解析响应，可能包含 totalAPiUsage等统计信息
-      const jobs = response.hasOwnProperty('records') ? response.records : (Array.isArray(response) ? response : []);
-      
+
+      // 列表接口返回 { done, records: [...] }，也兼容直接返回数组的情况
+      const jobs = response && Object.prototype.hasOwnProperty.call(response, 'records')
+        ? response.records
+        : (Array.isArray(response) ? response : []);
+
       return { success: true, jobs: jobs };
     } catch (error) {
-      log.error("获取全部 Bulk 任务失败:", error);
+      log.error("获取全部 Bulk 查询任务失败:", error);
       return { success: false, error: error.message };
     }
   },
@@ -1445,48 +1408,5 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
     }
   },
 
-  /**
-   * 获取指定 Log 的行日志详情 (LogEntry)
-   * @param {string} logId - Log 的 Id
-   * @param {number} limit - 返回的日志行数限制
-   */
-  async getDebugLogLines(logId, limit = 1000) {
-    try {
-      if (!this.connection) {
-        return { success: false, error: "Salesforce connection not established" };
-      }
-
-      if (!logId) {
-        return { success: false, error: "Log ID is required" };
-      }
-
-      // 查询 LogEntry 按时间排序
-      const logLinesQuery = `SELECT Id, Timestamp, Sequence, Line, TimestampOffset, ExecutableLine, 
-                              Value, StackTrace, Method, Type
-                              FROM LogEntry
-                              WHERE LogId = '${logId}'
-                              ORDER BY Sequence ASC
-                              LIMIT ${limit}`;
-
-      const encodedQuery = encodeURIComponent(logLinesQuery);
-      const response = await this.connection.request({
-        method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/tooling/query/?q=${encodedQuery}`
-      });
-
-      if (response && response.records) {
-        return {
-          success: true,
-          logLines: response.records,
-          totalSize: response.totalSize || response.records.length
-        };
-      }
-
-      return { success: false, error: "No log lines found" };
-    } catch (error) {
-      log.error("读取 Debug Log 内容失败:", error);
-      return { success: false, error: error.message };
-    }
-  }
 
 };

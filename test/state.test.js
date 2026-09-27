@@ -64,9 +64,11 @@ describe('state.js - 全局状态管理测试', () => {
       expect(appState.t2_custom_rules).toBeNull();
     });
 
-    test('t2_default_rules 初始为 null', () => {
-      expect(appState.t2_default_rules).toBeNull();
-    });
+    // 曾经还有一个 `t2_default_rules` 字段（初始为 null）。
+    // 它没有任何读取方：T-4 引擎是 t2rules.js 里硬编码的 applyT2Rules()，
+    // 不接受 rules 参数；唯一的写入方 loadDefaultT2Rules() 也是死代码。
+    // 两者已在 2026-09-27 一并删除，连同 src/rules/t2_rules_default.json。
+    // 如果将来真的要做"可配置的 T-2 默认规则"，请连测试一起加回来。
 
     test('readme_loaded 初始为 false', () => {
       expect(appState.readme_loaded).toBe(false);

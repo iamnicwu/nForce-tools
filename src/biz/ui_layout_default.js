@@ -110,7 +110,8 @@ const DEFAULT_LAYOUT = {
       icon: "fa-ellipsis-h",
       color: "teal",
       tiles: [
-        { id: "lunch", step: 14, label: "中午食乜", icon: "fa-utensils", desc: "随机挑选午餐" }
+        // 「中午食乜」是纯本地功能（列表存在本地 + 随机挑选），不依赖 Salesforce
+        { id: "lunch", step: 14, label: "中午食乜", icon: "fa-utensils", desc: "随机挑选午餐", requiresConnection: false }
       ]
     }
   ]

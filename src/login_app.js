@@ -1,8 +1,12 @@
 // login.html JavaScript Logic
 // API Version
 import { createLogger, maskSecret } from "./common/logger.js";
+import { SfRestConnection } from "./common/sf_rest_client.js";
 const log = createLogger("LOGIN");
 const defaultApiVersion = "65.0";
+
+// （原先这里会空闲预热 1.37MB 的 jsforce。改用自研的 sf_rest_client.js 之后，
+//   它是普通 ESM、已在上面静态 import，无需预热，也不需要 lib_loader。）
 
 // State
 let availableSessions = [];
@@ -43,16 +47,18 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
     log.debug('testConnectionWithUserInfo called');
     log.debug('session_id:', session_id ? maskSecret(session_id) : 'null');
     log.debug('instanceUrl:', instanceUrl);
-    
+
+    if (!instanceUrl) {
+        // 没有 instanceUrl 就无法构造连接：sessionId 只对特定 org 有效，
+        // 猜一个默认域必然失败，还会写出空的实例地址。
+        // 这里提前拦下，给出可执行的提示。
+        log.error('缺少 instanceUrl，无法建立连接');
+        return { success: false, error: '缺少实例地址(instanceUrl)，请先完成一次自动检测连接' };
+    }
+
     try {
-        // let finalInstanceUrl = instanceUrl || "https://here2serve.my.salesforce.com";
-        // if (finalInstanceUrl === "https://here2serve.lightning.force.com") {
-        //     finalInstanceUrl = "https://here2serve.my.salesforce.com";
-        //     log.debug('Converted lightning URL to:', finalInstanceUrl);
-        // }
-        
-        log.debug('Creating jsforce connection...');
-        const conn = new jsforce.Connection({
+        log.debug('Creating Salesforce connection...');
+        const conn = new SfRestConnection({
             instanceUrl: instanceUrl,
             serverUrl: `${instanceUrl}/services/Soap/u/${defaultApiVersion}`,
             sessionId: session_id,
@@ -88,6 +94,9 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
                 thumbnail: userInfo.photos?.thumbnail || userInfo.photos?.[0]?.thumbnail || userInfo.thumbnail || userInfo.photos?.picture || ''
             },
             orgInfo: orgInfo,
+            // 显式回传实例地址：调用方原本读的是 result.userInfo.instanceUrl（不存在），
+            // 结果把 sf_instance_url 写成 null，下次启动就丢了实例地址。
+            instanceUrl: instanceUrl,
             connection: conn
         };
         
@@ -117,12 +126,17 @@ async function autoDetectSession() {
         log.debug('Tabs query result:', tabs);
         log.debug('Total tabs found:', tabs ? tabs.length : 0);
         
-        const availableSessions = [];
-        // const processedDomains = new Set();
-        
+        // ── 第一步：把所有标签页收敛成「唯一的 (sid, instanceUrl) 候选」──
+        // 同一个 org 开 5 个 Salesforce 标签页时，原来会对同一个 sid 发起 5 次
+        // conn.identity() 网络请求；这里先去重，再做探测。
+        const candidates = [];
+        const candidateKeys = new Set();
+        // domainKey -> 已见过的 sid，用于跳过同一 org 的重复凭证
+        const sidByDomain = new Map();
+
         if (tabs && tabs.length > 0) {
             log.debug(`Processing ${tabs.length} tabs...`);
-            
+
             for (const tab of tabs) {
                 log.debug('-----------------------------------');
                 log.debug('Processing tab:', {
@@ -130,13 +144,11 @@ async function autoDetectSession() {
                     url: tab.url,
                     title: tab.title
                 });
-                
+
                 try {
                     const url = new URL(tab.url);
-                    // const instanceUrl = url.origin;
                     const hostname = url.hostname;
-                    
-                    
+
                     // Extract domain key
                     let domainKey = hostname;
                     if (hostname.includes('--')) {
@@ -146,66 +158,62 @@ async function autoDetectSession() {
                         domainKey = hostname.split('.')[0];
                         log.debug('  Domain key (simple):', domainKey);
                     }
-                    
-                    
-                    
+
                     // Get cookie URL
                     const cookieUrl = getDomain(tab.url);
                     log.debug('  Cookie URL:', cookieUrl);
-                    
+
                     if (!cookieUrl) {
                         log.warn('  SKIP: Could not get cookie URL');
                         continue;
                     }
-                    
+
                     // Get session from cookies
-                    log.debug('  Getting cookies for sid...');
                     const cookies = await chrome.cookies.getAll({ url: cookieUrl, name: "sid" });
-                    log.debug('  Cookies result:', cookies);
-                    
-                    if (cookies && cookies.length > 0) {
-                        const cookieValue = cookies[0].value;
-                        log.debug('  Cookie value (first 50 chars):', cookieValue ? cookieValue.substring(0, 50) + '...' : 'null');
-                        const instanceUrl = "https://"+getDomain(cookies[0].domain);
-                        log.debug("cookies[0].domain: ", instanceUrl);
-                        // Parse session ID from cookie
-                        // Cookie format: something!sessionId
-                        const parts = cookieValue.split('!');
-                        log.debug('  Cookie split parts:', parts.length);
-                        
-                        let sid = null;
-                        if (parts.length >= 2) {
-                            sid = parts[1];
-                        } else if (parts.length === 1) {
-                            sid = parts[0];
-                        }
-                        
-                        log.debug('  Extracted SID:', sid ? sid.substring(0, 20) + '...' : 'null');
-                        
-                        log.debug("abc instanceUrl: ", instanceUrl);
-                        if (sid) {
-                            log.debug('  Testing connection...');
-                            const connectionResult = await testConnectionWithUserInfo(sid, instanceUrl);
-                            
-                            if (connectionResult.success) {
-                                log.debug('  Connection SUCCESS!');
-                                availableSessions.push({
-                                    sid: sid,
-                                    instanceUrl: instanceUrl,
-                                    tabId: tab.id,
-                                    tabTitle: tab.title,
-                                    userInfo: connectionResult.userInfo,
-                                    orgInfo: connectionResult.orgInfo,
-                                    connection: connectionResult.connection
-                                });
-                                log.debug('  Session added to availableSessions, total:', availableSessions.length);
-                            } else {
-                                log.warn('  Connection FAILED');
-                            }
-                        }
-                    } else {
+                    log.debug('  Cookies count for sid:', cookies ? cookies.length : 0);
+
+                    if (!cookies || cookies.length === 0) {
                         log.warn('  No cookies found for this tab');
+                        continue;
                     }
+
+                    const cookieValue = cookies[0].value;
+                    const instanceUrl = "https://" + getDomain(cookies[0].domain);
+
+                    // Parse session ID from cookie（格式：something!sessionId）
+                    const parts = cookieValue.split('!');
+                    let sid = null;
+                    if (parts.length >= 2) {
+                        sid = parts[1];
+                    } else if (parts.length === 1) {
+                        sid = parts[0];
+                    }
+
+                    log.debug('  Extracted SID:', sid ? maskSecret(sid) : 'null');
+
+                    if (!sid) {
+                        log.warn('  SKIP: 无法从 cookie 解析出 session id');
+                        continue;
+                    }
+                    if (!instanceUrl || instanceUrl === "https://undefined") {
+                        log.warn('  SKIP: 无法确定实例地址');
+                        continue;
+                    }
+
+                    // 同一 domain 已探测过同一个 sid → 直接跳过，不再发网络请求
+                    if (sidByDomain.get(domainKey) === sid) {
+                        log.debug(`  SKIP: ${domainKey} 的该 session 已探测过`);
+                        continue;
+                    }
+                    sidByDomain.set(domainKey, sid);
+
+                    const key = `${sid}::${instanceUrl}`;
+                    if (candidateKeys.has(key)) {
+                        log.debug('  SKIP: (sid, instanceUrl) 重复');
+                        continue;
+                    }
+                    candidateKeys.add(key);
+                    candidates.push({ sid, instanceUrl, tabId: tab.id, tabTitle: tab.title });
                 } catch (err) {
                     log.error('  Error processing tab:', err);
                 }
@@ -213,31 +221,57 @@ async function autoDetectSession() {
         } else {
             log.warn('未找到 Salesforce 标签页');
         }
-        
-        // Deduplicate sessions by sid + instanceUrl combination
-        const seen = new Set();
-        const deduplicatedSessions = availableSessions.filter(session => {
-            const key = `${session.sid}::${session.instanceUrl}`;
-            if (seen.has(key)) {
-                log.debug(`  Deduplicating duplicate session: ${session.instanceUrl} (${session.userInfo?.username})`);
-                return false;
+
+        log.info(`待探测的 session 候选：${candidates.length} 个（来自 ${tabs ? tabs.length : 0} 个标签页）`);
+
+        // ── 第二步：限并发探测（每个候选一次 conn.identity() 网络往返）──
+        // 原来是串行 await，标签页一多就要等很久；这里并发 3 个，兼顾速度与限流。
+        const CONCURRENCY = 3;
+        const results = new Array(candidates.length);
+        let nextIndex = 0;
+
+        const worker = async () => {
+            while (true) {
+                const i = nextIndex++;
+                if (i >= candidates.length) return;
+                const c = candidates[i];
+                try {
+                    const connectionResult = await testConnectionWithUserInfo(c.sid, c.instanceUrl);
+                    if (connectionResult.success) {
+                        results[i] = {
+                            sid: c.sid,
+                            instanceUrl: c.instanceUrl,
+                            tabId: c.tabId,
+                            tabTitle: c.tabTitle,
+                            userInfo: connectionResult.userInfo,
+                            orgInfo: connectionResult.orgInfo,
+                            connection: connectionResult.connection
+                        };
+                    } else {
+                        log.warn(`  Connection FAILED: ${c.instanceUrl}`);
+                    }
+                } catch (err) {
+                    log.error(`  探测 ${c.instanceUrl} 失败:`, err);
+                }
             }
-            seen.add(key);
-            return true;
-        });
-        
+        };
+
+        await Promise.all(
+            Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker)
+        );
+        const availableSessions = results.filter(Boolean);
+
         log.debug('========== autoDetectSession END ==========');
-        log.debug('Total sessions before deduplication:', availableSessions.length);
-        log.debug('Total sessions after deduplication:', deduplicatedSessions.length);
-        deduplicatedSessions.forEach((s, i) => {
+        log.debug('Total sessions:', availableSessions.length);
+        availableSessions.forEach((s, i) => {
             log.debug(`  Session ${i}:`, {
                 instanceUrl: s.instanceUrl,
                 username: s.userInfo?.username,
                 fullName: s.userInfo?.fullName
             });
         });
-        
-        return deduplicatedSessions;
+
+        return availableSessions;
     } catch (error) {
         log.error('自动检测 Session 失败:', error);
         return [];
@@ -437,14 +471,33 @@ if (manualLoginBtn) {
         if (errorMsg) {
             errorMsg.classList.remove('show');
         }
-        
+
+        // 手动登录没有 instanceUrl 来源（页面上只输入 Session ID）。
+        // 沿用上一次成功连接的实例地址；没有就明确报错，别带着
+        // undefined 去拼连接。
+        let instanceUrl = null;
+        try {
+            const stored = await chrome.storage.local.get('sf_instance_url');
+            instanceUrl = stored?.sf_instance_url || null;
+        } catch (e) {
+            log.warn('读取已保存的实例地址失败:', e);
+        }
+        if (!instanceUrl) {
+            log.warn('手动登录缺少实例地址');
+            if (errorMsg) {
+                errorMsg.textContent = '手动登录需要实例地址：请先用「自动检测」成功连接一次，或在该 org 登录后再回来';
+                errorMsg.classList.add('show');
+            }
+            return;
+        }
+
         if (manualLoginBtn) {
             manualLoginBtn.disabled = true;
             manualLoginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>验证中...</span>';
         }
         
         log.debug('Calling testConnectionWithUserInfo...');
-        const result = await testConnectionWithUserInfo(sessionId);
+        const result = await testConnectionWithUserInfo(sessionId, instanceUrl);
         
         if (result.success) {
             log.debug('Manual login SUCCESS');
@@ -452,7 +505,7 @@ if (manualLoginBtn) {
             // Save to chrome.storage.local
             await chrome.storage.local.set({
                 sf_session_id: sessionId,
-                sf_instance_url: result.userInfo.instanceUrl || null,
+                sf_instance_url: result.instanceUrl || instanceUrl,
                 is_connected: true,
                 userInfo: result.userInfo,
                 orgInfo: result.orgInfo
