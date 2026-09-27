@@ -1,26 +1,42 @@
+# ───────────────────────── 依赖与构建产物 ─────────────────────────
+# 必须写成 node_modules/（目录形式）。
+# 曾因笔误写成 `.node_modules`（前面多一个点）导致 21781 个依赖文件被提交进公开仓库。
+node_modules/
+build/
+dist/
+dist_backup_before_inspector_tools/
+
+# 打包快照
+src.zip
+src 3.3.zip
+src 4.1.zip
+src 4.1.3.zip
+
+# ───────────────────────── 凭据（绝不入库） ─────────────────────────
+# 源码中禁止出现任何 token / secret；Graph Token 走 chrome.storage.local。
+# 这几条是防御性规则：万一有人又把裸令牌文件放回来，git 不会跟踪它。
+graph_token
+*.graph_token
+.env
+.env.*
+# 注意：上面两条**故意不用** `graph_token*`。
+# `src/common/graph_token.js` 是「安全存取层」（只提供读写 chrome.storage.local
+# 的入口，本身不含任何凭据），要正常入库；写成 `graph_token*` 会把它一并吞掉。
+# 该文件在 v4.0 里确实硬编码过令牌，已重构掉；令牌的历史残留见 plans/review-2026-09-27.md §1.1。
+
+# ───────────────────────── 编辑器 / 系统 ─────────────────────────
+.DS_Store
 .history
 .sfdx
-.node_modules
-build
-.workbuddy
-dist
-dist_backup_before_inspector_tools
-.DS_Store
-src.zip
-plans
-tools
-design-assets
-.DS_Store
-src 3.3.zip
-.workbuddy/memory/MEMORY.md
-dist/app.js
-dist/background.js
-dist/index.html
-dist/manifest.json
-dist/popup.html
-dist/docs/README.md
-dist/icons/icon-16.png
-dist/icons/icon-32.png
-dist/icons/icon-48.png
-dist/icons/icon-128.png
-dist/lib/css/main.css
+
+# ───────────────────────── 工作区私有内容 ─────────────────────────
+# .workbuddy/ 是本地开发记忆，含机器绝对路径与临时状态，不入库（但不要删除该目录）
+.workbuddy/
+# design-assets/ 是设计过程稿（截图 / 脚本），非交付物
+design-assets/
+
+# 注：plans/ 与 tools/ 曾在此被忽略，2026-09-28 起**有意改为入库**，故不再列出：
+#   plans/  评审与迁移方案（review-2026-09-28-jsforce.md 等），是决策依据，要能追溯
+#   tools/  自检与验证工具（check-ui.mjs、jsforce-diff/ 差分套件），属构建/CI 的一部分，
+#           先前被误伤，导致 tools/check-ui.mjs 长期未被跟踪
+# 若将来要重新忽略其中的个别文件，请写具体路径（如 plans/tmp/），不要忽略整个目录。

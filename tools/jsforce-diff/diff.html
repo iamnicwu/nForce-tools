@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>sf_rest_client 协议断言 / jsforce 差分</title></head>
+<body>
+<div id="__report__" data-status="running" data-mode="" data-summary="">运行中…</div>
+<pre id="__log__"></pre>
+<script>
+// SOAP 报文的命名空间写法差异（jsforce 用默认命名空间、本客户端用 met: 前缀）不该算不一致。
+// 归一化：去掉 <?xml?>、去掉 xmlns 声明、去掉元素前缀。
+const normSoap = (s) => s
+  .replace(/<\?xml[^>]*\?>/g, '')
+  .replace(/\sxmlns(?::[\w-]+)?="[^"]*"/g, '')
+  .replace(/<(\/?)[\w-]+:/g, '<$1');
+
+window.__track__ = async (fn) => {
+  await fetch('/reset');
+  let value, error;
+  try { value = await fn(); }
+  catch (e) {
+    // 错误按 errorCode/statusCode 比对 —— jsforce 与自研客户端是两个 Error 类，
+    // 名字和措辞必然不同，但「哪个 errorCode」才是调用方真正依赖的契约。
+    error = ((e && e.errorCode) || '(no errorCode)') + '/' + ((e && e.statusCode) || '-');
+  }
+  const reqs = await (await fetch('/seen')).json();
+  return {
+    reqs: reqs.map((r) => r.method + ' ' + r.url + (r.body ? ' | ' + r.body.replace(/\s+/g, ' ') : '')),
+    // 严格：只归一化命名空间；宽松：再把「有意多发的 includeZip」也去掉
+    reqsStrict: reqs.map((r) => r.method + ' ' + r.url + (r.body ? ' | ' + normSoap(r.body.replace(/\s+/g, ' ')) : '')),
+    reqsLoose: reqs.map((r) => r.method + ' ' + r.url + (r.body
+      ? ' | ' + normSoap(r.body.replace(/\s+/g, ' ')).replace(/<includeZip>[^<]*<\/includeZip>/g, '') : '')),
+    value, error,
+  };
+};
+</script>
+<script type="module">
+import { SfRestConnection } from '/sf_rest_client.js';
+
+const ORIGIN = '__ORIGIN__';
+
+// jsforce 已于 2026-09-28 从仓库移除。动态加载：拿不到就切到「对照基线快照」模式。
+const jfReady = await new Promise((resolve) => {
+  const s = document.createElement('script');
+  s.src = '/jsforce.min.js';
+  s.onload = () => resolve(typeof window.jsforce !== 'undefined');
+  s.onerror = () => resolve(false);
+  document.head.appendChild(s);
+});
+
+// 经 jsforce 逐字节差分验证过的协议基线
+const expected = await fetch('/expected.json')
+  .then((r) => (r.ok ? r.json() : null))
+  .catch(() => null);
+
+// 注：**没有 sobject.destroy 场景** —— 按安全策略扩展不提供删除能力。
+const scenarios = [
+  ['query(no autoFetch)', (c) => c.query('SELECT Id, Name FROM Account')],
+  ['query(autoFetch,maxFetch:5)', (c) => c.query('SELECT Id FROM Account', { autoFetch: true, maxFetch: 5 })],
+  ['query(autoFetch,maxFetch:99999)', (c) => c.query('SELECT Id FROM Account', { autoFetch: true, maxFetch: 99999 })],
+  ['query(scanAll:true)', (c) => c.query('SELECT Id FROM Account', { scanAll: true })],
+  ['identity', (c) => c.identity()],
+  ['describeGlobal', (c) => c.describeGlobal()],
+  ['sobject.describe', (c) => c.sobject('Account').describe()],
+  ['sobject.insert', (c) => c.sobject('Account').insert([{ Name: 'A' }, { Name: 'B' }])],
+  ['sobject.update', (c) => c.sobject('Account').update([{ Id: '001x', Name: 'A' }])],
+  ['sobject.upsert(2 条)', (c) => c.sobject('Account').upsert([{ Ext__c: 'K1', Name: 'A' }, { Ext__c: 'K2', Name: 'B' }], 'Ext__c')],
+  ['request(limits)', (c) => c.request({ method: 'GET', url: '/services/data/v65.0/limits/' })],
+  ['metadata.describe', (c) => c.metadata.describe('65.0')],
+  ['metadata.list', (c) => c.metadata.list([{ type: 'ApexClass' }])],
+  ['metadata.retrieve', (c) => c.metadata.retrieve({ unpackaged: { types: [{ name: 'ApexClass', members: ['MyClass'] }], version: '65.0' } })],
+  ['metadata.checkRetrieveStatus', (c) => c.metadata.checkRetrieveStatus('04pFAKE', true)],
+];
+
+// 有意不同的行为改进，见 plans/review-2026-09-28-jsforce.md §6
+const INTENTIONAL = {
+  'sobject.upsert(2 条)': '批量端点：1 次 composite PATCH，jsforce 是逐条 N 次',
+  'metadata.checkRetrieveStatus': '真的发送 includeZip=true，jsforce 丢弃该参数',
+};
+
+const mkJf = () => new jsforce.Connection({ instanceUrl: ORIGIN, sessionId: 'SID!AQ', version: '65.0' });
+const mkProto = () => new SfRestConnection({ instanceUrl: ORIGIN, sessionId: 'SID!AQ', version: '65.0' });
+
+// 规范化：丢掉 attributes 元数据列、把 undefined/函数折成哨兵，键排序。
+// 必须与 expected.json 的生成口径一致，否则断言会假失败。
+const pin = (v) => {
+  if (v === undefined) return '__undefined__';
+  if (v === null) return null;
+  if (typeof v === 'function') return '__fn__';
+  if (Array.isArray(v)) return v.map(pin);
+  if (typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v).sort()) { if (k === 'attributes') continue; o[k] = pin(v[k]); }
+    return o;
+  }
+  return v;
+};
+const valueKey = (r) => (r.error ? '✘ ' + r.error : JSON.stringify(pin(r.value)));
+
+// 逐「顶层键」比较：两边都有的键必须全等（这是真契约）；只在一侧出现的键单独列出。
+// 不整体 JSON 相等就判失败，是因为 jsforce 的返回对象是类实例、会为自己缺失的字段
+// 补空默认值（childXmlNames: [] / fileProperties: [] …），那是它类的产物而非线上数据。
+const diffTop = (a, b) => {
+  const A = pin(a), B = pin(b);
+  if (Array.isArray(A) || Array.isArray(B) || A === null || B === null
+      || typeof A !== 'object' || typeof B !== 'object') {
+    return { onlyA: [], onlyB: [], valueDiffs: JSON.stringify(A) === JSON.stringify(B) ? [] : ['(整体)'] };
+  }
+  const onlyA = [], onlyB = [], valueDiffs = [];
+  const keys = new Set([...Object.keys(A), ...Object.keys(B)]);
+  for (const k of keys) {
+    const hasA = Object.prototype.hasOwnProperty.call(A, k);
+    const hasB = Object.prototype.hasOwnProperty.call(B, k);
+    if (hasA && !hasB) onlyA.push(k);
+    else if (!hasA && hasB) onlyB.push(k);
+    else if (JSON.stringify(A[k]) !== JSON.stringify(B[k])) valueDiffs.push(k);
+  }
+  return { onlyA, onlyB, valueDiffs };
+};
+
+const mode = jfReady ? 'compare' : expected ? 'assert' : 'capture';
+const out = [];
+const captured = {};
+
+for (const [name, fn] of scenarios) {
+  const b = await window.__track__(() => fn(mkProto()));
+  // 注意键名与 expected.json 的读取口径一致：reqs = 宽松归一化后的请求列表
+  captured[name] = { reqs: b.reqsLoose, reqsStrict: b.reqsStrict, valueKey: valueKey(b) };
+
+  const intent = INTENTIONAL[name];
+  const skipReq = name.includes('upsert');   // 请求条数都不同，整体豁免
+
+  let ref = null, refReq = null, refValue = null;
+  if (mode === 'compare') {
+    ref = await window.__track__(() => fn(mkJf()));
+    refReq = ref.reqs;
+    refValue = ref.error ? '✘ ' + ref.error : ref.value;
+  } else if (mode === 'assert' && expected && expected.scenarios && expected.scenarios[name]) {
+    refReq = expected.scenarios[name].reqs;
+    refValue = expected.scenarios[name].valueKey;
+  }
+
+  let reqSame = null, reqSameStrict = null, valSame;
+  const onlyA = [], onlyB = [], valueDiffs = [];
+
+  if (mode === 'compare') {
+    reqSame = skipReq ? null : JSON.stringify(ref.reqsLoose) === JSON.stringify(b.reqsLoose);
+    reqSameStrict = skipReq ? null : JSON.stringify(ref.reqsStrict) === JSON.stringify(b.reqsStrict);
+    const va = ref.error ? '✘ ' + ref.error : ref.value;
+    const vb = b.error ? '✘ ' + b.error : b.value;
+    const d = (ref.error || b.error)
+      ? { onlyA: [], onlyB: [], valueDiffs: JSON.stringify(va) === JSON.stringify(vb) ? [] : ['(错误)'] }
+      : diffTop(va, vb);
+    onlyA.push(...d.onlyA); onlyB.push(...d.onlyB); valueDiffs.push(...d.valueDiffs);
+    valSame = valueDiffs.length === 0;
+  } else if (mode === 'assert') {
+    if (!refReq) {
+      valSame = false; valueDiffs.push('(基线里没有这个场景)');
+    } else {
+      reqSame = skipReq ? null : JSON.stringify(refReq) === JSON.stringify(b.reqsLoose);
+      reqSameStrict = skipReq ? null : JSON.stringify(expected.scenarios[name].reqsStrict) === JSON.stringify(b.reqsStrict);
+      valSame = refValue === valueKey(b);
+      if (!valSame) valueDiffs.push('(整体)');
+      if (reqSame === false) { onlyA.push(...refReq); onlyB.push(...b.reqsLoose); }
+    }
+  } else {
+    valSame = true;   // capture 模式没有对照物，只记录
+  }
+
+  out.push({
+    name,
+    reqSame, reqSameStrict, valSame,
+    protoOnly: false,
+    intentional: !!intent,
+    why: intent || '',
+    ok: mode === 'capture' ? true : (valSame && reqSame !== false),
+    onlyA, onlyB, valueDiffs,
+    jfReqs: refReq ? refReq.length : 0,
+    protoReqs: b.reqs.length,
+    jf: refValue === null ? '（capture 模式，无对照）'
+      : String(typeof refValue === 'string' ? refValue : JSON.stringify(refValue)).slice(0, 1500),
+    proto: String(b.error ? '✘ ' + b.error : JSON.stringify(b.value)).slice(0, 1500),
+    jfReq: refReq || [],
+    protoReq: b.reqs,
+  });
+}
+
+const pass = out.filter((r) => r.ok).length;
+const report = document.getElementById('__report__');
+report.dataset.status = pass === out.length ? 'ok' : 'diff';
+report.dataset.mode = mode;
+report.dataset.summary = pass + '/' + out.length + ' 场景一致（模式 ' + mode + '）';
+report.dataset.detail = JSON.stringify(out);
+if (mode === 'capture') report.dataset.capture = JSON.stringify(captured);
+
+document.getElementById('__log__').textContent =
+  '模式: ' + mode
+  + (mode === 'compare' ? '（jsforce 可用，直接对照）'
+    : mode === 'assert' ? '（jsforce 已移除，对照 expected.json 基线）'
+    : '（无 jsforce 也无基线，仅采集）')
+  + '\n' + out.map((r) =>
+    (r.ok ? '✔ ' : '⚠ ') + r.name
+    + (r.intentional ? '  [有意不同: ' + r.why + ']' : '')
+    + '  [请求' + (r.reqSame === null ? '不做对照' : r.reqSame ? '同' : '不同')
+    + (r.reqSameStrict === false && r.reqSame ? '/严格比较不同' : '')
+    + ' · 值' + (r.valSame ? '相同' : '不同') + ']'
+    + '\n    对照(' + r.jfReqs + '): ' + r.jf
+    + '\n    实际(' + r.protoReqs + '): ' + r.proto
+    + (r.valueDiffs.length ? '\n    ⚠ 值不同的键: ' + r.valueDiffs.join(', ') : '')
+    + (r.onlyA.length ? '\n      对照独有: ' + r.onlyA.join(' / ') : '')
+    + (r.onlyB.length ? '\n      实际独有: ' + r.onlyB.join(' / ') : '')
+  ).join('\n');
+</script>
+</body>
+</html>

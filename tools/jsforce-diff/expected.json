@@ -1,0 +1,148 @@
+{
+  "_comment": "jsforce 3.2.2 逐字节差分验证过的协议基线（capture 模式自动生成）。jsforce 已从仓库移除，diff.html 在拿不到 jsforce 时用这个文件做断言。",
+  "_generatedBy": "tools/jsforce-diff/diff.html capture 模式",
+  "_jsforceVersion": "3.2.2",
+  "scenarios": {
+    "query(no autoFetch)": {
+      "reqs": [
+        "GET /services/data/v65.0/query?q=SELECT%20Id%2C%20Name%20FROM%20Account"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0/query?q=SELECT%20Id%2C%20Name%20FROM%20Account"
+      ],
+      "valueKey": "{\"done\":false,\"nextRecordsUrl\":\"http://127.0.0.1:8788/services/data/v65.0/query/0gZ-2000\",\"records\":[{\"Id\":\"a0\",\"Name\":\"N0\"},{\"Id\":\"a1\",\"Name\":\"N1\"},{\"Id\":\"a2\",\"Name\":\"N2\"}],\"totalSize\":9}"
+    },
+    "query(autoFetch,maxFetch:5)": {
+      "reqs": [
+        "GET /services/data/v65.0/query?q=SELECT%20Id%20FROM%20Account",
+        "GET /services/data/v65.0/query/0gZ-2000"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0/query?q=SELECT%20Id%20FROM%20Account",
+        "GET /services/data/v65.0/query/0gZ-2000"
+      ],
+      "valueKey": "{\"done\":true,\"records\":[{\"Id\":\"a0\",\"Name\":\"N0\"},{\"Id\":\"a1\",\"Name\":\"N1\"},{\"Id\":\"a2\",\"Name\":\"N2\"},{\"Id\":\"a2000\",\"Name\":\"N2000\"},{\"Id\":\"a2001\",\"Name\":\"N2001\"}],\"totalSize\":9}"
+    },
+    "query(autoFetch,maxFetch:99999)": {
+      "reqs": [
+        "GET /services/data/v65.0/query?q=SELECT%20Id%20FROM%20Account",
+        "GET /services/data/v65.0/query/0gZ-2000"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0/query?q=SELECT%20Id%20FROM%20Account",
+        "GET /services/data/v65.0/query/0gZ-2000"
+      ],
+      "valueKey": "{\"done\":true,\"records\":[{\"Id\":\"a0\",\"Name\":\"N0\"},{\"Id\":\"a1\",\"Name\":\"N1\"},{\"Id\":\"a2\",\"Name\":\"N2\"},{\"Id\":\"a2000\",\"Name\":\"N2000\"},{\"Id\":\"a2001\",\"Name\":\"N2001\"},{\"Id\":\"a2002\",\"Name\":\"N2002\"}],\"totalSize\":9}"
+    },
+    "query(scanAll:true)": {
+      "reqs": [
+        "GET /services/data/v65.0/queryAll?q=SELECT%20Id%20FROM%20Account"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0/queryAll?q=SELECT%20Id%20FROM%20Account"
+      ],
+      "valueKey": "{\"done\":true,\"records\":[{\"Id\":\"a0\",\"Name\":\"N0\"},{\"Id\":\"d1\",\"IsDeleted\":true,\"Name\":\"D1\"}],\"totalSize\":2}"
+    },
+    "identity": {
+      "reqs": [
+        "GET /services/data/v65.0",
+        "GET /id/00Dxx/005xx?format=json&oauth_token=SID!AQ"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0",
+        "GET /id/00Dxx/005xx?format=json&oauth_token=SID!AQ"
+      ],
+      "valueKey": "{\"display_name\":\"Tester\",\"name\":\"Tester\",\"organization_id\":\"00Dxx\",\"user_id\":\"005xx\",\"username\":\"t@example.com\"}"
+    },
+    "describeGlobal": {
+      "reqs": [
+        "GET /services/data/v65.0/sobjects"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0/sobjects"
+      ],
+      "valueKey": "{\"encoding\":\"UTF-8\",\"sobjects\":[{\"createable\":true,\"name\":\"Account\"},{\"createable\":true,\"name\":\"Contact\"}]}"
+    },
+    "sobject.describe": {
+      "reqs": [
+        "GET /services/data/v65.0/sobjects/Account/describe"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0/sobjects/Account/describe"
+      ],
+      "valueKey": "{\"fields\":[{\"label\":\"ID\",\"name\":\"Id\",\"nillable\":false,\"type\":\"id\"},{\"label\":\"Name\",\"name\":\"Name\",\"nillable\":false,\"type\":\"string\"}],\"label\":\"Account\",\"name\":\"Account\"}"
+    },
+    "sobject.insert": {
+      "reqs": [
+        "POST /services/data/v65.0/composite/sobjects | {\"allOrNone\":false,\"records\":[{\"attributes\":{\"type\":\"Account\"},\"Name\":\"A\"},{\"attributes\":{\"type\":\"Account\"},\"Name\":\"B\"}]}"
+      ],
+      "reqsStrict": [
+        "POST /services/data/v65.0/composite/sobjects | {\"allOrNone\":false,\"records\":[{\"attributes\":{\"type\":\"Account\"},\"Name\":\"A\"},{\"attributes\":{\"type\":\"Account\"},\"Name\":\"B\"}]}"
+      ],
+      "valueKey": "[{\"errors\":[],\"id\":\"001new0\",\"success\":true},{\"errors\":[],\"id\":\"001new1\",\"success\":true}]"
+    },
+    "sobject.update": {
+      "reqs": [
+        "PATCH /services/data/v65.0/composite/sobjects | {\"allOrNone\":false,\"records\":[{\"id\":\"001x\",\"attributes\":{\"type\":\"Account\"},\"Name\":\"A\"}]}"
+      ],
+      "reqsStrict": [
+        "PATCH /services/data/v65.0/composite/sobjects | {\"allOrNone\":false,\"records\":[{\"id\":\"001x\",\"attributes\":{\"type\":\"Account\"},\"Name\":\"A\"}]}"
+      ],
+      "valueKey": "[{\"errors\":[],\"id\":\"001x\",\"success\":true}]"
+    },
+    "sobject.upsert(2 条)": {
+      "reqs": [
+        "PATCH /services/data/v65.0/composite/sobjects/Account/Ext__c | {\"allOrNone\":false,\"records\":[{\"attributes\":{\"type\":\"Account\"},\"Ext__c\":\"K1\",\"Name\":\"A\"},{\"attributes\":{\"type\":\"Account\"},\"Ext__c\":\"K2\",\"Name\":\"B\"}]}"
+      ],
+      "reqsStrict": [
+        "PATCH /services/data/v65.0/composite/sobjects/Account/Ext__c | {\"allOrNone\":false,\"records\":[{\"attributes\":{\"type\":\"Account\"},\"Ext__c\":\"K1\",\"Name\":\"A\"},{\"attributes\":{\"type\":\"Account\"},\"Ext__c\":\"K2\",\"Name\":\"B\"}]}"
+      ],
+      "valueKey": "[{\"errors\":[],\"id\":\"001K1\",\"success\":true},{\"errors\":[],\"id\":\"001K2\",\"success\":true}]"
+    },
+    "request(limits)": {
+      "reqs": [
+        "GET /services/data/v65.0/limits/"
+      ],
+      "reqsStrict": [
+        "GET /services/data/v65.0/limits/"
+      ],
+      "valueKey": "{\"DailyApiRequests\":{\"Max\":100000,\"Remaining\":99000}}"
+    },
+    "metadata.describe": {
+      "reqs": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><describeMetadata><asOfVersion>65.0</asOfVersion></describeMetadata></Body></Envelope>"
+      ],
+      "reqsStrict": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><describeMetadata><asOfVersion>65.0</asOfVersion></describeMetadata></Body></Envelope>"
+      ],
+      "valueKey": "{\"metadataObjects\":[{\"childXmlNames\":[],\"directoryName\":\"classes\",\"inFolder\":false,\"metaFile\":false,\"suffix\":\"cls\",\"xmlName\":\"ApexClass\"},{\"childXmlNames\":[],\"directoryName\":\"reports\",\"inFolder\":true,\"metaFile\":false,\"suffix\":\"report\",\"xmlName\":\"Report\"}],\"organizationNamespace\":\"\",\"partialSaveAllowed\":true,\"testRequired\":false}"
+    },
+    "metadata.list": {
+      "reqs": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><listMetadata><queries><type>ApexClass</type></queries><asOfVersion>65.0</asOfVersion></listMetadata></Body></Envelope>"
+      ],
+      "reqsStrict": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><listMetadata><queries><type>ApexClass</type></queries><asOfVersion>65.0</asOfVersion></listMetadata></Body></Envelope>"
+      ],
+      "valueKey": "[{\"createdById\":\"005\",\"createdByName\":\"Tester\",\"createdDate\":\"2026-01-01T00:00:00.000Z\",\"fileName\":\"classes/MyClass.cls\",\"fullName\":\"MyClass\",\"id\":\"\",\"lastModifiedById\":\"005\",\"lastModifiedByName\":\"Tester\",\"lastModifiedDate\":\"2026-02-02T00:00:00.000Z\",\"type\":\"ApexClass\"}]"
+    },
+    "metadata.retrieve": {
+      "reqs": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><retrieve><request><unpackaged><types><name>ApexClass</name><members>MyClass</members></types><version>65.0</version></unpackaged></request></retrieve></Body></Envelope>"
+      ],
+      "reqsStrict": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><retrieve><request><unpackaged><types><name>ApexClass</name><members>MyClass</members></types><version>65.0</version></unpackaged></request></retrieve></Body></Envelope>"
+      ],
+      "valueKey": "{\"done\":false,\"fileProperties\":[],\"id\":\"04pFAKE\",\"messages\":[],\"state\":\"Queued\",\"status\":\"\",\"success\":false,\"zipFile\":\"\"}"
+    },
+    "metadata.checkRetrieveStatus": {
+      "reqs": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><checkRetrieveStatus><asyncProcessId>04pFAKE</asyncProcessId></checkRetrieveStatus></Body></Envelope>"
+      ],
+      "reqsStrict": [
+        "POST /services/Soap/m/65.0 | <Envelope><Header><SessionHeader><sessionId>SID!AQ</sessionId></SessionHeader></Header><Body><checkRetrieveStatus><asyncProcessId>04pFAKE</asyncProcessId><includeZip>true</includeZip></checkRetrieveStatus></Body></Envelope>"
+      ],
+      "valueKey": "{\"done\":true,\"fileProperties\":[{\"createdById\":\"005\",\"createdByName\":\"Tester\",\"createdDate\":\"2026-01-01T00:00:00.000Z\",\"fileName\":\"classes/MyClass.cls\",\"fullName\":\"MyClass\",\"id\":\"\",\"lastModifiedById\":\"005\",\"lastModifiedByName\":\"Tester\",\"lastModifiedDate\":\"2026-02-02T00:00:00.000Z\",\"type\":\"ApexClass\"}],\"id\":\"04pFAKE\",\"messages\":[],\"status\":\"Succeeded\",\"success\":true,\"zipFile\":\"UEsDBAoAAAAAAA==\"}"
+    }
+  }
+}
