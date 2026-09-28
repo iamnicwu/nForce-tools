@@ -1,7 +1,7 @@
 import { createLogger } from "./common/logger.js";
 
 const log = createLogger("APP");
-import { sfConn, applyApiVersion } from "./biz/sf_service.js";
+import { sfConn, applyApiVersion, setAuthFailureHandler } from "./biz/sf_service.js";
 import { showNotification, describeError } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
 import { $, on } from "./common/dom.js";
@@ -108,6 +108,8 @@ async function validateStoredSession() {
   
   try {
     const isConnected = await sfConn.testConnection(appState.session_id, appState.instance_url);
+    // 成功即视为"会话新鲜"：刷新新鲜度并摘掉"疑似失效"标记（看门狗也会随之停下）
+    if (isConnected) markSessionVerified();
     return isConnected;
   } catch (e) {
     log.warn('Session 验证失败:', e);
@@ -139,28 +141,83 @@ function isSessionAuthFailure() {
 }
 
 /* ============================================================
- * 会话自动恢复（侧边栏里唯一的"逃生通道"）
+ * 会话自动恢复与自动续期 —— 「过期后不必再手动连」的全部机制都在这里
  *
- * 触发源共四类，全部走下面这一个入口：
- *   ① 启动时校验失败 / 启动时就是未连接
- *   ② 用户点「自动获取 Session 并重新连接」（section-1）
- *   ③ 浏览器里的 sid Cookie 变了 —— 用户在别的标签页重新登录了 Salesforce
- *   ④ 侧边栏重新可见 / 窗口重新获得焦点 —— 用户从别处切回来
+ * 为什么需要这么多层：会话过期有**四种完全不同的形态**，每一种能观察到的信号都不一样，
+ * 只堵住其中一两种，用户就会在另一种形态下卡在「未连接」里。
  *
- * ③④ 是"侧边栏能自己好起来"的关键：侧边栏页面**不会被重载**，没有它们的话
- * 用户即使重新登录了 Salesforce，面板也会一直停在「未连接」。
+ *   ① 打开面板时就已经过期（浏览器闲置了一夜）
+ *      → 启动时校验失败 / 根本没连上，两种都立刻自动恢复
+ *   ② 用着用着过期（最阴的一种：界面徽标还绿着，会话其实已经死了）
+ *      → 任意请求拿到 401/403 时自动换新会话，**并把原来那条请求重发一次**，
+ *        用户完全无感。这是本轮新增的能力，也是"减少手动操作"最关键的一环。
+ *   ③ 用户在别的标签页重新登录了 Salesforce，再切回面板
+ *      → sid Cookie 变化（最准）+ 面板重新可见/窗口获得焦点（兜底）
+ *   ④ 面板一直开着，什么都没发生（用户在别处忙了很久）
+ *      → 断连期间的低频看门狗；一旦连上就自动停，不烧 API 配额
  *
- * 四者共用一把重入锁 + 一个最小间隔，避免叠加成请求风暴。
+ * 四层共用同一把重入锁（recoveryInFlight）与最小间隔，避免叠加成请求风暴。
  * ============================================================ */
 const RECOVERY_MIN_INTERVAL_MS = 3000;
+
+/**
+ * 「会话新鲜度」阈值：距离上次确认会话可用超过这么久，用户回到面板时就复验一次。
+ *
+ * 为什么不再只看 `is_connected`：那是个内存布尔值，**服务端会话过期不会让它变红**。
+ * 老实现里「已连接就直接返回」的短路，正是形态 ② 永远等不到自愈的原因
+ * —— 用户切回来 → 短路 → 什么都没发生 → 点任何功能都失败 → 只能手动重连。
+ * identity 复验是 2 个 HTTP 请求，代价远小于让用户自己去点一次重连。
+ */
+const VERIFY_STALE_MS = 5 * 60 * 1000;
+/** 两次自动复验之间的最小间隔：focus / visibilitychange 会连续触发，必须压住 */
+const VERIFY_MIN_INTERVAL_MS = 60 * 1000;
+
+/** 看门狗：首次等待 / 最大退避 / 最多连续尝试次数（之后暂停，等新的触发源唤醒） */
+const WATCHDOG_BASE_MS = 15 * 1000;
+const WATCHDOG_MAX_MS = 120 * 1000;
+const WATCHDOG_MAX_TRIES = 8;
+
 let recoveryInFlight = null;
 let lastRecoveryAt = 0;
+/** 最近一次**真实 API 请求**被判鉴权失败（401/403）—— 即"徽标还绿着、会话其实已死" */
+let sessionSuspect = false;
+/** 上次**确认**会话可用的时刻（验证通过 / 恢复成功 / 手动连接成功都会刷新） */
+let lastVerifiedAt = 0;
+/** 上次发起自动复验的时刻（只管节流，不代表成功） */
+let lastVerifyAt = 0;
+
+/** 会话刚被确认可用：刷新新鲜度、摘掉"疑似失效"、停掉看门狗 */
+function markSessionVerified() {
+  lastVerifiedAt = Date.now();
+  sessionSuspect = false;
+  stopWatchdog();
+}
 
 /** 当前停留的 section 号（首页返回 null） */
 function currentSectionNumber() {
   const active = document.querySelector(".step-section.active");
   const matched = active && active.id ? String(active.id).match(/^section-(\d+)$/) : null;
   return matched ? Number(matched[1]) : null;
+}
+
+/**
+ * 在「连接设置」卡片里显示一行状态（元素不存在时静默跳过 —— 这个卡片在别的 section 时也可能不在 DOM 里）。
+ * @param {string} text
+ * @param {"auto-pending"|"auto-ok"|"auto-error"} state
+ */
+function setReconnectHint(text, state) {
+  const el = $("connection-reconnect-status");
+  if (!el) return;
+  el.textContent = text;
+  el.dataset.state = state;
+  el.style.color = state === "auto-ok" ? "var(--success-color)" : state === "auto-error" ? "var(--error-color)" : "var(--warning-color)";
+}
+
+/** 自动恢复失败时给用户一句能照着做的提示（不弹错误 toast，避免反复打扰） */
+function describeRecoveryFailure(reason) {
+  if (reason === "no-candidate") return "浏览器里没有 Salesforce 登录态：登录后会自动重连";
+  if (reason === "verify-blocked") return "校验请求没能到达 Salesforce（网络/代理），稍后会自动重试";
+  return "浏览器里的会话都已失效：重新登录 Salesforce 后会自动重连";
 }
 
 /**
@@ -183,6 +240,7 @@ async function attemptSessionRecovery(trigger, opts = {}) {
   lastRecoveryAt = Date.now();
   recoveryInFlight = (async () => {
     log.info(`尝试恢复 Salesforce 会话（触发：${trigger}）`);
+    setReconnectHint("正在重新获取 Salesforce 会话…", "auto-pending");
     const result = await recoverSessionFromBrowser({
       preferredInstanceUrl: appState.instance_url || null,
       knownBadSid
@@ -193,6 +251,11 @@ async function attemptSessionRecovery(trigger, opts = {}) {
       if (currentSectionNumber() === 1) {
         goHome();
       }
+      setReconnectHint("已自动获取到可用会话", "auto-ok");
+    } else {
+      // 自动恢复失败**不弹 toast**：形态 ④ 的看门狗会反复尝试，每次都弹就成了骚扰。
+      // 只把状态写进「连接设置」卡片，用户真去看时能看到原因。
+      setReconnectHint(describeRecoveryFailure(result.reason), "auto-error");
     }
     return result;
   })();
@@ -204,15 +267,166 @@ async function attemptSessionRecovery(trigger, opts = {}) {
   }
 }
 
+/* ── 第 ② 层：运行期请求被判会话失效 → 自动换会话，并让原请求重试 ── */
+
 /**
- * 注册"环境变了就再试一次"的监听：面板重新可见、窗口重新获得焦点、sid Cookie 变化。
+ * 由 `sf_service.setAuthFailureHandler()` 注入，被 `SfRestConnection.request()`
+ * 在收到 401/403 时调用。**返回新凭据意味着那条失败的请求会被原样重发一次**，
+ * 所以对用户来说就是"点了功能，正常出结果"，而不是"报错 + 自己去重连"。
  *
- * 三个触发源的性质不同，因此**不是同一套守卫**：
+ * ⚠️ 刻意**不**在这里等 `recoveryInFlight`：恢复流程内部会调 `onSessionRestored()`，
+ * 而后者自己也会发请求（fetchOrgInfo 查 Organization）。若那条请求再吃一个 401，
+ * 就会回到这里等"正在跑的那趟恢复"，而它正等着这条请求 —— 死锁。
+ * 并发 401 时让后来者按原样失败即可，不影响任何人。
+ *
+ * @returns {Promise<{sessionId: string, instanceUrl: string}|null>}
+ */
+async function handleAuthFailure() {
+  sessionSuspect = true;
+  log.warn("API 请求被判会话失效（401/403），尝试自动换一份新会话…");
+
+  if (recoveryInFlight) return null; // 已经有一趟在跑，这一条按原样失败就好
+
+  // 服务端已经明确判定失效，此刻的 `is_connected` 一定是错的，必须先摘掉：
+  // `attemptSessionRecovery()` 开头有「已连接就直接返回」的短路，不摘的话恢复会被
+  // 整个跳过，然后我们会把**同一个死会话**当成"续期成功"返回，重试再吃一次 401。
+  // storage 先不写 —— 乐观一点，恢复成功（绝大多数情况）时它本来就会被覆盖。
+  appState.is_connected = false;
+  updateUIState();
+
+  const result = await attemptSessionRecovery("运行期请求被判会话失效", {
+    force: true,
+    knownBadSid: appState.session_id,
+    successMessage: "Salesforce 会话已过期，已自动换用浏览器里的新会话"
+  });
+
+  if (result && result.ok) {
+    return { sessionId: appState.session_id, instanceUrl: appState.instance_url };
+  }
+
+  // 浏览器里也没有可用登录态：如实落盘为未连接，并交给看门狗继续等。
+  // 用户重新登录 Salesforce 后，sid Cookie 变化与看门狗两条路都会把它接回来。
+  log.warn("自动换新会话失败，面板保持未连接，等用户重新登录后自动恢复");
+  try {
+    await chrome.storage.local.set({ is_connected: false });
+  } catch (e) {
+    log.warn("写入未连接状态失败:", e);
+  }
+  ensureWatchdog();
+  return null;
+}
+
+// 注入点。函数声明会提升，所以放在这里也能拿到上面的定义。
+// 只要 app.js 被加载（侧边栏 / 标签页 / 贴边浮窗三种宿主都是同一个页面），
+// 运行期会话过期就会自动续期，不再需要用户手动点重连。
+setAuthFailureHandler(handleAuthFailure);
+
+/* ── 第 ③ 层：用户回到面板 / 窗口重新获得焦点 ── */
+
+/**
+ * 「用户回来了」时的会话体检。
+ *
+ * 判据是**新鲜度**而不是 `is_connected`：
+ *   · 已连接 + 不旧 + 不可疑 → 什么都不做（不打扰、不烧配额）
+ *   · 否则复验；确认失效就顺手换新会话（`reconnectNow` 内部完成）
+ * 用 VERIFY_MIN_INTERVAL_MS 压住 focus / visibilitychange 的连续触发。
+ *
+ * @param {string} trigger
+ */
+async function ensureSessionHealthy(trigger) {
+  if (document.visibilityState === "hidden") return { ok: true, skipped: "hidden" };
+
+  const now = Date.now();
+  if (appState.is_connected && !sessionSuspect && now - lastVerifiedAt < VERIFY_STALE_MS) {
+    return { ok: true, skipped: "fresh" };
+  }
+  if (now - lastVerifyAt < VERIFY_MIN_INTERVAL_MS) return { ok: false, skipped: "throttled" };
+
+  lastVerifyAt = now;
+  return reconnectNow(trigger);
+}
+
+/* ── 第 ④ 层：看门狗（断连期间的低频重试，连上即停） ── */
+
+let watchdogTimer = null;
+let watchdogTries = 0;
+let watchdogDelay = WATCHDOG_BASE_MS;
+
+/** 停表并复位（注意：只清定时器与计数，不改变任何会话状态） */
+function stopWatchdog() {
+  if (watchdogTimer !== null) clearTimeout(watchdogTimer);
+  watchdogTimer = null;
+  watchdogTries = 0;
+  watchdogDelay = WATCHDOG_BASE_MS;
+}
+
+function scheduleWatchdog(delay) {
+  if (watchdogTimer !== null) clearTimeout(watchdogTimer);
+  watchdogTimer = setTimeout(watchdogTick, delay);
+}
+
+/**
+ * 保证看门狗在跑（幂等）。
+ *
+ * 只有「未连接」或「疑似失效」才需要它 —— 连接正常时它一次都不会跑，
+ * 从根上避免"为了自愈而一直烧 API 配额"。
+ * @param {{reset?: boolean}} [opts] `reset` 用于"新的触发源来了，重新从最短间隔开始"
+ */
+function ensureWatchdog({ reset = false } = {}) {
+  if (reset) {
+    watchdogTries = 0;
+    watchdogDelay = WATCHDOG_BASE_MS;
+  }
+  if (watchdogTimer !== null) return;
+  if (appState.is_connected && !sessionSuspect) return;
+  scheduleWatchdog(watchdogDelay);
+}
+
+async function watchdogTick() {
+  watchdogTimer = null;
+  if (appState.is_connected && !sessionSuspect) {
+    stopWatchdog();
+    return;
+  }
+  // 面板不可见时只把闹钟往后推、不发任何请求：没人看着，连上了也没意义
+  if (document.visibilityState === "hidden") {
+    scheduleWatchdog(WATCHDOG_MAX_MS);
+    return;
+  }
+
+  watchdogTries += 1;
+  const result = await attemptSessionRecovery(`看门狗第 ${watchdogTries} 次`, {
+    force: true,
+    // 疑似失效时跳过刚刚被判死的那条会话，别拿它再发一次无谓请求
+    knownBadSid: sessionSuspect ? appState.session_id : null
+  });
+  if (result && result.ok) {
+    stopWatchdog();
+    return;
+  }
+
+  if (watchdogTries >= WATCHDOG_MAX_TRIES) {
+    log.info(
+      `看门狗已连续尝试 ${watchdogTries} 次仍未连上，暂停自动重试` +
+        `（重新回到面板、窗口获得焦点，或登录 Salesforce 后都会再次触发）`
+    );
+    stopWatchdog();
+    return;
+  }
+  watchdogDelay = Math.min(watchdogDelay * 2, WATCHDOG_MAX_MS);
+  scheduleWatchdog(watchdogDelay);
+}
+
+/**
+ * 注册"环境变了就再确认一次"的监听：sid Cookie 变化、面板重新可见、窗口重新获得焦点。
+ *
+ * 三者的信号强度不同，因此**不是同一套守卫**：
+ *   · `cookies.onChanged`（sid）—— 表示"登录态真的变了"，是最强的信号：用户在别的
+ *     标签页重新登录 / 换了 org。未连接或疑似失效时**绕过所有节流立刻复验**
+ *     （这正是"用户刚登录完，等着面板自己好"的那一刻）。
  *   · `visibilitychange` / `window.focus` —— 只表示"用户回来了"，会话未必变。
- *     仍保留 `appState.is_connected` 短路：连上了就不该每次切回来都去打一次 org
- *     （identity 是一次真实 API 调用，会吃 DailyApiRequests 配额）。
- *   · `cookies.onChanged`（sid）—— 表示"登录态真的变了"，是最强的信号，
- *     因此**不设短路**，改走会先复验的 `reconnectNow()`。原因见该处注释。
+ *     走 `ensureSessionHealthy()`：按会话**新鲜度**决定要不要复验，而不是被
+ *     `is_connected` 这个可能已经骗人的布尔值一票否决。
  *
  * 幂等：重复调用只绑一次。
  */
@@ -221,14 +435,8 @@ function watchSessionRecovery() {
   if (recoveryWatchersBound) return;
   recoveryWatchersBound = true;
 
-  // ③ Salesforce 的 sid Cookie 变化 = 用户刚在某个标签页登录/换号。
-  //    这是最准的信号：只认 sid，且限制在 Salesforce 域上，其他 Cookie 一律忽略。
-  //
-  //    ⚠️ 这里**刻意不加 `if (appState.is_connected) return`**（另外两个触发源有）。
-  //    因为最需要它救的，恰恰是「徽标还绿着、会话其实已经在使用中过期」那种状态
-  //    （各功能轮流报「尚未连接」，但连接标记还是 true）——加了短路就永远等不到自愈。
-  //    所以改走 `reconnectNow()`：它先复验（一次 identity 请求），
-  //    仍然有效就原地返回、确认失效才换新会话，不会因为一次 Cookie 抖动就去翻遍 Cookie。
+  // ⑤ Salesforce 的 sid Cookie 变化 = 用户刚在某个标签页登录/换号。
+  //    只认 sid，且限制在 Salesforce 域上，其他 Cookie 一律忽略。
   //    `info.removed` 为真表示是删除（登出/清理），没有可恢复的东西，直接忽略。
   try {
     chrome.cookies?.onChanged?.addListener((info) => {
@@ -236,32 +444,40 @@ function watchSessionRecovery() {
       if (!cookie || cookie.name !== "sid" || info.removed) return;
       const domain = String(cookie.domain || "").replace(/^\./, "");
       if (!/salesforce\.com$|force\.com$/i.test(domain)) return;
-      reconnectNow("检测到 Salesforce sid Cookie 变化");
+
+      if (!appState.is_connected || sessionSuspect) {
+        reconnectNow("检测到 Salesforce sid Cookie 变化");
+      } else {
+        ensureSessionHealthy("检测到 Salesforce sid Cookie 变化");
+      }
     });
   } catch (e) {
     log.warn("注册 Cookie 变化监听失败（不影响手动恢复）:", e);
   }
 
-  // ④-a 面板重新可见：被鼠标移出自动隐藏后又被召回，或窗口从后台切回来
+  // ③-a 面板重新可见：被鼠标移出自动隐藏后又被召回，或窗口从后台切回来
+  // ③-b 窗口重新获得焦点：用户去浏览器里登录完 Salesforce 再切回来
+  const onWakeUp = (trigger) => {
+    ensureSessionHealthy(trigger)
+      .catch((e) => log.warn(`会话体检异常（${trigger}）:`, e))
+      // 无论体检结果如何，都确保看门狗在跑（未连接时它是最后一道兜底）
+      .then(() => ensureWatchdog());
+  };
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible" || appState.is_connected) return;
-    attemptSessionRecovery("面板重新可见");
+    if (document.visibilityState !== "visible") return;
+    onWakeUp("面板重新可见");
   });
-
-  // ④-b 窗口重新获得焦点：用户去浏览器里登录完 Salesforce 再切回来
-  window.addEventListener("focus", () => {
-    if (appState.is_connected) return;
-    attemptSessionRecovery("窗口重新获得焦点");
-  });
+  window.addEventListener("focus", () => onWakeUp("窗口重新获得焦点"));
 }
 
 /**
- * 「重新连接」：用户主动按下时的入口 —— 先**复验**当前连接，确认失效了才去换新会话。
+ * 「先复验，失效才换新会话」的统一入口 ——
+ * 自动触发源（回到面板 / 获得焦点 / sid Cookie 变化）与用户手动点按钮都走它。
  *
  * 为什么不直接调 `attemptSessionRecovery()`：后者开头有「已连接就直接返回」的短路，
- * 而用户点这个按钮的场景恰恰包含「界面说已连接、其实会话已经在使用中过期」——
- * 各功能轮流报「尚未连接 Salesforce」，但徽标还是绿的。
- * 此时按钮必须真的去复验一次，否则点了没反应，比没有按钮更让人困惑。
+ * 而最需要救的场景恰恰是「界面说已连接、其实会话已经过期」。
+ * 所以这里先真的复验一次（`validateStoredSession()`，成功会自动 `markSessionVerified()`），
+ * 确认失效了才把状态降级、去浏览器 Cookie 换新的。
  *
  * @param {string} trigger
  * @returns {Promise<{ok:boolean, skipped?:string, reason?:string}>}
@@ -270,7 +486,7 @@ async function reconnectNow(trigger) {
   if (appState.is_connected) {
     const stillOk = await validateStoredSession();
     if (stillOk) {
-      log.info("用户点了「自动获取 Session」，但当前会话复验仍然有效，无需换新");
+      log.info(`复验通过（触发：${trigger}），当前会话仍然有效，无需换新`);
       return { ok: true, skipped: "verified-still-valid" };
     }
     if (!isSessionAuthFailure()) {
@@ -278,15 +494,20 @@ async function reconnectNow(trigger) {
       log.warn("复验未通过但无法判定会话失效（多为网络/CSP）：", sfConn.lastError);
       return { ok: false, reason: "verify-blocked" };
     }
-    log.warn("复验确认会话已失效，切换到未连接并重新获取");
+    log.warn(`复验确认会话已失效（触发：${trigger}），切换到未连接并重新获取`);
+    sessionSuspect = true;
     appState.is_connected = false;
     updateUIState();
   }
-  return attemptSessionRecovery(trigger, { force: true });
+  // 刚复验过的这条会话已经确定是死的，别再拿它去发一次请求
+  return attemptSessionRecovery(trigger, { force: true, knownBadSid: appState.session_id });
 }
 
 /** 会话恢复 / 自动刷新成功后的统一收尾（补齐用户与组织信息并刷新 UI） */
 async function onSessionRestored(message) {
+  // 会话刚被确认可用：刷新新鲜度、摘掉"疑似失效"、停掉看门狗。
+  // 必须放在最前面 —— 后面的请求要是再出问题，标记要反映的是那之后的状态。
+  markSessionVerified();
   // session 已确认有效：打开 Org 状态面板的请求门闩（会触发 limits 拉取）
   markSessionReady();
   try {
@@ -490,8 +711,13 @@ function watchSessionStorage() {
         `另一处（标签页/侧边栏）更新了连接信息，同步本页：is_connected=${appState.is_connected}`
       );
 
-      // session 刚变为可用：打开 Org 状态面板的请求门闩（时序约束见 org_limits.js）
-      if (appState.is_connected) markSessionReady();
+      // session 刚变为可用：打开 Org 状态面板的请求门闩（时序约束见 org_limits.js），
+      // 并摘掉本页可能残留的"疑似失效"标记、停掉看门狗 —— 另一处既然连上了，就不必再自愈。
+      if (appState.is_connected) {
+        sessionSuspect = false;
+        stopWatchdog();
+        markSessionReady();
+      }
 
       // updateUIState 内部会刷新连接徽标与各 section 的解锁状态
       updateUIState();
@@ -665,6 +891,7 @@ async function initApp() {
       if (!recovery.ok) {
         log.warn("自动获取新会话失败，降级为未连接状态（保留 session ID 便于重试）");
         appState.is_connected = false;
+        sessionSuspect = true; // 服务端刚判失效，别让"徽标还是绿的"继续骗人
         // 只清除连接标记，保留 session_id / instance_url 以便用户直接重试
         try {
           await chrome.storage.local.set({ is_connected: false });
@@ -677,9 +904,13 @@ async function initApp() {
         } catch (e) {
           log.warn('刷新首页图标状态失败:', e);
         }
+        // 从这里开始交给看门狗：用户去 Salesforce 重新登录后，无需任何手动操作
+        ensureWatchdog({ reset: true });
+        // 文案要点：现在**不需要**用户去点什么按钮了 —— 后台看门狗 + sid Cookie 监听
+        // 会在用户重新登录 Salesforce 的那一刻自动把连接接回来。所以这里只说明现状。
         showNotification(
-          "Salesforce 会话已过期：请先在 Salesforce 里重新登录，再点「连接设置」里的「自动获取 Session 并重新连接」，或手动粘贴新的 Session ID",
-          "error"
+          "Salesforce 会话已过期：在浏览器里重新登录 Salesforce 即可，面板会自动重新连接",
+          "warning"
         );
       }
     } else {
@@ -699,6 +930,11 @@ async function initApp() {
     await attemptSessionRecovery("启动时未连接", { force: true });
   }
 
+  // 启动时还没连上 → 交给看门狗在后台继续重试（每 15s 起、退避到最多 2 分钟、
+  // 连续 8 次仍失败就暂停）。这样用户去浏览器里登录完 Salesforce 再回来时，
+  // 面板多半已经自己连好了，不必再手动点任何按钮。
+  ensureWatchdog({ reset: true });
+
   // 环境变化即可自动重试（sid Cookie 变化 / 面板重新可见 / 窗口重新获得焦点）。
   // 必须放在会话恢复之后绑：否则启动过程中就触发一次，与上面的启动尝试叠在一起。
   watchSessionRecovery();
@@ -707,12 +943,13 @@ async function initApp() {
   if (!appState.is_connected) {
     if (host !== HOST_TAB) {
       // 侧边栏 / 贴边浮窗又窄又高，一个 toast 很容易被忽略，而且首页全是「需连接」的灰磁贴。
-      // 直接把用户送到「连接设置」卡片 —— 那里现在有「自动获取 Session 并重新连接」按钮，
-      // 侧边栏里没有地址栏可以重载，这个按钮就是它唯一的自救入口。
+      // 直接把用户送到「连接设置」卡片 —— 那里有「自动获取 Session 并重新连接」按钮
+      // （现在它更多是"手动催一下"的用途，正常情况下后台会自动连上），
+      // 侧边栏里没有地址栏可以重载，这个按钮仍是它的兜底自救入口。
       log.info(`${host === HOST_DOCK ? "贴边浮窗" : "侧边栏"}内尚未连接，直接进入「连接设置」`);
       showSection(1);
     }
-    showNotification("尚未连接 Salesforce，请先完成连接", "warning");
+    showNotification("尚未连接 Salesforce：若浏览器里登录过该 org，面板会自动连上", "warning");
   }
 }
 
@@ -789,6 +1026,8 @@ function bindEvents() {
           await fetchUserInfo();
           // 获取组织信息
           await fetchOrgInfo();
+          // session 刚测试通过：刷新新鲜度、摘掉"疑似失效"、停掉看门狗
+          markSessionVerified();
           // session 刚测试通过：打开 Org 状态面板的请求门闩（会触发 limits 拉取）
           markSessionReady();
           // // 获取 LTS Account 数量
@@ -807,6 +1046,12 @@ function bindEvents() {
       } catch (error) {
         // 连接失败
         appState.is_connected = false;
+        // 服务端明确判失效（而不是网络/笔误被拦）才算"会话疑似失效"，
+        // 并让看门狗接手 —— 粘贴的 Session ID 可能只是过期了，浏览器里另有可用的会话。
+        if (isSessionAuthFailure()) {
+          sessionSuspect = true;
+          ensureWatchdog({ reset: true });
+        }
 
         statusElement.innerHTML =
           `${Icons.timesCircle} 连接失败`;

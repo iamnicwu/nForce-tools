@@ -52,6 +52,29 @@ export function applyApiVersion(raw) {
   return changed;
 }
 
+/**
+ * 会话**中途**失效时的续期钩子。
+ *
+ * 由 `app.js` 在启动时通过 `setAuthFailureHandler()` 注入 —— 方向是 app → service，
+ * 所以本模块不需要（也不应该）反向 import 应用层，避免循环依赖。
+ *
+ * 注入后，`sfConn.connection` 上发出的任何请求一旦拿到 401/403，都会先请钩子去
+ * 浏览器 Cookie 换一份新会话，再用新凭据把**原来那条请求原样重发一次**。
+ * 用户侧的体感是「用着用着会话过期了，但功能照常能用」——不再需要手动点重连。
+ */
+let authFailureHandler = null;
+
+/**
+ * 注入 / 卸载「会话失效自动续期」处理器（传 null 即卸载）。
+ * @param {null | ((ctx: {instanceUrl: string, sessionId: string|null}) =>
+ *   Promise<{sessionId?: string, instanceUrl?: string}|null>)} fn
+ */
+export function setAuthFailureHandler(fn) {
+  authFailureHandler = typeof fn === "function" ? fn : null;
+  // 已经建好的连接也要立刻跟上，否则要等下一次「测试连接」才生效
+  if (sfConn.connection) sfConn.connection.onAuthFailure = authFailureHandler;
+}
+
 export let sfConn = {
   connection: null,
 
@@ -128,6 +151,15 @@ export let sfConn = {
       log.info("Salesforce 连接建立成功");
       log.debug("用户:", userInfo?.display_name || userInfo?.name || userInfo?.username);
       // 保存连接对象
+      //
+      // ⚠️ 续期钩子必须挂在这里 —— 也就是 `identity()` 已经 **成功之后**。
+      // `testConnection()` 同时承担两件事：它是「这条会话还活着吗」的**判据**，
+      // 又负责造出 app 长期使用的那个连接对象。如果钩子在验证之前就挂上，
+      // 那么验证本身拿到 401 时就会触发续期 → 续期又要调 testConnection 去验证
+      // 候选会话 → 再次 401 → 无限递归（或撞上重入锁后互相等待）。
+      // 放在验证之后，验证路径永远只是「照实回答 true/false」，
+      // 而 app 里所有功能走的 `sfConn.connection` 才具备无缝续期能力。
+      conn.onAuthFailure = authFailureHandler;
       this.connection = conn;
       globalConn = conn;
       this.lastError = null;
@@ -1022,19 +1054,37 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
       let locator = null;
       let isFirstPage = true;
       // 使用原生 fetch 以便获取 response headers 中的 Sforce-Locator
-      do {
+      //
+      // ⚠️ 正因为它绕过了 `connection.request()`，就没法自动享受「401 → 换会话 →
+      // 重发」的续期能力，所以下面补了一次同语义的判断（Bulk 结果动辄下载几十秒，
+      // 中途会话过期却只丢一句 HTTP 401 是最难让人理解的一类失败）。
+      // 顺带一提：headers 里的 token 是**每一轮现读** `this.connection.accessToken`，
+      // 续期后自然就是新值。
+      const sendBulkFetch = () => {
         let fetchUrl = `${this.connection.instanceUrl}/services/data/v${defaultApiVersion}/jobs/query/${jobId}/results`;
         if (locator && locator !== "null") {
           fetchUrl += `?locator=${locator}`;
         }
-
-        const response = await fetch(fetchUrl, {
+        return fetch(fetchUrl, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${this.connection.accessToken}`,
             'Accept': 'text/csv'
           }
         });
+      };
+
+      do {
+        let response = await sendBulkFetch();
+
+        if (
+          (response.status === 401 || response.status === 403) &&
+          typeof this.connection.renewAuth === "function" &&
+          (await this.connection.renewAuth())
+        ) {
+          log.warn("Bulk 结果下载遇到会话失效，已换新会话并重发该页");
+          response = await sendBulkFetch();
+        }
 
         if (!response.ok) {
           const errorText = await response.text();

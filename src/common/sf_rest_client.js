@@ -45,6 +45,11 @@
  * 4. 唯一的**行为改进**：`upsert` 走 `PATCH /composite/sobjects/{obj}/{extIdField}`
  *    批量端点。jsforce 是**每条记录一次请求**（实测确认），批量 200 条就是 200 个串行往返。
  *    这是替换之后顺带拿到的性能收益。
+ * 5. **可选的**「会话中途失效自动续期」：401/403 时调 `onAuthFailure` 钩子换一份新
+ *    会话，然后把同一份请求重发一次（`_renewSession()`）。**默认关闭**，
+ *    由 `sf_service.setAuthFailureHandler()` 注入后才生效 —— 这样
+ *    `tools/jsforce-diff/` 那份逐请求比对的金标准基线不用跟着改，
+ *    健康会话下本文件的行为与之前逐字节一致。
  */
 
 // API 版本的常量与解析器在 `common/api_version.js`。
@@ -445,6 +450,25 @@ export class SfRestConnection {
     this.userInfo = undefined;
     this._sobjects = new Map();
     this._metadata = null;
+
+    /**
+     * 会话**中途**失效时的续期钩子。默认 `null` = 关闭。
+     *
+     * 为什么需要它：Salesforce 的 sid 会在用户还没关闭面板时到期（浏览器闲置、
+     * 服务端会话超时、管理员改了会话策略…）。此时下一条 API 请求会拿到 401，
+     * 而面板的「已连接」徽标还是绿的 —— 表现是「点哪个功能都报错，重启也没用，
+     * 只能手动去连接设置里点一下」。挂上这个钩子后：401 → 去浏览器 Cookie 换
+     * 一份新会话 → **用同一份请求自动重试一次**，用户无感。
+     *
+     * 为什么默认关闭（而不是默认开启）：`tools/jsforce-diff/` 是逐请求比对
+     * method + URL 的**金标准基线**，它直接 `new SfRestConnection(...)`，
+     * 不经过 `sf_service`。钩子为 null 时 `request()` 的行为与基线逐字节一致
+     * （健康会话永远走不到 401 分支，不会平白多出任何请求）。
+     *
+     * @type {null | ((ctx: {instanceUrl: string, sessionId: string|null}) =>
+     *   Promise<{sessionId?: string, accessToken?: string, instanceUrl?: string}|null|undefined|false>)}
+     */
+    this.onAuthFailure = null;
   }
 
   /** `{instanceUrl}/services/data/v{version}`，与 jsforce 的 `_baseUrl()` 同义 */
@@ -463,9 +487,78 @@ export class SfRestConnection {
   }
 
   /**
+   * 「这次失败是不是**会话失效**」——决定值不值得去换一份新会话再重试。
+   *
+   * 只认 401 / 403：其余状态码（404 版本不对、400 参数错、500 服务端炸、
+   * 以及 fetch 直接抛的网络/CSP 错误）重试一遍纯属浪费，甚至会把真正的错误
+   * 盖成"重试后仍然失败"，更难排查。
+   *
+   * 与 `sf_service.js` 的 `isSessionAuthFailure()` 同源，但那边面对的是
+   * `lastError` 对象（还要看 `errorCode`，因为 jsforce 时代拿不到干净的状态码）；
+   * 这里能直接拿到 `response.status`，用状态码最准。
+   */
+  _isAuthStatus(status) {
+    return status === 401 || status === 403;
+  }
+
+  /**
+   * 调一次续期钩子，成功则把新凭据装回本对象。
+   *
+   * 只试一次，且**任何异常都按"续期失败"处理**：续期本身出问题不能把原始 401
+   * 盖掉（那会让排错时看不到真正的失败原因），调用方照常抛原来的错误。
+   *
+   * @returns {Promise<boolean>} 是否拿到了可用的新凭据
+   */
+  async _renewSession() {
+    if (typeof this.onAuthFailure !== "function") return false;
+
+    let renewed = null;
+    try {
+      renewed = await this.onAuthFailure({
+        instanceUrl: this.instanceUrl,
+        sessionId: this.accessToken,
+      });
+    } catch (e) {
+      return false;
+    }
+
+    const nextToken = renewed && (renewed.sessionId || renewed.accessToken);
+    if (!nextToken) return false;
+
+    // 同一个 org 换 sid：只换 token。
+    // 若钩子顺带换了实例地址（换的是另一个 org），也必须跟上 —— 否则重试会打在旧 org 上，
+    // 得到的是 404 而不是新的 401，看起来像"重试也没用"。
+    if (renewed.instanceUrl) {
+      const nextUrl = normalizeInstanceUrl(renewed.instanceUrl);
+      if (nextUrl && nextUrl !== this.instanceUrl) this.instanceUrl = nextUrl;
+    }
+    this.accessToken = nextToken;
+    return true;
+  }
+
+  /**
+   * 公开的续期入口。
+   *
+   * 绝大多数请求都走 `request()`，续期是它内部自动完成的。但少数调用方**必须**用
+   * 原生 `fetch` —— 例如 Bulk 结果下载要读 `Sforce-Locator` 响应头（`request()`
+   * 只返回解析后的 body）。那些地方拿不到自动续期，需要自己判断 401 后调一次
+   * 本方法，再重发原请求。
+   *
+   * @returns {Promise<boolean>} 是否已换到新凭据
+   */
+  renewAuth() {
+    return this._renewSession();
+  }
+
+  /**
    * 通用请求。接受两种调用形式，覆盖项目里全部用法：
    *   request("/services/data/v68.0/limits/")
    *   request({method, url, body, headers})
+   *
+   * 失败时若命中「会话失效」（401/403）且挂了 `onAuthFailure` 钩子，会换一份新
+   * 会话并**原样重发一次**（POST/PATCH 也安全：401 意味着请求根本没被受理）。
+   * 仅重试一次，不循环 —— 换来的新会话要是也 401，那就是真的没救了，
+   * 继续重试只会把错误信息埋掉。
    *
    * @param {string|{method?: string, url: string, body?: *, headers?: object}} opts
    * @returns {Promise<*>} 解析后的 JSON（204 无内容时为 null）
@@ -473,7 +566,6 @@ export class SfRestConnection {
   async request(opts) {
     const { method, url, body, headers } =
       typeof opts === "string" ? { method: "GET", url: opts } : opts || {};
-    const absolute = this._api(url);
     const sendBody =
       body === undefined || body === null
         ? undefined
@@ -481,15 +573,37 @@ export class SfRestConnection {
           ? body
           : JSON.stringify(body);
 
-    const finalHeaders = {
-      Authorization: `Bearer ${this.accessToken}`,
-      Accept: "application/json",
-      ...(sendBody !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(headers || {}),
+    // Authorization 每次现算：续期后 accessToken 变了，重试必须用新值。
+    const send = async (absoluteUrl) => {
+      const res = await fetch(absoluteUrl, {
+        method: method || "GET",
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          Accept: "application/json",
+          ...(sendBody !== undefined ? { "Content-Type": "application/json" } : {}),
+          ...(headers || {}),
+        },
+        body: sendBody,
+      });
+      return { res, text: await res.text() };
     };
 
-    const res = await fetch(absolute, { method: method || "GET", headers: finalHeaders, body: sendBody });
-    const text = await res.text();
+    const baseUrlBefore = this.instanceUrl;
+    const firstUrl = this._api(url);
+    let { res, text } = await send(firstUrl);
+
+    if (!res.ok && this._isAuthStatus(res.status) && (await this._renewSession())) {
+      // 续期有可能落到**另一个 org**（候选会话属于别的实例）。此时 URL 要重新拼：
+      // `_api()` 对绝对 URL 是原样返回的，所以 `_query()` 那种"先 `_baseUrl()` 拼好绝对
+      // 地址"的调用不会自己改基址 —— 不补这一下，重试就会打在旧 org 上，
+      // 拿到的还是 401，看起来像"换会话没用"。
+      const retryUrl =
+        this.instanceUrl !== baseUrlBefore && firstUrl.startsWith(baseUrlBefore)
+          ? this.instanceUrl + firstUrl.slice(baseUrlBefore.length)
+          : this._api(url);
+      ({ res, text } = await send(retryUrl));
+    }
+
     if (!res.ok) throw extractApiError(text, res.status);
     if (res.status === 204 || !text) return null;
     try {
@@ -499,6 +613,7 @@ export class SfRestConnection {
       return text;
     }
   }
+
 
   /**
    * SOQL 查询。

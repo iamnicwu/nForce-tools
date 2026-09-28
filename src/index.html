@@ -210,11 +210,19 @@
 
                         <!-- 自动获取会话：侧边栏里没有地址栏、也没法「重载当前页」，
                              会话过期后这里是唯一的自救入口（原理与 login.html 的自动检测同源：
-                             用浏览器 Cookie 里的 sid 换一个可用的 Salesforce 会话）。 -->
+                             用浏览器 Cookie 里的 sid 换一个可用的 Salesforce 会话）。
+                             注意：正常情况下**不需要**用户点这个按钮 —— 启动时、请求被判 401 时、
+                             回到面板时、以及后台看门狗都会自动走同一套恢复流程（见 app.js
+                             「会话自动恢复与自动续期」那一节）。按钮保留的意义是：用户想立刻催一下，
+                             或想看看到底是哪一步没成功（状态行会写明原因）。 -->
                         <div class="form-group u-mb-24 u-text-center">
                             <h3 class="u-mb-8 u-fs-xl">自动获取会话</h3>
-                            <p class="u-text-secondary u-fs-base u-mb-16">
+                            <p class="u-text-secondary u-fs-base u-mb-8">
                                 浏览器里还登录着 Salesforce 时，可直接用浏览器 Cookie 换取新会话，不必手动粘贴 Session ID。
+                            </p>
+                            <p class="u-text-secondary u-fs-base u-mb-16">
+                                <b>通常不必手动操作</b>：会话过期后会自动重新连接（含用着用着突然失效的情况）。
+                                只有长时间没连上时才需要点下面的按钮催一下。
                             </p>
                             <button type="button" class="ant-btn ant-btn-primary ant-btn-lg u-w-full" id="connection-reconnect-btn">
                                 <i class="fas fa-sync-alt"></i>
