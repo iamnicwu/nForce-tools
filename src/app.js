@@ -207,7 +207,13 @@ async function attemptSessionRecovery(trigger, opts = {}) {
 /**
  * 注册"环境变了就再试一次"的监听：面板重新可见、窗口重新获得焦点、sid Cookie 变化。
  *
- * 全部在 `appState.is_connected` 为真时直接返回 —— 连上了就不该再打扰 org。
+ * 三个触发源的性质不同，因此**不是同一套守卫**：
+ *   · `visibilitychange` / `window.focus` —— 只表示"用户回来了"，会话未必变。
+ *     仍保留 `appState.is_connected` 短路：连上了就不该每次切回来都去打一次 org
+ *     （identity 是一次真实 API 调用，会吃 DailyApiRequests 配额）。
+ *   · `cookies.onChanged`（sid）—— 表示"登录态真的变了"，是最强的信号，
+ *     因此**不设短路**，改走会先复验的 `reconnectNow()`。原因见该处注释。
+ *
  * 幂等：重复调用只绑一次。
  */
 let recoveryWatchersBound = false;
@@ -217,14 +223,20 @@ function watchSessionRecovery() {
 
   // ③ Salesforce 的 sid Cookie 变化 = 用户刚在某个标签页登录/换号。
   //    这是最准的信号：只认 sid，且限制在 Salesforce 域上，其他 Cookie 一律忽略。
+  //
+  //    ⚠️ 这里**刻意不加 `if (appState.is_connected) return`**（另外两个触发源有）。
+  //    因为最需要它救的，恰恰是「徽标还绿着、会话其实已经在使用中过期」那种状态
+  //    （各功能轮流报「尚未连接」，但连接标记还是 true）——加了短路就永远等不到自愈。
+  //    所以改走 `reconnectNow()`：它先复验（一次 identity 请求），
+  //    仍然有效就原地返回、确认失效才换新会话，不会因为一次 Cookie 抖动就去翻遍 Cookie。
+  //    `info.removed` 为真表示是删除（登出/清理），没有可恢复的东西，直接忽略。
   try {
     chrome.cookies?.onChanged?.addListener((info) => {
-      if (appState.is_connected) return;
       const cookie = info && info.cookie;
-      if (!cookie || cookie.name !== "sid") return;
-      const domain = String(cookie.domain || "");
-      if (!/salesforce\.com$|force\.com$/i.test(domain.replace(/^\./, ""))) return;
-      attemptSessionRecovery("检测到 Salesforce sid Cookie 变化");
+      if (!cookie || cookie.name !== "sid" || info.removed) return;
+      const domain = String(cookie.domain || "").replace(/^\./, "");
+      if (!/salesforce\.com$|force\.com$/i.test(domain)) return;
+      reconnectNow("检测到 Salesforce sid Cookie 变化");
     });
   } catch (e) {
     log.warn("注册 Cookie 变化监听失败（不影响手动恢复）:", e);

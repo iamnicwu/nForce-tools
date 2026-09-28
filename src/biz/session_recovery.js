@@ -14,18 +14,21 @@
  *
  * 本模块把那条通道搬进应用本体（`src/` 不打包也能跑，所以放在 `biz/` 里、由
  * `app.js` 静态 import）。它与 `login_app.js` 的 `autoDetectSession()` 同源，
- * 但做了三处必要补强：
+ * 但做了四处必要补强：
  *   1. **不要求先知道 instance_url**：候选可以从标签页 URL 或 Cookie 域本身推出来；
- *   2. **不要求开着 Salesforce 标签页**：直接扫扩展有 host 权限的全部 `sid` Cookie；
+ *   2. **不要求开着 Salesforce 标签页**：已保存的实例地址也能当查询锚点；
  *   3. **分区 Cookie 兜底**：带 `Partitioned` 属性的 `sid` 不带 partitionKey 查不到
- *      （CHIPS），所以主查询为空时会用当前活动标签页的 origin 再查一次。
+ *      （CHIPS），所以主查询为空时会用当前活动标签页的 origin 再查一次；
+ *   4. **同族域名互换**：`xxx.lightning.force.com` 与 `xxx.my.salesforce.com` 是
+ *      **不同根域**，挂在 `.salesforce.com` 上的 `sid` 用 lightning 域去查会是 0 枚
+ *      —— 见 `siblingHosts()` 的注释。这是真机复现出来的那个 bug。
  *
  * ── 候选来源与优先级（越靠前越可信，先命中的先验证）──
- *   0. 已保存的 instance_url 上按 URL 过滤查到的 sid Cookie
- *   1. 当前打开的 Salesforce 标签页（从标签页 URL 推出 org 实例地址）
- *   2. 其余所有 sid Cookie —— **仅当 Cookie 域自身就能反推出 org 实例地址**时才可用。
- *      `.salesforce.com` 这类泛域推不出是哪个 org，会跳过（否则会拿 sid 去撞
- *      `https://null`，这正是 `login_app.js` 里 `getDomain()` 那段的历史隐患）。
+ *   0. **已知主机**（已保存的实例地址 + 打开的 Salesforce 标签页，各自连同同族域名）：
+ *      `getAll({url})` 返回的是「会被发往该 URL 的 Cookie」，所以查到的 sid 天然属于
+ *      那个 org，**不需要从 Cookie 域反推**（泛域 `.salesforce.com` 反推不出是哪个 org）。
+ *   1. 其余所有 sid Cookie —— **仅当 Cookie 域自身就能反推出 org 实例地址**时才可用。
+ *      这是最后的兜底：没有实例地址、也没有 Salesforce 标签页时才走到这里。
  *
  * ── 安全 ──
  * sid 等同登录凭证：本模块只把它写进 `chrome.storage.local`（与手动连接一致），
@@ -51,8 +54,8 @@ const SF_TAB_URL_PATTERNS = [
  * `*.visualforce.com` / `*.cloudforce.com` 不是 API 域名，拼出来的连接必然失败。
  * 支持 sandbox / 我的域名的双横线形式（`acme--uat.my.salesforce.com`）。
  */
-const INSTANCE_HOST_RE =
-  /(^|\.)[a-z0-9-]+(--[a-z0-9-]+)?\.(my\.salesforce\.com|lightning\.force\.com)$/i;
+const MY_SF_RE = /(^|\.)[a-z0-9-]+(--[a-z0-9-]+)?\.my\.salesforce\.com$/i;
+const LIGHTNING_RE = /(^|\.)[a-z0-9-]+(--[a-z0-9-]+)?\.lightning\.force\.com$/i;
 
 /** 把 Cookie 值（`orgId!sessionId`）拆成 sessionId；格式不符时原样返回 */
 function splitSidFromCookieValue(value) {
@@ -60,25 +63,55 @@ function splitSidFromCookieValue(value) {
   return (parts.length >= 2 ? parts[1] : parts[0]) || "";
 }
 
-/** 主机名 → 可建连接的实例地址；认不出来返回 null（泛域走不通这条路） */
-function hostToInstanceUrl(host) {
-  const h = String(host || "").replace(/^\./, "").toLowerCase();
-  if (!INSTANCE_HOST_RE.test(h)) return null;
-  if (h.endsWith(".lightning.force.com")) {
-    // Lightning 域名不能当 API 域名用，换回 my.salesforce.com（与 sf_rest_client 的归一化一致）
-    return `https://${h.slice(0, -".lightning.force.com".length)}.my.salesforce.com`;
-  }
-  return `https://${h}`;
-}
-
-/** 标签页 URL → 读取 sid Cookie 用的 URL（与 `login_app.js` 的 getDomain() 同义） */
-function tabUrlToCookieUrl(tabUrl) {
+/** 从主机名或完整 URL 里取主机名；取不到返回 null */
+function hostnameOf(hostOrUrl) {
+  const raw = String(hostOrUrl || "").trim();
+  if (!raw) return null;
   try {
-    if (!/^https?:/i.test(String(tabUrl || ""))) return null;
-    return hostToInstanceUrl(new URL(tabUrl).hostname);
+    return (/^https?:\/\//i.test(raw) ? new URL(raw) : new URL(`https://${raw}`)).hostname.toLowerCase();
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * `*.lightning.force.com` ⇄ `*.my.salesforce.com` 的互换。
+ *
+ * ⚠️ **这是本模块最要紧的一处修正**（2026-09-28 真机复现）。
+ * `xxx.lightning.force.com` 与 `xxx.my.salesforce.com` 是**不同根域**
+ * （force.com ≠ salesforce.com），所以挂在 `.salesforce.com` 上的 `sid`
+ * **不会**被 `chrome.cookies.getAll({url: "https://xxx.lightning.force.com"})` 命中
+ * —— 实测返回 0 枚。
+ * 而存储里的 `sf_instance_url` 完全可能就是 lightning 主机名（用户地址栏里那个，
+ * 或手工「测试连接」时粘进去的）。上游若直接拿它去查 Cookie，就会一枚都查不到，
+ * 表现为「浏览器明明登录着，却一直说没找到登录态」。
+ */
+function siblingHosts(hostname) {
+  const h = String(hostname || "").replace(/^\./, "").toLowerCase();
+  const out = new Set();
+  if (!h) return out;
+  out.add(h);
+  if (LIGHTNING_RE.test(h)) {
+    out.add(`${h.slice(0, -".lightning.force.com".length)}.my.salesforce.com`);
+  } else if (MY_SF_RE.test(h)) {
+    out.add(`${h.slice(0, -".my.salesforce.com".length)}.lightning.force.com`);
+  }
+  return out;
+}
+
+/**
+ * 主机名 → 可建连接的 **REST API 实例地址**；认不出来返回 null。
+ * Lightning 域名不能当 API 域名用，一律换回 `my.salesforce.com`
+ * （与 `sf_rest_client` 的归一化方向一致）。接受主机名或完整 URL。
+ */
+function hostToInstanceUrl(hostOrUrl) {
+  const h = hostnameOf(hostOrUrl);
+  if (!h) return null;
+  if (LIGHTNING_RE.test(h)) {
+    return `https://${h.slice(0, -".lightning.force.com".length)}.my.salesforce.com`;
+  }
+  if (MY_SF_RE.test(h)) return `https://${h}`;
+  return null;
 }
 
 /** 当前活动标签页的 origin —— 分区 Cookie 兜底查询要用它当 topLevelSite */
@@ -130,7 +163,47 @@ async function findSidCookies(filter = {}) {
 }
 
 /**
+ * 收集「已知主机名」：这些是我们**确实知道属于某个 org** 的域名，
+ * 拿它们去查 Cookie 比从 Cookie 域反推可靠得多。
+ *
+ * 两个来源：
+ *   ① 已保存的 `sf_instance_url`（它可能带协议、可能是 lightning 域）
+ *   ② 当前打开的 Salesforce 标签页（`login_app.js` 用的就是这条路，最稳）
+ *
+ * 返回的是**去重后的主机名**，且已把同族域名（lightning ⇄ my.salesforce.com）展开。
+ *
+ * @param {string|null} preferredInstanceUrl
+ * @returns {Promise<string[]>}
+ */
+async function collectKnownHosts(preferredInstanceUrl) {
+  const hosts = new Set();
+  const addHost = (hostOrUrl) => {
+    for (const h of siblingHosts(hostnameOf(hostOrUrl))) hosts.add(h);
+  };
+
+  if (preferredInstanceUrl) addHost(preferredInstanceUrl);
+
+  try {
+    const tabs = await chrome.tabs.query({ url: SF_TAB_URL_PATTERNS });
+    for (const tab of tabs || []) addHost(tab.url);
+  } catch (e) {
+    log.debug("枚举 Salesforce 标签页失败:", e);
+  }
+
+  return [...hosts];
+}
+
+/**
  * 按优先级收集候选会话。
+ *
+ * ── 顺序为什么是这样 ──
+ * 优先用「已知主机」：`chrome.cookies.getAll({url})` 返回的是**会被发往该 URL 的
+ * Cookie**，所以查到的 sid 天然就属于那个 org，不需要再从 Cookie 域反推
+ * （泛域 `.salesforce.com` / `.my.salesforce.com` 反推不出是哪个 org，
+ * 这正是 `login_app.js` 里 `getDomain()` 那段的历史隐患）。
+ * 只有当「没有已保存实例地址、也没有 Salesforce 标签页」时，才退化到
+ * 从 Cookie 域反推——那是最后一条路，能救多少算多少。
+ *
  * @param {string|null} preferredInstanceUrl 已保存的实例地址（可为空）
  * @param {string|null} knownBadSid 刚被服务端判定失效的 sid，直接跳过、不做无谓请求
  * @returns {Promise<Array<{sid:string, instanceUrl:string, source:string}>>}
@@ -147,33 +220,28 @@ async function collectCandidates(preferredInstanceUrl, knownBadSid) {
     candidates.push({ sid, instanceUrl, source });
   };
 
-  // ── 优先级 0：已保存的实例地址 ──
-  if (preferredInstanceUrl) {
-    for (const c of await findSidCookies({ url: preferredInstanceUrl })) {
-      add(splitSidFromCookieValue(c.value), preferredInstanceUrl, "已保存的实例地址");
+  // ── 优先级 0：已知主机（已保存实例地址 + 打开的 Salesforce 标签页）──
+  // 对每个主机名连同它的同族域名一起查，然后把查到的 sid 绑到**这个已知主机**的
+  // API 地址上（而不是从 Cookie 域反推）。
+  const knownHosts = await collectKnownHosts(preferredInstanceUrl);
+  for (const host of knownHosts) {
+    const apiUrl = hostToInstanceUrl(host);
+    if (!apiUrl) continue; // 不是可建连接的主机（如 *.cloudforce.com）
+    const source = preferredInstanceUrl && siblingHosts(hostnameOf(preferredInstanceUrl)).has(host)
+      ? "已保存的实例地址"
+      : "Salesforce 标签页";
+    for (const c of await findSidCookies({ url: `https://${host}` })) {
+      add(splitSidFromCookieValue(c.value), apiUrl, source);
     }
   }
 
-  // ── 优先级 1：当前打开的 Salesforce 标签页 ──
-  let tabs = [];
-  try {
-    tabs = await chrome.tabs.query({ url: SF_TAB_URL_PATTERNS });
-  } catch (e) {
-    log.debug("枚举 Salesforce 标签页失败:", e);
-  }
-  for (const tab of tabs || []) {
-    const cookieUrl = tabUrlToCookieUrl(tab.url);
-    if (!cookieUrl) continue;
-    for (const c of await findSidCookies({ url: cookieUrl })) {
-      // Cookie 自己带更精确的域时以它为准（同 org 多域名时更稳）
-      add(splitSidFromCookieValue(c.value), hostToInstanceUrl(c.domain) || cookieUrl, "Salesforce 标签页");
-    }
-  }
-
-  // ── 优先级 2：全部 sid Cookie（域能反推出 org 才收） ──
+  // ── 优先级 1：全部 sid Cookie（域能反推出 org 才收）──
+  // 走到这里说明上面一无所获（没有实例地址、也没有 Salesforce 标签页）。
+  // 泛域 Cookie（`.salesforce.com` / `.my.salesforce.com`）在这一步必然被跳过 ——
+  // 它们推不出具体是哪个 org，硬拼只会得到 `https://null`。
   for (const c of await findSidCookies({})) {
     const instanceUrl = hostToInstanceUrl(c.domain);
-    if (!instanceUrl) continue; // 泛域（.salesforce.com）推不出 org，前两级已覆盖
+    if (!instanceUrl) continue;
     add(splitSidFromCookieValue(c.value), instanceUrl, "浏览器 Cookie");
   }
 
