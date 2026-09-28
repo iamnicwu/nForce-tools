@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nForce Tools</title>
+    <!-- favicon：**必须显式声明**。不声明时 Chrome 会自动去请求 `/favicon.ico`，
+         而扩展里没有这个文件 → DevTools 里留下一条
+         「Failed to load resource: the server responded with a status of 404」。
+         扩展页面、登录页、弹窗都一样，只是扩展页面下这条请求由浏览器内部发出，
+         在网络面板里不显眼，极易被当成真故障排查半天。
+         顺带让标签页/弹窗显示正经图标，而不是空白页图标。 -->
+    <link rel="icon" type="image/png" href="icons/icon-32.png">
     <!--
       只保留 dayjs（7KB）作为同步阻塞脚本：sf_service.js / session_info.js 会直接用到它，
       且用量极小。其余库改为「按需加载」——

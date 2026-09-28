@@ -61,3 +61,103 @@ export function parseApiVersion(raw) {
 export function normalizeApiVersion(raw) {
   return parseApiVersion(raw) ?? DEFAULT_API_VERSION;
 }
+
+// ==========================================================================
+// 实例版本发现
+//
+// 为什么必须有：Salesforce 每年发 3 个版本，但**各 org 的升级窗口天差地别**。
+// 以 Winter '27（v68.0）为例，生产部署窗口是 2026-09-04 / 10-02 / 10-09，
+// 全面 GA 是 10-12 —— 也就是说 10 月之前，同一家企业里的两个 org 完全可能
+// 一个在 v67、另一个在 v68。
+//
+// 对一个还是 v67 的 org 请求 `/services/data/v68.0/...`，Salesforce 返回
+// **404 Not Found**。这条 404 的文案与「路径写错了」一模一样，从日志上几乎
+// 分辨不出来；而在本插件里它的表现是**整个连接测试失败**（`identity()` 是建连接的
+// 第一步），用户看到的是「昨天还好好的，今天一直未连接」。
+//
+// 所以：不要假设「默认值 = 对方支持」。先问一次实例到底有哪些版本。
+// ==========================================================================
+
+/**
+ * `instanceUrl -> Promise<number[]>`。同一个 org 只探测一次。
+ *
+ * 为什么要缓存：`login_app.js` 与会话恢复（`biz/session_recovery.js`）都是
+ * 「按候选逐个建连接」，而多个候选常常属于同一个 org —— 不缓存就会对着
+ * 同一个端点反复发一模一样的请求。
+ */
+const versionsProbeCache = new Map();
+
+/**
+ * 版本探测的超时。
+ * ⚠️ 这个请求在**建连接的关键路径**上（`testConnection` 会 await 它），
+ * 所以宁可探测不出来，也绝不能挂着 —— 对方接受连接却不响应时，
+ * 没有超时的 fetch 会一直 pending，整个连接流程就卡死在那里，
+ * 而那比「探测失败 → 沿用配置值」糟糕得多。
+ */
+const PROBE_TIMEOUT_MS = 4000;
+
+/**
+ * 查实例**实际支持**的 REST API 版本号，升序返回（如 `[20, 21, …, 67]`）；
+ * 探测失败返回 `[]`。
+ *
+ * `GET {instanceUrl}/services/data/` 是 Salesforce 的**版本发现端点**，
+ * 官方文档明确说明它**不需要认证** —— 因此可以在建立会话之前调用，
+ * 用来回答「这个 org 到底认哪个版本」。
+ *
+ * ⚠️ 刻意**不引 logger**：本模块是「零 import」的，会被逐字复制进
+ * `dist/common/`（`background.js` 也引用它）。日志由调用方负责。
+ *
+ * @param {string} instanceUrl
+ * @returns {Promise<number[]>}
+ */
+export function probeInstanceApiVersions(instanceUrl) {
+  const key = String(instanceUrl || "").replace(/\/+$/, "");
+  if (!key) return Promise.resolve([]);
+  if (versionsProbeCache.has(key)) return versionsProbeCache.get(key);
+
+  const p = (async () => {
+    const res = await fetch(`${key}/services/data/`, {
+      headers: { Accept: "application/json" },
+      // 见 PROBE_TIMEOUT_MS 的说明：超时后抛 AbortError，走下面的 catch 当作"探测不出来"
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    const list = await res.json();
+    return (Array.isArray(list) ? list : [])
+      .map((v) => Number(v && v.version))
+      .filter((n) => Number.isFinite(n) && n > 0)
+      .sort((a, b) => a - b);
+  })().catch(() => {
+    // 失败**不缓存**：一次网络抖动 / CSP 拦截不该变成永久结论，下次还要再试
+    versionsProbeCache.delete(key);
+    return [];
+  });
+
+  versionsProbeCache.set(key, p);
+  return p;
+}
+
+/**
+ * 把偏好版本夹进实例可用范围内。
+ *
+ * 三种结果：
+ *   · 偏好可用        → 原样返回（尊重用户/默认值的选择，什么都不做）
+ *   · 偏好不可用      → 退到**可用版本中最高的那个**，`fellBack: true`
+ *   · 探测不出来（`available` 为空）→ 原样返回，`fellBack: false`
+ *     （探测失败的原因可能是离线 / CSP / 域名根本不是 Salesforce，
+ *      这些都不该被伪装成「版本不对」，后续请求该抛什么就抛什么）
+ *
+ * @param {string|number} preferred
+ * @param {number[]} available `probeInstanceApiVersions()` 的结果
+ * @returns {{version: string, fellBack: boolean, available: number[]}}
+ */
+export function pickUsableApiVersion(preferred, available) {
+  const want = String(preferred || DEFAULT_API_VERSION);
+  if (!Array.isArray(available) || available.length === 0) {
+    return { version: want, fellBack: false, available: [] };
+  }
+  if (available.includes(Number(want))) {
+    return { version: want, fellBack: false, available };
+  }
+  return { version: available[available.length - 1].toFixed(1), fellBack: true, available };
+}

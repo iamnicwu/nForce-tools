@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nForce Tools - 登录</title>
+    <!-- favicon：不声明就会去请求 /favicon.ico 并拿到 404（见 index.html 处的说明） -->
+    <link rel="icon" type="image/png" href="icons/icon-32.png">
     <!-- Salesforce 客户端已换成自研的 common/sf_rest_client.js（约 8KB，普通 ESM，
          由 login_app.js 直接 import）。原先 1.37MB 的 jsforce 已移除，本页不再需要任何惰性加载。 -->
     <!-- 共享设计令牌 + 表单控件字体继承（原先这里只引了 FontAwesome CDN，

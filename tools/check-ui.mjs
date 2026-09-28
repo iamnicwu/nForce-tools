@@ -178,7 +178,7 @@ const rel = (p) => path.relative(ROOT, p);
 
 // JS / 浏览器内置里"大写开头"的全局对象。只列会用到的，新增时补一行即可。
 const JS_BUILTIN_GLOBALS = new Set([
-  "AbortController", "Array", "ArrayBuffer", "Atomics", "BigInt", "BigInt64Array", "BigUint64Array",
+  "AbortController", "AbortSignal", "Array", "ArrayBuffer", "Atomics", "BigInt", "BigInt64Array", "BigUint64Array",
   "Blob", "Boolean", "BroadcastChannel", "CSS", "Cache", "Comment", "Crypto", "CryptoKey",
   "CustomEvent", "DOMException", "DOMParser", "DataView", "Date", "DocumentFragment", "Element",
   "Error", "EvalError", "Event", "EventTarget", "File", "FileList", "FileReader", "FinalizationRegistry",

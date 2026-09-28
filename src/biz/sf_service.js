@@ -5,7 +5,12 @@ const log = createLogger("SF");
 import { flattenRecords, remove_duplicates, loadingLog } from "../common/utils.js";
 import { applyExpiryRules, applyT2Rules } from "../common/t2rules.js";
 import { SfRestConnection } from "../common/sf_rest_client.js";
-import { DEFAULT_API_VERSION, normalizeApiVersion } from "../common/api_version.js";
+import {
+  DEFAULT_API_VERSION,
+  normalizeApiVersion,
+  pickUsableApiVersion,
+  probeInstanceApiVersions,
+} from "../common/api_version.js";
 
 /**
  * 当前使用的 Salesforce API 版本。
@@ -26,7 +31,10 @@ export let userInfo = null;
  *    否则用户改了版本、界面也显示新值，但请求其实还走在旧版本路径上，
  *    直到重新「测试连接」才生效 —— 属于看着对、实际没生效的那类 bug。
  * 2. 只改版本号不重连是安全的：它只是 URL 里的 `/v68.0/` 这一段。
- *    版本本身不可用（org 太旧）会在下一次请求时以 404 暴露出来，届时界面会正常报错。
+ *    若配置的版本超出该 org 支持的范围，`testConnection()` 里的版本协商会在下一次
+ *    建连接时自动退到实例支持的最高版本（`common/api_version.js` 的
+ *    `probeInstanceApiVersions` / `pickUsableApiVersion`），不会再以 404 的形式
+ *    伪装成「连不上」——各 org 的升级窗口不同，这不是配置错误。
  *
  * @param {string|number} raw 用户输入或 storage 里的值
  * @returns {boolean} 是否与之前不同（调用方可据此决定要不要提示用户重连）
@@ -80,13 +88,38 @@ export let sfConn = {
         finalInstanceUrl = "https://here2serve.my.salesforce.com";
       }
 
+      // ── 先把 API 版本夹进这个 org **实际支持**的范围 ──
+      //
+      // 各 org 的升级窗口不同：Winter '27（v68.0）的生产部署窗口是
+      // 2026-09-04 / 10-02 / 10-09，全面 GA 是 10-12。对还没升级的 org 请求
+      // `/services/data/v68.0/`，Salesforce 返回 **404 Not Found** ——
+      // 而 `identity()` 正是建连接的第一步，于是整件事表现为「一直未连接」，
+      // 从 404 这条错误上完全看不出是版本问题。
+      //
+      // 配置的版本可用 → 什么都不做；不可用 → 退到实例支持的最高版本。
+      // 探测失败（离线 / CSP / 域名不是 Salesforce）→ 沿用配置值，不阻断主流程。
+      const pickedVersion = pickUsableApiVersion(
+        defaultApiVersion,
+        await probeInstanceApiVersions(finalInstanceUrl)
+      );
+      if (pickedVersion.fellBack) {
+        log.warn(
+          `该 org 不支持 API v${defaultApiVersion}（实例可用：` +
+            `${pickedVersion.available.map((v) => "v" + v.toFixed(1)).join(" / ")}），` +
+            `本次连接改用 v${pickedVersion.version}`
+        );
+        // 同步模块级值：本文件里另有几处手拼 `/services/data/v${defaultApiVersion}/…`
+        // （limits、Bulk 结果下载、Bulk 任务查询），不同步的话它们仍会打在不可用的版本上。
+        defaultApiVersion = pickedVersion.version;
+      }
+
       // Salesforce 客户端是自研的普通 ESM（common/sf_rest_client.js），
       // 直接 import 即可，不再需要惰性注入 1.37MB 的 jsforce
       const conn = new SfRestConnection({
         instanceUrl: finalInstanceUrl,
-        serverUrl: `${finalInstanceUrl}/services/Soap/u/${defaultApiVersion}`,
+        serverUrl: `${finalInstanceUrl}/services/Soap/u/${pickedVersion.version}`,
         sessionId: session_id,
-        version: defaultApiVersion,
+        version: pickedVersion.version,
       });
 
       // Get user identity info

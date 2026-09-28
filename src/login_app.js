@@ -3,6 +3,7 @@
 import { createLogger, maskSecret } from "./common/logger.js";
 import { SfRestConnection } from "./common/sf_rest_client.js";
 import { loadPrefs, getApiVersion } from "./common/prefs.js";
+import { pickUsableApiVersion, probeInstanceApiVersions } from "./common/api_version.js";
 const log = createLogger("LOGIN");
 
 // API 版本不再写死在这里。设置页（section-28「插件偏好」）里配置的值存在
@@ -67,11 +68,28 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
         await prefsReady;
         const apiVersion = getApiVersion();
         log.debug('使用 API 版本:', apiVersion);
+
+        // 各 org 的升级窗口不同（Winter '27 / v68.0 的生产窗口是 2026-09-04 / 10-02 / 10-09，
+        // 全面 GA 是 10-12）：对还没升级的 org 请求 /services/data/v68.0/ 会拿到 404，
+        // 而下面 conn.identity() 正是建连接的第一步 —— 不协商就会表现为「一直连不上」。
+        // 配置的版本可用则原样使用，不可用才退到实例支持的最高版本。
+        const pickedVersion = pickUsableApiVersion(
+            apiVersion,
+            await probeInstanceApiVersions(instanceUrl)
+        );
+        if (pickedVersion.fellBack) {
+            log.warn(
+                `该 org 不支持 API v${apiVersion}（实例可用：` +
+                `${pickedVersion.available.map((v) => 'v' + v.toFixed(1)).join(' / ')}），` +
+                `本次连接改用 v${pickedVersion.version}`
+            );
+        }
+
         const conn = new SfRestConnection({
             instanceUrl: instanceUrl,
-            serverUrl: `${instanceUrl}/services/Soap/u/${apiVersion}`,
+            serverUrl: `${instanceUrl}/services/Soap/u/${pickedVersion.version}`,
             sessionId: session_id,
-            version: apiVersion,
+            version: pickedVersion.version,
         });
         
         log.debug('Calling conn.identity()...');
