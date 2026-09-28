@@ -4,6 +4,7 @@ import { createLogger, maskSecret } from "./common/logger.js";
 import { SfRestConnection } from "./common/sf_rest_client.js";
 import { loadPrefs, getApiVersion } from "./common/prefs.js";
 import { pickUsableApiVersion, probeInstanceApiVersions } from "./common/api_version.js";
+import { replaceIcons } from "./common/icons.js";
 const log = createLogger("LOGIN");
 
 // API 版本不再写死在这里。设置页（section-28「插件偏好」）里配置的值存在
@@ -648,6 +649,27 @@ async function init() {
     log.debug('Initialization complete');
     log.debug('========================================');
 }
+
+// ── 页面外壳：图标替换 + 版本号 ──
+// 这两件事原先写在 login.html 末尾的一段内联 <script type="module"> 里，
+// 被 CSP `script-src 'self'`（不含 'unsafe-inline'）整段拒绝执行 —— 而且**没有任何
+// 页面可见的异常**，只在控制台留一条 CSP 报错。后果是全静默的：登录页 7 个图标
+// 一直是空白方块，#login-version 一直停在占位符 "v-"。
+// 挪到本文件（登录页唯一的脚本）之后由它统一负责。
+// type="module" 天然 defer，执行到这里时 DOM 已解析完，元素必然拿得到。
+replaceIcons();
+
+// 版本号唯一来源：manifest.json。
+// 原先这里硬编码 v3.0，与 manifest 3.3.0 / popup v1.0 三处互不一致。
+const loginVersionEl = document.getElementById('login-version');
+if (loginVersionEl) {
+    try {
+        loginVersionEl.textContent = 'v' + chrome.runtime.getManifest().version;
+    } catch (e) {
+        loginVersionEl.textContent = '';
+    }
+}
+log.debug('页面外壳已初始化：图标已替换，版本号 =', loginVersionEl ? loginVersionEl.textContent : '(未找到 #login-version)');
 
 // Start initialization when DOM is ready
 log.debug('Script loaded, checking document.readyState:', document.readyState);

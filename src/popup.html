@@ -73,36 +73,19 @@
         </div>
         <h1 class="title">nForce Tools</h1>
         <p class="subtitle">Salesforce 数据管理助手</p>
-        <button class="ant-btn ant-btn-primary ant-btn-lg" onclick="openFullApp()" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+        <!-- 按钮不再用 onclick="openFullApp()"：内联事件处理器同受 CSP
+             `script-src 'self'` 管辖（无 'unsafe-inline'），会被拒绝执行，
+             表现同样是「点了没反应」。改由 popup_app.js 绑 click。 -->
+        <button id="open-app-btn" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
             <i class="fas fa-external-link-alt"></i>
             <span>打开完整应用</span>
         </button>
         <div class="footer" id="popup-version"></div>
     </div>
-    <script>
-        function openFullApp() {
-            // 打开完整应用页面
-            chrome.tabs.create({
-                url: chrome.runtime.getURL('index.html'),
-                active: true
-            });
-        }
-    </script>
-    <script type="module">
-        // 图标走共享的 common/icons.js，不再自带一份手写 iconMap
-        import { replaceIcons } from './common/icons.js';
-
-        // 版本号唯一来源是 manifest.json。以前这里硬编码 v1.0，
-        // 而 manifest 是 3.3.0、package.json 是 3.2.0，三处互不一致。
-        const versionEl = document.getElementById('popup-version');
-        try {
-            versionEl.textContent = 'v' + chrome.runtime.getManifest().version;
-        } catch (e) {
-            versionEl.textContent = '';
-        }
-
-        replaceIcons();
-        document.addEventListener('DOMContentLoaded', replaceIcons);
-    </script>
+    <!-- 页面脚本必须走外部文件：内联 <script> 会被 CSP `script-src 'self'` 整段拒绝执行，
+         且不产生任何页面可见异常（只在控制台留一条 CSP 报错）。
+         popup_app.js 是**复制型**脚本（非 webpack 入口，由 CopyWebpackPlugin 逐字复制，
+         见 webpack.config.js 中对应说明；check-ui 的 J 组会校验它在 dist/ 里可达）。 -->
+    <script src="popup_app.js" type="module"></script>
 </body>
 </html>

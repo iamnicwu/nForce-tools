@@ -133,6 +133,16 @@ module.exports = {
           from: 'src/common/api_version.js',
           to: 'common/api_version.js',
           info: { minimized: true }
+        },
+        // popup.html 的页面脚本。同样是「复制型」而不是 webpack 入口：
+        // 它不是模块化的产物，只是十几行页面外壳（replaceIcons / 版本号 / 绑定按钮）。
+        // 不能写进 popup.html 的内联 <script> —— CSP `script-src 'self'` 会把内联脚本
+        // 整段拒绝执行，且不产生任何页面可见异常（只在控制台留一条 CSP 报错）。
+        // 它 import 的 ./common/icons.js 已有上面的复制规则，dist 里的相对解析成立。
+        {
+          from: 'src/popup_app.js',
+          to: 'popup_app.js',
+          info: { minimized: true }
         }
       ]
     })
