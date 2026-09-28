@@ -1956,21 +1956,37 @@ optgroup {
     margin: 0 auto;
 }
 
-/* 布局配置（作为「设置 → 布局配置」功能页，见 #section-20） */
-.layout-panel-tip {
+/* 设置类卡片里的说明文字。
+   #section-20 布局配置 与 #section-28 插件偏好 共用同一套排版：
+   两者都是"先一句说明、再一个控件、最后一行更弱的补充提示"的节奏，
+   分三套写只会让它们随时间各自漂移。 */
+.layout-panel-tip,
+.pref-desc,
+.pref-hint {
     margin: 0 0 10px;
     font-size: var(--fs-xs);
     line-height: 1.7;
     color: var(--text-secondary);
 }
 
-.layout-panel-tip code {
+.layout-panel-tip code,
+.pref-desc code,
+.pref-hint code {
     padding: 1px 5px;
     margin: 0 2px;
     font-size: var(--fs-xs);
     background: var(--bg-secondary);
     border-radius: 4px;
     color: var(--accent-indigo);
+}
+
+/* 补充提示比说明再弱一档；报错时整行变红（由 prefs_panel.js 切换 is-error） */
+.pref-hint {
+    color: var(--text-light);
+}
+
+.pref-hint.is-error {
+    color: var(--error-color);
 }
 
 .layout-json-input {
@@ -2065,6 +2081,105 @@ optgroup {
     flex-shrink: 0;
     font-size: var(--fs-sm);
     color: var(--text-secondary);
+}
+
+/* ---------- #section-28「插件偏好」----------
+   两组设置（API 版本 / 侧边栏位置），每组统一是
+   「标题 + 右侧当前值徽标 → 说明 → 控件行 → 更弱的补充提示」。
+   窄侧边栏（240~300px）下控件靠 flex-wrap 自动换行，不给固定宽度。 */
+.pref-group + .pref-group {
+    margin-top: 22px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.pref-group-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.pref-group-title {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* 当前生效值。等宽字体 + 与「Org 状态」面板同一套 tint 底，读起来像"读数值" */
+.pref-group-value {
+    flex-shrink: 0;
+    padding: 2px 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    border-radius: 999px;
+    background: var(--accent-indigo-tint);
+    color: var(--accent-indigo);
+}
+
+/* 侧边栏位置 / 开关状态不是数值，用中性色，跟版本号那个 indigo 徽标区分开。
+   on/off 两态各给一个语义色，让人扫一眼就知道这一项是开还是关。 */
+.pref-group-value[data-side="unknown"],
+.pref-group-value[data-state="unknown"] {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.pref-group-value[data-state="on"] {
+    background: var(--success-bg);
+    color: var(--success-color);
+}
+
+.pref-group-value[data-state="off"] {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+/* 复选框 + 文字标签。原生 checkbox 与 main.css 的字体（表单控件默认不继承字族）
+   都要显式声明，否则在窄侧边栏里会突然变成 Arial 且大小不一致。 */
+.pref-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.pref-switch input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+}
+
+/* 关掉时把同组的下拉置灰：延迟只有在启用后才有意义，避免"调了没反应"的困惑 */
+.pref-controls select:disabled,
+.pref-controls input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pref-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+/* flex-basis 给下限、max-width 给上限：窄栏能缩到一行放一个，宽屏也不会拉得太长。
+   min-width: 0 是必需的 —— 否则 select 会按最宽选项撑开，压不住（同 ECharts 那个坑）。 */
+.pref-controls .pref-select,
+.pref-controls .pref-input {
+    flex: 1 1 140px;
+    min-width: 0;
+    max-width: 220px;
 }
 
 /* Session 链接 / 连接信息（#section-22） */
@@ -3577,6 +3692,7 @@ optgroup {
 .u-tint-gray { --row-accent: var(--text-secondary); --row-tint: var(--accent-gray-tint); }
 .u-tint-purple { --row-accent: var(--accent-purple); --row-tint: var(--accent-purple-tint); }
 .u-tint-blue { --row-accent: var(--accent-blue); --row-tint: var(--accent-blue-tint); }
+.u-tint-teal { --row-accent: var(--accent-teal); --row-tint: var(--accent-teal-tint); }
 
 /* ---------------------------------------------------------------------------
    少数工具类需要压过组件规则

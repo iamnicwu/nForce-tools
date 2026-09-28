@@ -79,9 +79,12 @@ let t2AnalysisResizeListener = null;
 export function showSection(sectionNumber) {
   log.debug(`showSection called with sectionNumber=${sectionNumber}, is_connected=${appState.is_connected}`);
 
-  // 未连接时仅允许访问连接设置(1)、版本信息(6)、午餐(14)、布局配置(20)与设置(21)
-  // 14（中午食乜）是纯本地功能，因此在白名单里，对应磁贴也声明了 requiresConnection: false
-  if (!appState.is_connected && ![1, 6, 14, 20, 21].includes(sectionNumber)) {
+  // 未连接时仅允许访问连接设置(1)、版本信息(6)、午餐(14)、布局配置(20)、设置(21)
+  // 与插件偏好(28)。
+  // 14（中午食乜）是纯本地功能，因此在白名单里，对应磁贴也声明了 requiresConnection: false；
+  // 28 同理：API 版本是"连之前就该能改"的参数（组织 API 版本不一致时要先降版本再连），
+  // 未连接就被弹回连接设置的话这个设置项等于不可用。它不占磁贴，从「设置」页进入。
+  if (!appState.is_connected && ![1, 6, 14, 20, 21, 28].includes(sectionNumber)) {
     log.debug(`Section ${sectionNumber} requires connection`);
     showNotification("请先完成 Salesforce 连接", "warning");
     showSection(1);

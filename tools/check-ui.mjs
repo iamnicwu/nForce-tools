@@ -57,7 +57,8 @@ const JSON_OUT = process.argv.includes("--json");
 const INTERNAL_SECTIONS = {
   20: "布局配置（设置页内入口）",
   21: "设置总览（顶栏齿轮）",
-  27: "Org Dashboard 详情页（入口在首页「Org 状态」面板，见 biz/org_limits.js）"
+  27: "Org Dashboard 详情页（入口在首页「Org 状态」面板，见 biz/org_limits.js）",
+  28: "插件偏好（设置页内入口 data-goto=28，见 biz/prefs_panel.js）"
 };
 
 // 不是真图标，属于修饰类（fa-spin / fa-fw 等），不参与图标映射检查

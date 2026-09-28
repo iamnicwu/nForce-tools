@@ -5,10 +5,45 @@ const log = createLogger("SF");
 import { flattenRecords, remove_duplicates, loadingLog } from "../common/utils.js";
 import { applyExpiryRules, applyT2Rules } from "../common/t2rules.js";
 import { SfRestConnection } from "../common/sf_rest_client.js";
+import { DEFAULT_API_VERSION, normalizeApiVersion } from "../common/api_version.js";
 
-export let defaultApiVersion = "65.0";
+/**
+ * 当前使用的 Salesforce API 版本。
+ *
+ * 这是一个 **ESM 活绑定**（`export let`）：本文件里的
+ * `/services/data/v${defaultApiVersion}/...` 模板串，以及其他 `import` 它的模块，
+ * 都会在 `applyApiVersion()` 重新赋值后立刻读到新值，不需要各自再读一次设置。
+ */
+export let defaultApiVersion = DEFAULT_API_VERSION;
 export let globalConn = null;
 export let userInfo = null;
+
+/**
+ * 把设置页里配置的 API 版本应用到运行时（由 `app.js` 启动时与设置页保存时调用）。
+ *
+ * 两个容易漏掉的点：
+ * 1. **已建立的连接对象自己缓存了一份 `version`**，必须一起改掉。
+ *    否则用户改了版本、界面也显示新值，但请求其实还走在旧版本路径上，
+ *    直到重新「测试连接」才生效 —— 属于看着对、实际没生效的那类 bug。
+ * 2. 只改版本号不重连是安全的：它只是 URL 里的 `/v68.0/` 这一段。
+ *    版本本身不可用（org 太旧）会在下一次请求时以 404 暴露出来，届时界面会正常报错。
+ *
+ * @param {string|number} raw 用户输入或 storage 里的值
+ * @returns {boolean} 是否与之前不同（调用方可据此决定要不要提示用户重连）
+ */
+export function applyApiVersion(raw) {
+  const next = normalizeApiVersion(raw);
+  const changed = next !== defaultApiVersion;
+  defaultApiVersion = next;
+
+  const conn = sfConn.connection;
+  if (conn && conn.version !== next) {
+    conn.version = next;
+    log.info(`API 版本切换为 v${next}，已同步到当前连接`);
+  }
+  return changed;
+}
+
 export let sfConn = {
   connection: null,
 

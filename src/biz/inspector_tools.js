@@ -20,8 +20,7 @@ const logSoql = createLogger("SOQL");
 const logImport = createLogger("IMPORT");
 const logMeta = createLogger("META");
 const logEvent = createLogger("EVENT");
-import { sfConn } from "./sf_service.js";
-import { appState } from "./state.js";
+import { sfConn, defaultApiVersion } from "./sf_service.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
 import { ensureXLSX, ensureJSZip } from "../common/lib_loader.js";
 
@@ -503,7 +502,11 @@ export async function loadMetadataTypes() {
   if (!select) return;
   try {
     const conn = getConn();
-    const res = await conn.metadata.describe(appState.metadata_api_version || undefined);
+    // 版本统一走设置页配置的那个（biz/sf_service.js 的 defaultApiVersion）。
+    // 这里原来是 `conn.metadata.describe(appState.metadata_api_version || undefined)`，
+    // 而 `appState.metadata_api_version` 从来没有被写入过 —— 等于永远走 describe() 内部的
+    // `conn.version` 兜底，是个查不到出处的"幽灵设置项"。
+    const res = await conn.metadata.describe(defaultApiVersion);
     const types = res.metadataObjects
       .filter(t => t.xmlName)
       .sort((a, b) => a.xmlName.localeCompare(b.xmlName));
@@ -586,8 +589,11 @@ export async function retrieveMetadataPackage() {
     const blobs = [];
     for (let i = 0; i < members.length; i += BATCH) {
       const chunk = members.slice(i, i + BATCH);
+      // 打包清单里的 version 必须和 describe / REST 用同一个版本号：
+      // 这里原先是写死的 "59.0"，而同一次操作里的 describe() 已经在用默认版本，
+      // 两处对不上。见 sf_service.js 的 applyApiVersion()。
       const req = {
-        unpackaged: { types: [{ name: typeName, members: chunk }], version: (appState.metadata_api_version || "59.0") }
+        unpackaged: { types: [{ name: typeName, members: chunk }], version: defaultApiVersion }
       };
       const asyncResultId = await conn.metadata.retrieve(req);
       let status;
@@ -828,7 +834,7 @@ export async function subscribeEventChannel() {
   if (!channelPath) { showNotification("请选择或输入要监听的事件通道", "warning"); return; }
 
   const conn = getConn();
-  const apiVersion = conn.version || "59.0";
+  const apiVersion = conn.version || defaultApiVersion;
   const replayId = replayInput ? parseInt(replayInput.value, 10) : -1;
   if (Number.isNaN(replayId)) { showNotification("Replay Id 必须是整数（-1 / -2 / 具体位置）", "warning"); return; }
   if (replayId === -2 && !window.confirm("Replay Id 为 -2 会重放保留窗口内的所有事件，大事件量时可能影响性能并消耗每日事件配额，确定继续？")) {

@@ -47,7 +47,11 @@
  *    这是替换之后顺带拿到的性能收益。
  */
 
-const DEFAULT_API_VERSION = "65.0";
+// API 版本的常量与解析器在 `common/api_version.js`。
+// 抽出去的理由：内容脚本（`biz/dock.js`）也要读偏好，而偏好层要校验版本号；
+// 若把常量留在本文件，一个版本号字符串就会把整个 REST 客户端拖进客户页面。
+// 这里保留 import，是因为连接对象的 `version` 兜底要用 `DEFAULT_API_VERSION`。
+import { DEFAULT_API_VERSION } from "./api_version.js";
 
 /** Metadata API 的 SOAP 命名空间与端点前缀 */
 const METADATA_NS = "http://soap.sforce.com/2006/04/metadata";
@@ -460,7 +464,7 @@ export class SfRestConnection {
 
   /**
    * 通用请求。接受两种调用形式，覆盖项目里全部用法：
-   *   request("/services/data/v65.0/limits/")
+   *   request("/services/data/v68.0/limits/")
    *   request({method, url, body, headers})
    *
    * @param {string|{method?: string, url: string, body?: *, headers?: object}} opts
@@ -551,11 +555,11 @@ export class SfRestConnection {
 
   /**
    * 把 `nextRecordsUrl` 由**相对路径**补成**绝对 URL**，与 jsforce 的返回值逐字对齐
-   * （实测 jsforce 返回 `https://xxx.my.salesforce.com/services/data/v65.0/query/01g…`）。
+   * （实测 jsforce 返回 `https://xxx.my.salesforce.com/services/data/v68.0/query/01g…`）。
    *
    * 这不是洁癖：`inspector_tools.js:173` 会把 `result.nextRecordsUrl` 直接交回
    * `conn.request(...)`。留相对路径虽然也能被 `_api()` 兜住，但一旦哪天有人
-   * 换个方式拼接（先 `_baseUrl()` 再拼），就会得到 `…/v65.0/services/data/v65.0/…`
+   * 换个方式拼接（先 `_baseUrl()` 再拼），就会得到 `…/v68.0/services/data/v68.0/…`
    * 这种重复路径 —— 补成绝对 URL 可以从根上消掉这类风险。
    */
   _absolutizeNext(result) {

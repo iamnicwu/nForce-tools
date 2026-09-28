@@ -50,6 +50,16 @@ module.exports = {
           from: 'src/background.js',
           to: 'background.js'
         },
+        // 贴边浮窗的**内容脚本**。必须是「经典脚本」—— content_scripts 不是 module，
+        // 里面不能出现 import/export；而 src/ 目录本身也要能直接加载运行，
+        // 所以这里既不做 webpack 打包，也不改写成 ESM，只是逐字复制。
+        // 它需要的一切（配置、日志）都通过 runtime.sendMessage 找 service worker 要，
+        // 因此本身零依赖，两份产物逐字节一致。
+        {
+          from: 'src/dock.js',
+          to: 'dock.js',
+          info: { minimized: true }
+        },
         {
           from: 'src/icons',
           to: 'icons'
@@ -107,6 +117,21 @@ module.exports = {
         {
           from: 'src/common/logger.js',
           to: 'common/logger.js',
+          info: { minimized: true }
+        },
+        // background.js 现在还会 import 偏好层（它要回答内容脚本的 dock:get-config）。
+        // 复制型 JS 的 import 必须在 dist 里真实存在，所以这两条是必需的，不是冗余：
+        //   prefs.js       ← 依赖 logger.js（已复制）与 api_version.js
+        //   api_version.js ← 零依赖，纯常量与解析器
+        // 若哪天它们被别的复制型文件引用，check-ui 的 J 组会先报出来。
+        {
+          from: 'src/common/prefs.js',
+          to: 'common/prefs.js',
+          info: { minimized: true }
+        },
+        {
+          from: 'src/common/api_version.js',
+          to: 'common/api_version.js',
           info: { minimized: true }
         }
       ]

@@ -1,7 +1,7 @@
 import { createLogger } from "./common/logger.js";
 
 const log = createLogger("APP");
-import { sfConn } from "./biz/sf_service.js";
+import { sfConn, applyApiVersion } from "./biz/sf_service.js";
 import { showNotification, describeError } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
 import { $, on } from "./common/dom.js";
@@ -11,6 +11,19 @@ import { initUiLayout, renderLauncher } from "./biz/ui_layout.js";
 // Org 状态面板：session 真正可用后必须调 markSessionReady()，
 // 否则面板不会发起 limits 请求（时序约束见 org_limits.js 头部注释）
 import { markSessionReady } from "./biz/org_limits.js";
+// 本机偏好（目前只有 API 版本）：存 chrome.storage.local，侧边栏与标签页共享。
+// 必须在任何建连之前载入 —— validateStoredSession / testConnection 都会用到版本号。
+import {
+  loadPrefs,
+  getApiVersion,
+  watchPrefsStorage,
+  onPrefsChanged,
+  PREF_KEYS
+} from "./common/prefs.js";
+import { initPrefsPanel } from "./biz/prefs_panel.js";
+// 侧边栏「鼠标移出自动隐藏」。只在**侧边栏宿主**下启用 ——
+// 贴边浮窗里调用它会把浏览器侧边栏关掉（模块头部的注释有详细说明）。
+import { initPanelAutoHide } from "./biz/panel_auto_hide.js";
 import {
   initInspectorTools,
   loadSoqlFields,
@@ -213,21 +226,46 @@ async function onSessionRestored(message) {
 }
 
 /* ============================================================
- * 显示宿主：浏览器侧边栏 ⇄ 普通标签页
+ * 显示宿主：浏览器侧边栏 ⇄ 普通标签页 ⇄ 贴边浮窗
  *
  * 侧边栏与标签页加载的是同一个 index.html（manifest 的
  * side_panel.default_path 指向它），所以必须在运行时区分宿主：
  *   · 侧边栏 → 顶栏给「完整应用」（在新标签页打开，宽屏更适合看表格与图表）
  *   · 标签页 → 顶栏给「侧边栏」（chrome.sidePanel.open 停靠到窗口右侧）
+ *   · 贴边浮窗 → 同「完整应用」，窄栏排版
  * 排版本身由 main.css 末尾的「浏览器侧边栏排版层」按宽度生效，与这里的判定
  * 无关 —— 判定失败最多是少一个顶栏按钮，不会退化成难用的界面。
  * ============================================================ */
 const HOST_PANEL = "panel";
 const HOST_TAB = "tab";
+/** 贴边浮窗（`src/dock.js` 注入到 Salesforce 页面里的 iframe，加载 index.html?dock=1） */
+const HOST_DOCK = "dock";
 let activeHost = HOST_TAB;
 let hostSwitchBound = false;
 
+/**
+ * 贴边浮窗的自报家门。
+ *
+ * 为什么不能靠 API 判定：浮窗是个 iframe，`chrome.tabs.getCurrent()` 在子 frame 里
+ * 会返回**宿主标签页**，于是它和普通标签页长得一模一样，必然被误判成 host-tab
+ * （表现：顶栏按钮方向反了、窄栏排版不生效）。
+ * 所以由 `dock.js` 在加载时带上 `?dock=1`，这里优先采信它 ——
+ * 这个信号是自证的，不存在信号 1/2 之间「谁先谁后」的顺序问题。
+ */
+function detectDockHost() {
+  try {
+    if (new URLSearchParams(location.search).get("dock") === "1") return HOST_DOCK;
+  } catch (e) {
+    log.debug("解析 ?dock= 参数失败:", e);
+  }
+  return null;
+}
+
 async function detectHost() {
+  // 信号 0（自证，优先级最高）：贴边浮窗带 ?dock=1 加载
+  const dock = detectDockHost();
+  if (dock) return dock;
+
   // 信号 1（决定性）：chrome.tabs.getCurrent() 只在「标签页」上下文里返回 tab 对象；
   // 侧边栏不属于任何标签页，返回 undefined。
   //
@@ -262,9 +300,14 @@ async function detectHost() {
 /** 按宿主设置 body 标记 + 顶栏「完整应用 / 侧边栏」切换按钮 */
 function applyHostChrome(host) {
   const isPanel = host === HOST_PANEL;
+  const isDock = host === HOST_DOCK;
+  // 侧边栏与贴边浮窗都是「窄栏」：共用一套窄屏排版（main.css 的宽度媒体查询
+  // 本来就会命中，这里保持 class 语义一致，方便按宿主写例外样式）。
+  const isNarrow = isPanel || isDock;
   activeHost = host;
-  document.body.classList.toggle("host-panel", isPanel);
-  document.body.classList.toggle("host-tab", !isPanel);
+  document.body.classList.toggle("host-panel", isNarrow);
+  document.body.classList.toggle("host-tab", !isNarrow);
+  document.body.classList.toggle("host-dock", isDock);
 
   const btn = $("host-switch-btn");
   if (!btn) {
@@ -272,12 +315,14 @@ function applyHostChrome(host) {
     return;
   }
   // 直接注入 Icons 里的 SVG 字面量：顶栏是动态渲染的，replaceIcons() 已经跑过
-  btn.innerHTML = isPanel
+  btn.innerHTML = isNarrow
     ? `${Icons.externalLink}<span>完整应用</span>`
     : `${Icons.outdent}<span>侧边栏</span>`;
   btn.title = isPanel
     ? "在新标签页中打开完整应用（宽屏更适合看数据表格与图表）"
-    : "在浏览器侧边栏中打开（可固定在右侧，也可随时隐藏）";
+    : isDock
+      ? "在新标签页中打开完整应用"
+      : "在浏览器侧边栏中打开（可固定在右侧，也可随时隐藏）";
   btn.hidden = false;
 
   // initApp 可能被重复调用（点顶部标题会重新初始化），事件只绑一次
@@ -285,8 +330,8 @@ function applyHostChrome(host) {
   hostSwitchBound = true;
 
   on("host-switch-btn", "click", async () => {
-    if (activeHost === HOST_PANEL) {
-      // 侧边栏 → 标签页：同一个 index.html，只是换成宽屏宿主
+    if (activeHost !== HOST_TAB) {
+      // 侧边栏 / 贴边浮窗 → 标签页：同一个 index.html，只是换成宽屏宿主
       await chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
       return;
     }
@@ -390,10 +435,39 @@ async function initApp() {
     log.warn("宿主判定异常，按普通标签页处理:", e);
   }
   applyHostChrome(host);
-  log.info(`当前显示宿主：${host === HOST_PANEL ? "浏览器侧边栏" : "标签页"}`);
+  log.info(
+    `当前显示宿主：${
+      host === HOST_PANEL ? "浏览器侧边栏" : host === HOST_DOCK ? "贴边浮窗" : "标签页"
+    }`
+  );
+
+  // 侧边栏独有的行为：鼠标移出后自动隐藏。
+  // 必须卡在 host === HOST_PANEL 上：贴边浮窗的收起由 dock.js 自己管，
+  // 且浮窗里调 sidePanel.close 关掉的是**浏览器侧边栏**，与用户所见无关。
+  if (host === HOST_PANEL) {
+    try {
+      initPanelAutoHide();
+    } catch (e) {
+      log.warn("侧边栏自动隐藏初始化失败（不影响其他功能）:", e);
+    }
+  }
 
   // 侧边栏与标签页可能同时开着，连接状态要双向同步
   watchSessionStorage();
+
+  // ===== 载入本机偏好（API 版本）=====
+  // 位置很关键：必须早于 validateStoredSession() / onSessionRestored() / testConnection()，
+  // 否则会话校验与后续所有请求都会先用默认版本发一次。
+  try {
+    await loadPrefs();
+    applyApiVersion(getApiVersion());
+    watchPrefsStorage();
+    // 另一处（侧边栏/标签页）改了版本 → 本页也切过去。
+    // 注意这里不写 storage（prefs.js 已写过了），只改运行时值，避免来回触发。
+    onPrefsChanged((prefs) => applyApiVersion(prefs[PREF_KEYS.apiVersion]));
+  } catch (e) {
+    log.warn("偏好初始化失败，本次使用默认 API 版本:", e);
+  }
 
   // 从 chrome.storage.local 读取登录状态
   try {
@@ -517,10 +591,10 @@ async function initApp() {
 
   // 会话恢复 / 自动刷新都结束后，仍未连接才提示（避免先弹警告又马上连接成功的噪音）
   if (!appState.is_connected) {
-    if (host === HOST_PANEL) {
-      // 侧边栏又窄又高，一个 toast 很容易被忽略，而且首页全是「需连接」的灰磁贴。
-      // 直接把用户送到「连接设置」卡片，打开侧边栏就能立刻填 Session ID / 跑登录流程。
-      log.info("侧边栏内尚未连接，直接进入「连接设置」");
+    if (host !== HOST_TAB) {
+      // 侧边栏 / 贴边浮窗又窄又高，一个 toast 很容易被忽略，而且首页全是「需连接」的灰磁贴。
+      // 直接把用户送到「连接设置」卡片，打开面板就能立刻填 Session ID / 跑登录流程。
+      log.info(`${host === HOST_DOCK ? "贴边浮窗" : "侧边栏"}内尚未连接，直接进入「连接设置」`);
       showSection(1);
     }
     showNotification("尚未连接 Salesforce，请先完成连接", "warning");
@@ -806,6 +880,9 @@ function bindEvents() {
       if (target) showSection(target);
     });
   });
+
+  // 设置页内的「插件偏好」（section-28）：API 版本 + 侧边栏位置
+  initPrefsPanel();
 
   // 导出当日数据按钮点击事件
   const exportDailyDataBtn = $("export-daily-data");

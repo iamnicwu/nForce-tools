@@ -2,8 +2,14 @@
 // API Version
 import { createLogger, maskSecret } from "./common/logger.js";
 import { SfRestConnection } from "./common/sf_rest_client.js";
+import { loadPrefs, getApiVersion } from "./common/prefs.js";
 const log = createLogger("LOGIN");
-const defaultApiVersion = "65.0";
+
+// API 版本不再写死在这里。设置页（section-28「插件偏好」）里配置的值存在
+// chrome.storage.local，登录时读一次即可。
+// 模块加载就开始读：用户点「登录」时这个 Promise 早已 settle，
+// 因此下面可以无条件 await，不会读到"还没来得及载入"的默认值。
+const prefsReady = loadPrefs();
 
 // （原先这里会空闲预热 1.37MB 的 jsforce。改用自研的 sf_rest_client.js 之后，
 //   它是普通 ESM、已在上面静态 import，无需预热，也不需要 lib_loader。）
@@ -58,11 +64,14 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
 
     try {
         log.debug('Creating Salesforce connection...');
+        await prefsReady;
+        const apiVersion = getApiVersion();
+        log.debug('使用 API 版本:', apiVersion);
         const conn = new SfRestConnection({
             instanceUrl: instanceUrl,
-            serverUrl: `${instanceUrl}/services/Soap/u/${defaultApiVersion}`,
+            serverUrl: `${instanceUrl}/services/Soap/u/${apiVersion}`,
             sessionId: session_id,
-            version: defaultApiVersion,
+            version: apiVersion,
         });
         
         log.debug('Calling conn.identity()...');

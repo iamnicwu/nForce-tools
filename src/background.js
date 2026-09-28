@@ -2,6 +2,11 @@
 // Service Worker for nForce Tools
 // 使用 Chrome Alarm API 管理定时任务
 import { createLogger } from "./common/logger.js";
+// 贴边浮窗（内容脚本）的配置来源。内容脚本是经典脚本、不能 import，
+// 所以它通过 runtime.sendMessage 向这里要配置 —— 偏好的键名只在 prefs.js 里写一份。
+// ⚠️ 本文件是**逐字复制**进 dist 的 ESM service worker，它的 import 必须真的存在：
+// webpack.config.js 里已为 common/prefs.js 与 common/api_version.js 各加了一条复制规则。
+import { loadPrefs, watchPrefsStorage, onPrefsChanged, getPref, PREF_KEYS } from "./common/prefs.js";
 
 const log = createLogger("BG");
 
@@ -151,6 +156,16 @@ function isValidSender(sender) {
 
 // 监听来自前端的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // ⚠️ 必须最先放行 `dock:*`（贴边浮窗那条链路，监听器在文件末尾）。
+  // Chrome 对同一条消息会依次调用**所有**监听器，但只认**第一个** sendResponse：
+  // 这里下面的白名单校验对 `dock:get-config` 是"未知类型"，会立刻回一个
+  // `{success:false, error:'Invalid message type'}`，于是后面那个监听器的
+  // 异步回话永远送不出去（内容脚本只拿到 ok=false）→ 浮窗静默地永不启用。
+  // 静态检查与截图都抓不到这个：它只在真实的 Salesforce 页面上才暴露。
+  if (typeof message?.type === "string" && message.type.startsWith("dock:")) {
+    return undefined;
+  }
+
   log.debug("收到页面消息:", message.type);
   
   // 验证消息来源
@@ -434,4 +449,156 @@ chrome.action.onClicked.addListener((tab) => {
   chrome.tabs.create({
     url: chrome.runtime.getURL('login.html')
   });
+});
+
+// ===== 快捷键：开 / 关侧边栏 =====
+// 为什么需要它：侧边栏一旦被「鼠标移出自动关闭」收起，用户就需要一个不依赖鼠标的召回方式。
+// 快捷键是 chrome.sidePanel.open() 允许的四种用户动作之一（另外三种是点图标、右键菜单、
+// 扩展页/内容脚本里的手势），而**鼠标移动不算**。
+//
+// 开/关状态只能靠 onOpened / onClosed 事件维护（API 没有 isOpen()）。
+// 这两个事件是 Chrome 141/142+ 才有的，所以低版本上退化成「盲开」：
+// 首次按下只会打开（若本来就开着，等价于无操作），第二次按键才由我们自己记的状态关掉。
+const PANEL_OPEN_KEY = "side_panel_open_windows";
+const sidePanelApi = chrome.sidePanel || null;
+
+async function readOpenWindows() {
+  try {
+    const stored = await chrome.storage.session.get(PANEL_OPEN_KEY);
+    return new Set(stored[PANEL_OPEN_KEY] || []);
+  } catch (e) {
+    return new Set(); // storage.session 不可用时按「都没开」处理
+  }
+}
+
+async function writeOpenWindows(set) {
+  try {
+    await chrome.storage.session.set({ [PANEL_OPEN_KEY]: [...set] });
+  } catch (e) {
+    log.debug("记录侧边栏开关状态失败（不影响功能）:", e);
+  }
+}
+
+try {
+  sidePanelApi?.onOpened?.addListener(async (info) => {
+    if (info && info.windowId !== undefined) {
+      const set = await readOpenWindows();
+      set.add(info.windowId);
+      await writeOpenWindows(set);
+    }
+  });
+  sidePanelApi?.onClosed?.addListener(async (info) => {
+    if (info && info.windowId !== undefined) {
+      const set = await readOpenWindows();
+      set.delete(info.windowId);
+      await writeOpenWindows(set);
+    }
+  });
+  if (!sidePanelApi?.onOpened || !sidePanelApi?.onClosed) {
+    log.debug("onOpened/onClosed 不可用（需 Chrome 141/142+），快捷键退化为「先开后关」");
+  }
+} catch (e) {
+  log.debug("绑定侧边栏开关事件失败:", e);
+}
+
+try {
+  chrome.commands?.onCommand?.addListener(async (command) => {
+    if (command !== "toggle-side-panel") return;
+    try {
+      const win = await chrome.windows.getLastFocused();
+      if (!win || win.id === undefined) return;
+
+      const openSet = await readOpenWindows();
+      if (openSet.has(win.id)) {
+        await sidePanelApi.close({ windowId: win.id });
+        openSet.delete(win.id);
+        await writeOpenWindows(openSet);
+        log.info("快捷键：已隐藏侧边栏");
+      } else {
+        // 在快捷键处理器里调用 open() 是合法的用户手势上下文
+        await sidePanelApi.open({ windowId: win.id });
+        openSet.add(win.id);
+        await writeOpenWindows(openSet);
+        log.info("快捷键：已打开侧边栏");
+      }
+    } catch (e) {
+      log.error("快捷键切换侧边栏失败:", e);
+    }
+  });
+} catch (e) {
+  log.debug("注册快捷键监听失败（commands 不可用）:", e);
+}
+
+// ===== 贴边浮窗：配置下发 + 日志转发 =====
+// 内容脚本（dist/dock.js）是经典脚本，既不能 import 偏好层、也不能用 logger，
+// 所以这两件事都由这里代劳。
+const dockLog = createLogger("DOCK");
+
+/** 浮窗需要的最小配置。键名一律取自 PREF_KEYS，别在这里写字符串字面量。 */
+function dockConfig() {
+  return {
+    enabled: !!getPref(PREF_KEYS.dockEnabled),
+    side: getPref(PREF_KEYS.dockSide),
+    hideDelay: Number(getPref(PREF_KEYS.dockHideDelay))
+  };
+}
+
+const prefsReady = loadPrefs();
+watchPrefsStorage();
+
+// 上一次广播出去的配置。作用：偏好里任何一项变化都会触发 onPrefsChanged，
+// 但我们只该在**浮窗相关**的项变化时才打扰所有标签页。
+let lastDockConfigJson = null;
+
+async function broadcastDockConfig(force = false) {
+  const config = dockConfig();
+  const json = JSON.stringify(config);
+  if (!force && json === lastDockConfigJson) return;
+  lastDockConfigJson = json;
+
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({});
+  } catch (e) {
+    return;
+  }
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (tab.id === undefined) return;
+      try {
+        await chrome.tabs.sendMessage(tab.id, { type: "dock:config", config });
+      } catch (e) {
+        // 该标签页没有注入内容脚本（非 Salesforce 域 / chrome:// 页面），属正常
+      }
+    })
+  );
+  log.debug(`已向 ${tabs.length} 个标签页广播浮窗配置：${json}`);
+}
+
+onPrefsChanged(() => {
+  broadcastDockConfig();
+});
+
+/** `dock:log` 的级别白名单 —— 内容脚本给什么都不能让 logger 崩掉 */
+const DOCK_LEVELS = { debug: "debug", info: "info", warn: "warn", error: "error" };
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || typeof msg.type !== "string") return undefined;
+
+  if (msg.type === "dock:get-config") {
+    // 必须 return true 保持消息通道开着：loadPrefs() 是异步的
+    prefsReady
+      .catch(() => {})
+      .then(() => sendResponse({ ok: true, config: dockConfig() }));
+    return true;
+  }
+
+  if (msg.type === "dock:log") {
+    const level = DOCK_LEVELS[msg.level] || "debug";
+    const tabId = sender && sender.tab ? sender.tab.id : "-";
+    dockLog[level](`[tab ${tabId}] ${msg.message}`);
+    return undefined;
+  }
+
+  return undefined;
 });

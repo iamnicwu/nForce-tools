@@ -489,6 +489,111 @@
                     </div>
                 </div>
             </div>
+            <!-- 插件偏好卡片（属于「设置」分组，从首页 设置 → 插件偏好 进入） -->
+            <div id="section-28" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">插件偏好</div>
+                        <div class="ant-card-extra"><span class="ant-tag">保存在本机</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <!-- ① Salesforce API 版本 -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">Salesforce API 版本</span>
+                            <span class="pref-group-value" id="api-version-current">—</span>
+                        </div>
+                        <p class="pref-desc">
+                            所有 Salesforce 请求（REST / Bulk / Tooling / 事件监听 CometD / Metadata 打包）
+                            都使用这个版本，请求路径里的 <code>/vXX.0/</code> 就是它。
+                        </p>
+                        <div class="pref-controls">
+                            <select class="ant-input pref-select" id="api-version-select" aria-label="常用 API 版本"></select>
+                            <input type="text" class="ant-input pref-input" id="api-version-custom"
+                                   placeholder="自定义，如 66.0" autocomplete="off" spellcheck="false"
+                                   aria-label="自定义 API 版本">
+                            <button type="button" class="ant-btn ant-btn-primary" id="api-version-save">保存</button>
+                            <button type="button" class="ant-btn" id="api-version-reset">恢复默认</button>
+                        </div>
+                        <p class="pref-hint" id="api-version-hint">
+                            保存后立即生效（无需重新登录）。若组织不支持该版本，请求会返回 404，换回较低版本即可。
+                        </p>
+                    </section>
+
+                    <!-- ② 侧边栏位置（只能读、不能设，原因见下方说明） -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">侧边栏位置</span>
+                            <span class="pref-group-value" id="panel-side-value">检测中…</span>
+                        </div>
+                        <p class="pref-desc">
+                            侧边栏在左侧还是右侧，是 <b>Chrome 的全局设置</b>，扩展无法用 API 修改
+                            —— Chrome 的 <code>sidePanel</code> 只提供 <code>getLayout()</code> 读取布局，
+                            没有对应的 <code>setLayout()</code>。所以这里只能帮你确认当前在哪一侧。
+                        </p>
+                        <div class="pref-controls">
+                            <button type="button" class="ant-btn" id="panel-side-refresh">重新检测</button>
+                        </div>
+                        <p class="pref-hint" id="panel-side-hint">
+                            改法：Chrome 菜单 → 设置 → 外观 →「侧边栏」→ 选「在左侧显示 / 在右侧显示」；
+                            也可以右键点击侧边栏边缘，直接选「移到左侧 / 移到右侧」。
+                            这个设置对所有侧边栏内容生效，不只是本扩展。
+                        </p>
+                    </section>
+
+                    <!-- ③ 侧边栏自动隐藏 -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">侧边栏自动隐藏</span>
+                            <span class="pref-group-value" id="panel-auto-hide-state">—</span>
+                        </div>
+                        <p class="pref-desc">
+                            开启后，鼠标离开侧边栏并停留一小会儿，面板会自动收起，把宽度还给网页；
+                            再按 <code>Alt+Shift+N</code> 即可重新打开（也可以在 Chrome 的扩展快捷键页改成自己顺手的手势）。
+                        </p>
+                        <div class="pref-controls">
+                            <label class="pref-switch" for="panel-auto-hide-toggle">
+                                <input type="checkbox" id="panel-auto-hide-toggle">
+                                <span>启用自动隐藏</span>
+                            </label>
+                            <select class="ant-input pref-select" id="panel-hide-delay-select"
+                                    aria-label="侧边栏隐藏延迟"></select>
+                        </div>
+                        <p class="pref-hint" id="panel-auto-hide-hint">
+                            延迟是「鼠标离开后等多久才收起」。焦点落在输入框或下拉框上时不会收起 ——
+                            原生下拉的选项弹窗属于浏览器界面，鼠标移过去在网页看来等于离开了文档。
+                        </p>
+                    </section>
+
+                    <!-- ④ 贴边浮窗 -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">贴边浮窗</span>
+                            <span class="pref-group-value" id="dock-state">—</span>
+                        </div>
+                        <p class="pref-desc">
+                            在 Salesforce 页面上贴一条感应边，<b>鼠标靠过去就滑出</b>这个工具面板。
+                            侧边栏本身做不到这一点：Chrome 规定 <code>sidePanel.open()</code> 只能由
+                            点击 / 快捷键 / 右键菜单触发，<b>鼠标移动不算用户动作</b>，所以「靠边即显示」
+                            只能由浮窗来实现。
+                        </p>
+                        <div class="pref-controls">
+                            <label class="pref-switch" for="dock-enable-toggle">
+                                <input type="checkbox" id="dock-enable-toggle">
+                                <span>在 Salesforce 页面启用</span>
+                            </label>
+                            <select class="ant-input pref-select" id="dock-side-select" aria-label="贴哪一边"></select>
+                            <select class="ant-input pref-select" id="dock-hide-delay-select"
+                                    aria-label="浮窗收回延迟"></select>
+                        </div>
+                        <p class="pref-hint" id="dock-hint">
+                            改完立即生效，无需刷新页面 —— 只对<b>已打开</b>的 Salesforce 标签页生效；
+                            新开的标签页会自动带上。浮窗与侧边栏是两套独立入口，可以同时开。
+                        </p>
+                    </section>
+                </div>
+            </div>
             <!-- 设置总览卡片（顶部导航齿轮进入；布局配置是其中一项） -->
             <div id="section-21" class="ant-card ant-card-bordered step-section">
                 <div class="ant-card-head">
@@ -515,6 +620,16 @@
                             <span class="settings-row-text">
                                 <span class="settings-row-label">布局配置</span>
                                 <span class="settings-row-desc">首页图标排列 · 分组 · 常用功能默认列表</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                        <button type="button" class="settings-row" data-goto="28">
+                            <span class="settings-row-icon u-tint-teal">
+                                <i class="fas fa-cog"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">插件偏好</span>
+                                <span class="settings-row-desc">Salesforce API 版本 · 侧边栏位置 · 自动隐藏 · 贴边浮窗</span>
                             </span>
                             <i class="fas fa-chevron-right settings-row-arrow"></i>
                         </button>
