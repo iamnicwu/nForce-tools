@@ -195,6 +195,30 @@
                             <p>点击"测试连接"按钮以验证Salesforce连接</p>
                             <p class="u-fs-base">连接成功后才能进行后续操作</p>
                         </div>
+
+                        <div class="u-relative u-my-32 u-text-center">
+                            <hr class="u-border-0 u-border-top">
+                            <span class="u-absolute u-top-half u-left-half u-translate-center u-bg-white u-px-16 u-text-secondary u-fs-xs">或</span>
+                        </div>
+
+                        <!-- 自动获取会话：侧边栏里没有地址栏、也没法「重载当前页」，
+                             会话过期后这里是唯一的自救入口（原理与 login.html 的自动检测同源：
+                             用浏览器 Cookie 里的 sid 换一个可用的 Salesforce 会话）。 -->
+                        <div class="form-group u-mb-24 u-text-center">
+                            <h3 class="u-mb-8 u-fs-xl">自动获取会话</h3>
+                            <p class="u-text-secondary u-fs-base u-mb-16">
+                                浏览器里还登录着 Salesforce 时，可直接用浏览器 Cookie 换取新会话，不必手动粘贴 Session ID。
+                            </p>
+                            <button type="button" class="ant-btn ant-btn-primary ant-btn-lg u-w-full" id="connection-reconnect-btn">
+                                <i class="fas fa-sync-alt"></i>
+                                <span>自动获取 Session 并重新连接</span>
+                            </button>
+                            <button type="button" class="ant-btn ant-btn-default u-w-full u-mt-16" id="connection-open-login-btn">
+                                <i class="fas fa-sign-in-alt"></i>
+                                <span>打开登录页（可在多个 org 中选择）</span>
+                            </button>
+                            <div class="u-mt-16 u-fw-600 u-minh-24" id="connection-reconnect-status" data-state="idle"></div>
+                        </div>
                     </div>
                 </div>
             </div>

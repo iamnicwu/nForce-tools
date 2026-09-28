@@ -7,6 +7,9 @@ import { replaceIcons, Icons } from "./common/icons.js";
 import { $, on } from "./common/dom.js";
 import { appState } from "./biz/state.js";
 import { OneDriveWorkbookService } from "./common/onedrive_service.js";
+// 会话自动恢复：侧边栏（side panel）里没有地址栏、也没有「重载当前页」的动线，
+// 会话过期后必须能自己从浏览器 Cookie 换一个新会话，否则会永久停在「未连接」。
+import { recoverSessionFromBrowser } from "./biz/session_recovery.js";
 import { initUiLayout, renderLauncher } from "./biz/ui_layout.js";
 // Org 状态面板：session 真正可用后必须调 markSessionReady()，
 // 否则面板不会发起 limits 请求（时序约束见 org_limits.js 头部注释）
@@ -135,66 +138,139 @@ function isSessionAuthFailure() {
   return AUTH_FAILURE_CODES.includes(err.errorCode.toUpperCase());
 }
 
+/* ============================================================
+ * 会话自动恢复（侧边栏里唯一的"逃生通道"）
+ *
+ * 触发源共四类，全部走下面这一个入口：
+ *   ① 启动时校验失败 / 启动时就是未连接
+ *   ② 用户点「自动获取 Session 并重新连接」（section-1）
+ *   ③ 浏览器里的 sid Cookie 变了 —— 用户在别的标签页重新登录了 Salesforce
+ *   ④ 侧边栏重新可见 / 窗口重新获得焦点 —— 用户从别处切回来
+ *
+ * ③④ 是"侧边栏能自己好起来"的关键：侧边栏页面**不会被重载**，没有它们的话
+ * 用户即使重新登录了 Salesforce，面板也会一直停在「未连接」。
+ *
+ * 四者共用一把重入锁 + 一个最小间隔，避免叠加成请求风暴。
+ * ============================================================ */
+const RECOVERY_MIN_INTERVAL_MS = 3000;
+let recoveryInFlight = null;
+let lastRecoveryAt = 0;
+
+/** 当前停留的 section 号（首页返回 null） */
+function currentSectionNumber() {
+  const active = document.querySelector(".step-section.active");
+  const matched = active && active.id ? String(active.id).match(/^section-(\d+)$/) : null;
+  return matched ? Number(matched[1]) : null;
+}
+
 /**
- * 从浏览器 Cookie 中重新获取 Salesforce 会话（sid）。
- * 场景：存储的 session 已过期，但用户在浏览器里仍登录着 Salesforce，
- * 此时 Cookie 里的 sid 是最新的。刷新 index.html 即可自动换新，无需手动重登。
- * @param {string|null} knownBadSid - 刚被服务端判定失效的 sid，同值 Cookie 直接跳过
- * @returns {Promise<boolean>} 是否刷新成功
+ * 尝试从浏览器 Cookie 恢复会话。
+ * @param {string} trigger 触发源（只用于日志，排查"到底谁在重试"）
+ * @param {{force?:boolean, knownBadSid?:string|null, successMessage?:string}} [opts]
+ *   `force` 绕过最小间隔（启动流程与用户手动点击用）；
+ *   `knownBadSid` 传刚被判失效的 sid，避免拿同一个死会话再发一次请求。
+ * @returns {Promise<{ok:boolean, skipped?:string, reason?:string, tried?:number}>}
  */
-async function tryRefreshSessionFromCookie(knownBadSid = null) {
-  const instanceUrl = appState.instance_url;
-  if (!instanceUrl) return false;
-  if (!chrome.cookies || typeof chrome.cookies.getAll !== "function") {
-    log.warn("当前环境无 chrome.cookies 权限，跳过自动刷新");
-    return false;
+async function attemptSessionRecovery(trigger, opts = {}) {
+  const { force = false, knownBadSid = null, successMessage = "" } = opts;
+
+  if (appState.is_connected) return { ok: true, skipped: "already-connected" };
+  if (recoveryInFlight) return recoveryInFlight; // 已经有人在试，搭个便车
+  if (!force && Date.now() - lastRecoveryAt < RECOVERY_MIN_INTERVAL_MS) {
+    return { ok: false, skipped: "throttled" };
   }
-  try {
-    const cookies = await chrome.cookies.getAll({ url: instanceUrl, name: "sid" });
-    if (!cookies || cookies.length === 0) {
-      log.info("浏览器中未找到 sid Cookie，无法自动刷新会话");
-      return false;
-    }
 
-    // 与当前实例域名匹配的 Cookie 优先，其余按返回顺序兜底
-    let host = "";
-    try { host = new URL(instanceUrl).hostname; } catch (e) { /* instanceUrl 已在上面保证非空，忽略 */ }
-    const domainRank = (c) => {
-      const d = String(c.domain || "").replace(/^\./, "");
-      return host && (host === d || host.endsWith("." + d)) ? 0 : 1;
-    };
-    const sorted = [...cookies].sort((a, b) => domainRank(a) - domainRank(b));
-
-    for (const cookie of sorted) {
-      // Cookie 格式: org!sessionId
-      const parts = String(cookie.value || "").split("!");
-      const sid = parts.length >= 2 ? parts[1] : parts[0];
-      if (!sid || (knownBadSid && sid === knownBadSid)) continue;
-
-      log.info("尝试用浏览器 Cookie 刷新会话，domain:", cookie.domain);
-      const ok = await sfConn.testConnection(sid, instanceUrl);
-      if (ok) {
-        appState.session_id = sid;
-        appState.is_connected = true;
-        try {
-          await chrome.storage.local.set({
-            sf_session_id: sid,
-            sf_instance_url: instanceUrl,
-            is_connected: true
-          });
-        } catch (e) {
-          log.warn("写入刷新后的会话失败:", e);
-        }
-        log.info("已通过浏览器 Cookie 自动刷新 Salesforce 会话");
-        return true;
+  lastRecoveryAt = Date.now();
+  recoveryInFlight = (async () => {
+    log.info(`尝试恢复 Salesforce 会话（触发：${trigger}）`);
+    const result = await recoverSessionFromBrowser({
+      preferredInstanceUrl: appState.instance_url || null,
+      knownBadSid
+    });
+    if (result.ok) {
+      await onSessionRestored(successMessage || "已从浏览器获取新的 Salesforce 会话");
+      // 未连接时侧边栏会被自动送到「连接设置」，恢复成功后把它送回功能中心
+      if (currentSectionNumber() === 1) {
+        goHome();
       }
-      log.warn("该 Cookie 对应的会话无效，继续尝试下一个，domain:", cookie.domain);
     }
-    return false;
-  } catch (e) {
-    log.warn("从 Cookie 自动刷新会话失败:", e);
-    return false;
+    return result;
+  })();
+
+  try {
+    return await recoveryInFlight;
+  } finally {
+    recoveryInFlight = null;
   }
+}
+
+/**
+ * 注册"环境变了就再试一次"的监听：面板重新可见、窗口重新获得焦点、sid Cookie 变化。
+ *
+ * 全部在 `appState.is_connected` 为真时直接返回 —— 连上了就不该再打扰 org。
+ * 幂等：重复调用只绑一次。
+ */
+let recoveryWatchersBound = false;
+function watchSessionRecovery() {
+  if (recoveryWatchersBound) return;
+  recoveryWatchersBound = true;
+
+  // ③ Salesforce 的 sid Cookie 变化 = 用户刚在某个标签页登录/换号。
+  //    这是最准的信号：只认 sid，且限制在 Salesforce 域上，其他 Cookie 一律忽略。
+  try {
+    chrome.cookies?.onChanged?.addListener((info) => {
+      if (appState.is_connected) return;
+      const cookie = info && info.cookie;
+      if (!cookie || cookie.name !== "sid") return;
+      const domain = String(cookie.domain || "");
+      if (!/salesforce\.com$|force\.com$/i.test(domain.replace(/^\./, ""))) return;
+      attemptSessionRecovery("检测到 Salesforce sid Cookie 变化");
+    });
+  } catch (e) {
+    log.warn("注册 Cookie 变化监听失败（不影响手动恢复）:", e);
+  }
+
+  // ④-a 面板重新可见：被鼠标移出自动隐藏后又被召回，或窗口从后台切回来
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || appState.is_connected) return;
+    attemptSessionRecovery("面板重新可见");
+  });
+
+  // ④-b 窗口重新获得焦点：用户去浏览器里登录完 Salesforce 再切回来
+  window.addEventListener("focus", () => {
+    if (appState.is_connected) return;
+    attemptSessionRecovery("窗口重新获得焦点");
+  });
+}
+
+/**
+ * 「重新连接」：用户主动按下时的入口 —— 先**复验**当前连接，确认失效了才去换新会话。
+ *
+ * 为什么不直接调 `attemptSessionRecovery()`：后者开头有「已连接就直接返回」的短路，
+ * 而用户点这个按钮的场景恰恰包含「界面说已连接、其实会话已经在使用中过期」——
+ * 各功能轮流报「尚未连接 Salesforce」，但徽标还是绿的。
+ * 此时按钮必须真的去复验一次，否则点了没反应，比没有按钮更让人困惑。
+ *
+ * @param {string} trigger
+ * @returns {Promise<{ok:boolean, skipped?:string, reason?:string}>}
+ */
+async function reconnectNow(trigger) {
+  if (appState.is_connected) {
+    const stillOk = await validateStoredSession();
+    if (stillOk) {
+      log.info("用户点了「自动获取 Session」，但当前会话复验仍然有效，无需换新");
+      return { ok: true, skipped: "verified-still-valid" };
+    }
+    if (!isSessionAuthFailure()) {
+      // 校验请求被网络/CSP 拦住 —— 会话本身可能还好，不能贸然标记为未连接
+      log.warn("复验未通过但无法判定会话失效（多为网络/CSP）：", sfConn.lastError);
+      return { ok: false, reason: "verify-blocked" };
+    }
+    log.warn("复验确认会话已失效，切换到未连接并重新获取");
+    appState.is_connected = false;
+    updateUIState();
+  }
+  return attemptSessionRecovery(trigger, { force: true });
 }
 
 /** 会话恢复 / 自动刷新成功后的统一收尾（补齐用户与组织信息并刷新 UI） */
@@ -543,6 +619,15 @@ async function initApp() {
   // 校验请求可能被 CSP / 网络 / 代理拦截，但会话本身是好的；
   // 之前直接降级（甚至清空 session 并跳登录页）会造成
   // 「找到 session 进入主页却显示未连接、且没有功能图标」的问题。
+  //
+  // 另一种伪"已连接"：标记是 true，但 session_id / instance_url 缺了一个
+  // （storage 被部分清过、或外部写入了半套值）。这种状态既通过了 `is_connected` 的门禁，
+  // 又没有会话可用 —— 每个功能都会以「尚未连接 Salesforce」失败。
+  // 直接按未连接处理并交给下面的恢复流程，别让它挂在中间态。
+  if (appState.is_connected && !(appState.session_id && appState.instance_url)) {
+    log.warn("标记为已连接但缺少 session_id / instance_url，按未连接处理并尝试恢复");
+    appState.is_connected = false;
+  }
   if (appState.is_connected && appState.session_id && appState.instance_url) {
     const isValid = await validateStoredSession();
     if (isValid) {
@@ -551,13 +636,22 @@ async function initApp() {
     } else if (isSessionAuthFailure()) {
       // 只有服务端明确返回「会话无效」时才需要处理。
       // 先尝试从浏览器 Cookie 自动获取新 session（用户浏览器仍登录着的话即可无感续期），
-      // 刷新失败才降级为未连接。
-      log.warn("Salesforce 会话已失效，尝试从浏览器 Cookie 自动刷新...");
-      const refreshed = await tryRefreshSessionFromCookie(appState.session_id);
-      if (refreshed) {
-        await onSessionRestored("Session 已过期，已自动从浏览器获取新会话");
-      } else {
-        log.warn("自动刷新会话失败，降级为未连接状态（保留 session ID 便于重试）");
+      // 拿不到新会话才降级为未连接。
+      log.warn("Salesforce 会话已失效，尝试从浏览器 Cookie 自动获取新会话...");
+      // ⚠️ 必须**先**把内存里的连接标记摘掉再尝试恢复。
+      // `attemptSessionRecovery` 开头有「已连接就直接返回」的短路（它是给自动触发器用的），
+      // 而这里的 is_connected 还是 true（服务端刚判失效，但标记还没改）——不摘的话恢复会被
+      // 整个跳过，界面停在「已连接」而 sfConn.connection 已是 null，每个功能都报
+      // 「尚未连接 Salesforce」，比明确失败更难查。storage 不在这里写，
+      // 由下面的成功/降级分支统一落盘，避免中间态被别的宿主读到。
+      appState.is_connected = false;
+      const recovery = await attemptSessionRecovery("启动时会话校验失败", {
+        force: true,
+        knownBadSid: appState.session_id,
+        successMessage: "Session 已过期，已自动从浏览器获取新会话"
+      });
+      if (!recovery.ok) {
+        log.warn("自动获取新会话失败，降级为未连接状态（保留 session ID 便于重试）");
         appState.is_connected = false;
         // 只清除连接标记，保留 session_id / instance_url 以便用户直接重试
         try {
@@ -571,7 +665,10 @@ async function initApp() {
         } catch (e) {
           log.warn('刷新首页图标状态失败:', e);
         }
-        showNotification("Salesforce 会话已过期且自动刷新失败，请到 Salesforce 重新登录后刷新本页，或在「连接设置」手动更新", "error");
+        showNotification(
+          "Salesforce 会话已过期：请先在 Salesforce 里重新登录，再点「连接设置」里的「自动获取 Session 并重新连接」，或手动粘贴新的 Session ID",
+          "error"
+        );
       }
     } else {
       // 无法判定会话失效（多为请求被拦截）：保留已连接状态，仅记录日志
@@ -580,20 +677,26 @@ async function initApp() {
       // （若网络确实不通，limits 拉取会走既有失败态，不影响其他功能）
       markSessionReady();
     }
-  } else if (!appState.is_connected && appState.instance_url) {
-    // 之前降级为未连接：刷新 index.html 时尝试从浏览器 Cookie 重新获取会话，
-    // 让用户不必手动走一遍登录页。
-    const refreshed = await tryRefreshSessionFromCookie(appState.session_id || null);
-    if (refreshed) {
-      await onSessionRestored("已自动从浏览器 Cookie 恢复 Salesforce 会话");
-    }
+  } else if (!appState.is_connected) {
+    // 未连接（含"上次降级为未连接"）：启动即尝试一次自动恢复，让用户不必手动走一遍登录流程。
+    //
+    // 这里**刻意不再要求 appState.instance_url 存在**：候选会话可以从当前打开的
+    // Salesforce 标签页 URL、或 Cookie 自身的域推出来（见 session_recovery.js）。
+    // 旧写法一旦丢了 instance_url 就直接放弃，正是"一直未连接、怎么都刷不出来"的一条成因。
+    // 浏览器里本就没有登录态时，这次尝试不会发任何网络请求（没有候选就直接返回）。
+    await attemptSessionRecovery("启动时未连接", { force: true });
   }
+
+  // 环境变化即可自动重试（sid Cookie 变化 / 面板重新可见 / 窗口重新获得焦点）。
+  // 必须放在会话恢复之后绑：否则启动过程中就触发一次，与上面的启动尝试叠在一起。
+  watchSessionRecovery();
 
   // 会话恢复 / 自动刷新都结束后，仍未连接才提示（避免先弹警告又马上连接成功的噪音）
   if (!appState.is_connected) {
     if (host !== HOST_TAB) {
       // 侧边栏 / 贴边浮窗又窄又高，一个 toast 很容易被忽略，而且首页全是「需连接」的灰磁贴。
-      // 直接把用户送到「连接设置」卡片，打开面板就能立刻填 Session ID / 跑登录流程。
+      // 直接把用户送到「连接设置」卡片 —— 那里现在有「自动获取 Session 并重新连接」按钮，
+      // 侧边栏里没有地址栏可以重载，这个按钮就是它唯一的自救入口。
       log.info(`${host === HOST_DOCK ? "贴边浮窗" : "侧边栏"}内尚未连接，直接进入「连接设置」`);
       showSection(1);
     }
@@ -706,6 +809,81 @@ function bindEvents() {
 
         // 更新UI状态，确保后续步骤被禁用
         updateUIState();
+      }
+    });
+
+  // 「自动获取 Session 并重新连接」（section-1）
+  // 这是侧边栏里唯一的自救入口：面板没有地址栏、也没法"重载当前页"，
+  // 会话过期后如果只能手动粘贴 Session ID，多数用户就卡死在「未连接」了。
+  on("connection-reconnect-btn", "click", async () => {
+      const btn = $("connection-reconnect-btn");
+      const statusElement = $("connection-reconnect-status");
+      const originalHtml = btn ? btn.innerHTML : "";
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `${Icons.spinner} <span>正在读取浏览器会话...</span>`;
+      }
+      if (statusElement) {
+        statusElement.textContent = "正在从浏览器 Cookie 中查找可用的 Salesforce 会话...";
+        statusElement.style.color = "var(--warning-color)";
+        statusElement.dataset.state = "pending";
+      }
+
+      let result;
+      try {
+        result = await reconnectNow("手动点击「自动获取 Session」");
+      } catch (e) {
+        log.error("自动获取 Session 异常:", e);
+        result = { ok: false, reason: "error" };
+      }
+
+      if (result.ok) {
+        // 成功时 onSessionRestored() 已经弹过成功提示，并且会把界面送回功能中心
+        if (statusElement) {
+          const already = result.skipped === "already-connected";
+          const stillValid = result.skipped === "verified-still-valid";
+          statusElement.innerHTML = stillValid
+            ? `${Icons.checkCircle} 当前连接正常，无需重新获取`
+            : already
+              ? `${Icons.checkCircle} 当前已是连接状态`
+              : `${Icons.checkCircle} 已获取到可用会话`;
+          statusElement.style.color = "var(--success-color)";
+          statusElement.dataset.state = "ok";
+        }
+      } else {
+        const hint =
+          result.reason === "no-candidate"
+            ? "浏览器里没有找到 Salesforce 登录态：请先打开该 org 的 Salesforce 页面完成登录，再点一次。"
+            : result.reason === "verify-blocked"
+              ? "校验请求没能到达 Salesforce（可能是网络/代理被拦），当前连接状态未改动，请稍后再试。"
+              : result.reason === "throttled"
+                ? "刚刚已经试过一次了，请稍等几秒再点。"
+                : "浏览器里的会话都已失效：请重新登录 Salesforce，或在上方手动粘贴新的 Session ID。";
+        if (statusElement) {
+          statusElement.innerHTML = `${Icons.timesCircle} ${hint}`;
+          statusElement.style.color = "var(--error-color)";
+          statusElement.dataset.state = "error";
+        }
+        showNotification(hint, "warning");
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    });
+
+  // 「打开登录页」。login.html 原本唯一的入口是 chrome.action.onClicked，
+  // 而侧边栏启用 openPanelOnActionClick 之后 Chrome 就不再派发该事件 ——
+  // 这个页面事实上变成了孤儿，这里把入口补回来（它会枚举所有 org 让用户挑一个）。
+  // 登录成功写的是 chrome.storage，侧边栏的 storage 监听会自动同步过来。
+  on("connection-open-login-btn", "click", () => {
+      try {
+        chrome.tabs.create({ url: chrome.runtime.getURL("login.html") });
+      } catch (e) {
+        log.error("打开登录页失败:", e);
+        showNotification("打开登录页失败", "error");
       }
     });
 
