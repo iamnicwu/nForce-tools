@@ -786,6 +786,55 @@
                     </div>
                 </div>
             </div>
+            <!-- 获取 PCD 过期数据卡片 -->
+            <div id="section-29" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">获取 PCD 过期数据</div>
+                        <div class="ant-card-extra"><span id="pcd-expired-data-badge" class="ant-tag ant-tag-success u-hidden">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-clock u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">获取 PCD 过期数据</h3>
+                            <ul class="section-desc">
+                                <li>系统将从 Salesforce 获取 PCD 所有<strong>已过期 (Expired)</strong> 的订单数据。</li>
+                                <li class="u-text-secondary u-fs-sm">* 查询条件内置在插件里，无需手工填写 SOQL；此操作可能需要几分钟时间，请耐心等待。</li>
+                            </ul>
+                        </div>
+
+                        <form id="pcd-expired-data-form" class="unified-form">
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_expired_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-cloud-download-alt"></i>
+                                    <span>立即获取数据</span>
+                                </button>
+                            </div>
+                        </form>
+
+                        <div id="pcd-expired-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-pcd-expired-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>导出Excel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-expired-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-expired-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <!-- VVIP 模块卡片 -->
             <div id="section-9" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-vvip">
                 <div class="ant-card-head">

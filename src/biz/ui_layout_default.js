@@ -23,7 +23,7 @@ const DEFAULT_LAYOUT = {
     // 只有在「恢复默认」或首次使用时才会用到这里。
     title: "常用功能",
     max: 8,
-    ids: ["lts-report","lts-file","t4-list","pcd-pid-fallout","pcd-qc-issue","session-link"]
+    ids: ["t4-list", "lts-report", "lts-file", "pcd-expired"]
   },
   groups: [
     {
@@ -76,6 +76,7 @@ const DEFAULT_LAYOUT = {
       color: "pink",
       tiles: [
         { id: "pcd", step: 8, label: "PCD", icon: "fa-laptop-code", desc: "PCD 当日数据" },
+        { id: "pcd-expired", step: 29, label: "PCD 过期", icon: "fa-clock", desc: "PCD Expired 订单" },
         { id: "pcd-pid-fallout", step: 16, label: "PID Fallout", icon: "fa-exclamation-triangle", desc: "Data issue 排查" },
         { id: "pcd-qc-issue", step: 17, label: "QC Issue", icon: "fa-search", desc: "Data issue 排查" }
       ]

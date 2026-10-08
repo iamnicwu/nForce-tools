@@ -347,6 +347,7 @@ export function updateUIState() {
     { flag: appState.has_pcd_daily_data,        badgeId: "pcd-daily-data-badge",        actionsId: "pcd-daily-data-actions" },
     { flag: appState.has_pcd_pid_fallout_data,  badgeId: "pcd-pid-fallout-data-badge",  actionsId: "pcd-pid-fallout-data-actions" },
     { flag: appState.has_pcd_qc_issue_data,     badgeId: "pcd-qc-issue-data-badge",     actionsId: "pcd-qc-issue-data-actions" },
+    { flag: appState.has_pcd_expired_data,      badgeId: "pcd-expired-data-badge",      actionsId: "pcd-expired-data-actions" },
     { flag: appState.has_report_data,           badgeId: "report-data-badge",           actionsId: "report-data-actions" },
     { flag: appState.has_t2_data,               badgeId: "t2-data-badge",               actionsId: "t2-data-actions" },
     // T-4 分析结果：只有导出按钮，没有徽标/操作区
@@ -380,7 +381,8 @@ const DEFAULT_STATS = {
   ltsAccounts: 0,
   vvipOrders: 0,
   ltsOrders: 0,
-  pcdDailyOrders: 0
+  pcdDailyOrders: 0,
+  pcdExpiredOrders: 0
 };
 
 const DEFAULT_USER_INFO = {
@@ -541,6 +543,11 @@ export function renderPCDPIDFalloutData(data) {
 // 渲染 PCD QC Issue 数据
 export function renderPCDQCIssueData(data) {
   renderTable("pcd-qc-issue-data-container", "pcd-qc-issue-data-table", data);
+}
+
+// 渲染 PCD 过期数据
+export function renderPCDExpiredData(data) {
+  renderTable("pcd-expired-data-container", "pcd-expired-data-table", data);
 }
 
 // 渲染报表数据

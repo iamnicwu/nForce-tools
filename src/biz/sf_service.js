@@ -75,6 +75,47 @@ export function setAuthFailureHandler(fn) {
   if (sfConn.connection) sfConn.connection.onAuthFailure = authFailureHandler;
 }
 
+/**
+ * ⚠️ TODO(query): PCD 过期数据的 SOQL 查询 —— **待补充**。
+ *
+ * 「获取 PCD 过期数据」功能（首页 PCD 分组 · section-29）只依赖这一个常量。
+ * 拿到正式查询后，**只改这里**（把下面这串整体替换掉）即可，
+ * sf_service.getPCDExpiredData() / logic.js / ui.js / index.html 都不用动。
+ *
+ * 当前值是「占位查询」：字段与筛选条件和 PCD 当日数据保持一致，只为让
+ * 整条链路（取数 → 去重 → 渲染 → 导出）现在就能跑通，业务口径**并不代表**
+ * 「过期」的正式定义。
+ *
+ * 注意：查询必须以 `FROM OrderItem` 为准，返回的字段名会直接决定表格列与导出列；
+ * 若新增字段，`applyT2Rules` 会按字段名自动匹配（匹配不上就留空，不会报错）。
+ */
+const PCD_EXPIRED_SOQL = `SELECT order.Name,
+        order.OrderNumber,
+        order.Order_Nature__c,
+        order.Service_Request_Date__c,
+        order.Attention__c,
+        FulfillmentRemark__c,
+        order.id,
+        order.Custom_OrderStatus__c,
+        order.Custom_FulfilmentStatus__c,
+        FulfillmentId__c,
+        AppointmentId__c,
+        vlocity_cmt__FulfilmentStatus__c,
+        BRM_Request_Id__c,
+        LOB__c,
+        order.Is_Voluntary__c,
+        order.Self_Return__c
+    FROM OrderItem
+    WHERE
+        (MainProduct__c = TRUE OR Product2.vlocity_cmt__SubType__c = 'NowTV Standalone Starter Offer') AND
+        LOB__c !='' AND
+        order.Attention__c = '' AND
+        order.Service_Request_Date__c <= TODAY AND
+        order.Service_Request_Date__c > 2026-01-01 AND
+        order.Custom_OrderStatus__c NOT IN (
+            'Ready To Submit', 'Superseded', 'Activated',
+            'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')`;
+
 export let sfConn = {
   connection: null,
 
@@ -908,6 +949,71 @@ order.Bsn__c in ('${escapedOrderNumbers.join(
       }
     } catch (error) {
       log.error("获取 Expiry daily Data 失败:", error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 获取 PCD 过期（Expired）数据。
+   *
+   * 与「获取报表数据」（getReportData）同构的取数流程：
+   *   查询 → 展平嵌套结构 → 去重 → 补齐人工填写列 → 套业务规则 → 返回。
+   *
+   * 查询语句集中在模块顶部的 `PCD_EXPIRED_SOQL` 常量里（待补充正式口径）。
+   * 这里刻意不吃「自定义 SOQL」入参，避免重现 getPCDDailyData 那条
+   * 「界面给了输入框、服务端却为了防注入把入参丢掉」的死 UI。
+   *
+   * @returns {Promise<{success: boolean, data?: Array<Object>, error?: string}>}
+   */
+  async getPCDExpiredData() {
+    try {
+      if (!this.connection) {
+        return {
+          success: false,
+          error: "Salesforce connection not established",
+        };
+      }
+
+      const result = await this.connection.query(PCD_EXPIRED_SOQL, {
+        autoFetch: true,
+        maxFetch: 99999,
+      });
+      const records = result.records || [];
+
+      if (records.length === 0) {
+        return { success: true, data: [] };
+      }
+
+      // 预处理数据，展平嵌套结构
+      const processedRecords = flattenRecords(records);
+
+      // 启用去重逻辑
+      const removedDupeList = remove_duplicates(processedRecords);
+
+      // 补齐人工填写列，并确保它们在最前面（与其它 PCD 模块一致）
+      const addFieldList = removedDupeList.map((record) => {
+        return {
+          "Issue Status": "",
+          "Action": "",
+          "Remark": "",
+          "Root Cause Category": "",
+          "Need Attention": "",
+          "Suspected Complaint Case": "",
+          ...record,
+        };
+      });
+
+      const finalRecords = applyT2Rules(addFieldList);
+      log.info(
+        `PCD 过期数据获取成功，原始: ${processedRecords.length}, 去重后: ${removedDupeList.length}`
+      );
+
+      return {
+        success: true,
+        data: finalRecords,
+      };
+    } catch (error) {
+      log.error("获取 PCD 过期数据失败:", error);
       return { success: false, error: error.message };
     }
   },

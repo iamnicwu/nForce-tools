@@ -5,7 +5,7 @@ import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
 import { showNotification, loadingLog } from "../common/utils.js";
 import { processExcelFile as processExcelFileUtil, processVVIPExcelFile as processVVIPExcelFileUtil, processAnalysisExcelFile as processAnalysisExcelFileUtil, analyzeData as analyzeDataUtil, exportToExcel, getUniqueOrderCount, readExcelFile, parseSheetData } from "../common/excel_utils.js";
-import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState, renderBulkJobsTable, showBulkJobsLoading } from "./ui.js";
+import { showSection, updateUIState, updateStats, renderReportData, renderT2Data, renderT2AnalysisData, renderLatestData, renderDailyData, renderPCDDailyData, renderPCDPIDFalloutData, renderPCDQCIssueData, renderPCDExpiredData, renderVVIPData, renderAnalysisData, updateFileUploadUI, updateVVIPFileUploadUI, updateAnalysisFileUploadUI, updateT2AnalysisFileUploadUI, updateT2RulesFileUploadUI, renderT2RulesList, renderT2SheetSelector, updateLunchFileUploadUI, showLunchResult, updateLunchUIState, renderBulkJobsTable, showBulkJobsLoading } from "./ui.js";
 import {applyT2Rules} from "../common/t2rules.js"
 import { DEFAULT_LUNCH_PLACES } from "./ui_config.js";
 import { OneDriveWorkbookService } from "../common/onedrive_service.js";
@@ -841,6 +841,82 @@ export async function getPCDQCIssueData() {
   }
 }
 
+/**
+ * 获取 PCD 过期数据（首页 PCD 分组 · section-29）。
+ *
+ * 与 getReportData 同构：取数 → 存状态 → 渲染 → 显示导出按钮 → 自动导出。
+ * 查询语句在 biz/sf_service.js 顶部的 `PCD_EXPIRED_SOQL`（待补充正式口径）。
+ */
+export async function getPCDExpiredData() {
+  try {
+    log.info("开始获取 PCD 过期数据");
+
+    // 显示loading mask
+    const loadingMask = document.getElementById("loading-mask");
+    if (loadingMask) {
+      loadingMask.style.display = "flex";
+      loadingMask.querySelector("h3").textContent = "正在获取 PCD 过期数据...";
+    }
+
+    const result = await sfConn.getPCDExpiredData();
+    log.debug("获取 PCD 过期数据结果:", result);
+
+    if (result.success) {
+      // 更新应用状态
+      appState.has_pcd_expired_data = true;
+      // 保存数据到应用状态，以便后续导出
+      appState.pcd_expired_data = result.data;
+      // 更新统计数据
+      appState.stats.pcdExpiredOrders = result.data.length;
+
+      // 隐藏loading mask
+      if (loadingMask) {
+        loadingMask.style.display = "none";
+      }
+
+      // 显示数据
+      renderPCDExpiredData(result.data);
+
+      // 显示导出按钮
+      const exportActions = document.getElementById("pcd-expired-data-actions");
+      if (exportActions) {
+        exportActions.style.display = "block";
+      }
+      const exportBtn = document.getElementById("export-pcd-expired-data");
+      if (exportBtn) {
+        exportBtn.style.display = "inline-block";
+      }
+
+      // 更新UI状态
+      updateUIState();
+      // 更新统计数据
+      updateStats();
+
+      showNotification(`PCD 过期数据获取成功，共 ${result.data.length} 条记录`, "success");
+      log.info("PCD 过期数据获取成功");
+
+      // 获取成功后直接导出文件，用户无需再点「导出Excel」
+      await exportPCDExpiredData();
+    } else {
+      showNotification(`获取 PCD 过期数据失败: ${result.error}`, "error");
+      // 隐藏loading mask
+      if (loadingMask) {
+        loadingMask.style.display = "none";
+      }
+    }
+  } catch (error) {
+    log.error("获取 PCD 过期数据失败:", error);
+    showNotification("获取 PCD 过期数据失败，请稍后重试", "error");
+
+    // 隐藏loading mask
+    const loadingMask = document.getElementById("loading-mask");
+    if (loadingMask) {
+      loadingMask.style.display = "none";
+    }
+    log.info("获取 PCD 过期数据失败，已显示错误通知");
+  }
+}
+
 // 导出当日数据
 export async function exportDailyData() {
   await exportToExcel(appState.daily_data, "当日数据", "当日数据");
@@ -849,6 +925,11 @@ export async function exportDailyData() {
 // 导出 PCD 当日数据
 export async function exportPCDDailyData() {
   await exportToExcel(appState.pcd_daily_data, "PCD当日数据", "PCD当日数据");
+}
+
+// 导出 PCD 过期数据
+export async function exportPCDExpiredData() {
+  await exportToExcel(appState.pcd_expired_data, "PCD过期数据", "PCD过期数据");
 }
 
 // 导出 PCD PID Fallout 数据 (CSV格式)

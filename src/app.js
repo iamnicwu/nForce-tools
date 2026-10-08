@@ -65,11 +65,13 @@ import {
   getPCDDailyData,
   getPCDPIDFalloutData,
   getPCDQCIssueData,
+  getPCDExpiredData,
   getT2Data,
   exportDailyData,
   exportPCDDailyData,
   exportPCDPIDFalloutData,
   exportPCDQCIssueData,
+  exportPCDExpiredData,
   exportReportData,
   exportT2Data,
   exportLatestData,
@@ -1216,6 +1218,24 @@ function bindEvents() {
       getPCDQCIssueData();
     });
 
+  // 获取 PCD 过期数据表单提交
+  on("pcd-expired-data-form", "submit", function (e) {
+      e.preventDefault();
+
+      // 显示loading mask
+      const loadingMask = $("loading-mask");
+      const recordCountSpan = $("record-count");
+
+      if (loadingMask && recordCountSpan) {
+        loadingMask.style.display = "flex";
+        loadingMask.querySelector("h3").textContent = "正在获取 PCD 过期数据...";
+        recordCountSpan.textContent = "0";
+      }
+
+      // 获取 PCD 过期数据
+      getPCDExpiredData();
+    });
+
   // 自定义日期复选框变化事件
   const dailyCustomDateCheckbox = $("daily-custom-date-checkbox");
   if (dailyCustomDateCheckbox) {
@@ -1341,6 +1361,12 @@ function bindEvents() {
   const exportPCDQCIssueDataBtn = $("export-pcd-qc-issue-data");
   if (exportPCDQCIssueDataBtn) {
     exportPCDQCIssueDataBtn.addEventListener("click", exportPCDQCIssueData);
+  }
+
+  // 导出 PCD 过期数据按钮点击事件
+  const exportPCDExpiredDataBtn = $("export-pcd-expired-data");
+  if (exportPCDExpiredDataBtn) {
+    exportPCDExpiredDataBtn.addEventListener("click", exportPCDExpiredData);
   }
 
   // 导出报表数据按钮点击事件
