@@ -1,0 +1,57 @@
+name: Build & Verify
+
+# 取代原先自动生成的 webpack.yml（2026-10-09 打包工具由 webpack 迁移到 Vite，
+# 那个工作流里的 `npx webpack` 已不存在，留着只会在每次 push 时报红）。
+#
+# 相比旧工作流只验「能不能装依赖并构建」，这里还多跑三件事：
+#   · npm run check:ui —— 项目自带的一致性自检（磁贴↔section、图标映射、样式令牌、
+#     构建产物资源可达性等 A~O 组断言）
+#   · npx jest        —— 单测
+#   · dist/ 同步检查  —— dist/ 是入库的（方便直接从仓库取已打包好的扩展），
+#     一旦改了 src/ 却忘了重新构建，这一步会把 CI 打红
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [24.x]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: npm
+
+    - name: Install
+      run: npm ci
+
+    - name: Build
+      run: npm run build
+
+    - name: UI 一致性自检
+      run: npm run check:ui
+
+    - name: 单元测试
+      run: npx jest
+
+    # dist/ 已入库，所以必须与 src/ 保持同步。
+    # 构建是可复现的（同一份源码重复构建产出逐字节一致的 dist/），所以这个比较不会误报。
+    - name: dist/ 必须与源码同步
+      run: |
+        if [ -n "$(git status --porcelain -- dist)" ]; then
+          echo "::error::dist/ 与源码不同步 —— 本地跑 npm run build 后，把 dist/ 单独提交一个 commit。"
+          git status --porcelain -- dist
+          git --no-pager diff --stat -- dist
+          exit 1
+        fi
+        echo "dist/ 与源码一致 ✓"
