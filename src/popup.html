@@ -84,8 +84,8 @@
     </div>
     <!-- 页面脚本必须走外部文件：内联 <script> 会被 CSP `script-src 'self'` 整段拒绝执行，
          且不产生任何页面可见异常（只在控制台留一条 CSP 报错）。
-         popup_app.js 是**复制型**脚本（非 webpack 入口，由 CopyWebpackPlugin 逐字复制，
-         见 webpack.config.js 中对应说明；check-ui 的 J 组会校验它在 dist/ 里可达）。 -->
+         popup_app.js 是**复制型**脚本（非打包入口，由 tools/build-plan.mjs 的复制清单
+         逐字搬进 dist；check-ui 的 J 组会校验它在 dist/ 里可达）。 -->
     <script src="popup_app.js" type="module"></script>
 </body>
 </html>

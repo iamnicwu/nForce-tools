@@ -5,7 +5,8 @@ import { createLogger } from "./common/logger.js";
 // 贴边浮窗（内容脚本）的配置来源。内容脚本是经典脚本、不能 import，
 // 所以它通过 runtime.sendMessage 向这里要配置 —— 偏好的键名只在 prefs.js 里写一份。
 // ⚠️ 本文件是**逐字复制**进 dist 的 ESM service worker，它的 import 必须真的存在：
-// webpack.config.js 里已为 common/prefs.js 与 common/api_version.js 各加了一条复制规则。
+// tools/build-plan.mjs 的 COPY_RULES 里已为 common/prefs.js 与 common/api_version.js
+// 各列了一条复制规则（check-ui 的 J 组会盯这件事）。
 import { loadPrefs, watchPrefsStorage, onPrefsChanged, getPref, PREF_KEYS } from "./common/prefs.js";
 
 const log = createLogger("BG");

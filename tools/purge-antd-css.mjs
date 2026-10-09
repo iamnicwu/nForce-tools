@@ -11,7 +11,7 @@
  * ── 文件约定 ──
  *   src/lib/css/antd.full.css   vendored 原始文件，**唯一的源头**，不进 dist
  *   src/lib/css/antd.min.css    本脚本生成的裁剪版，由 index.html / popup.html 加载
- *   webpack.config.js 的 CopyPlugin 已配置忽略 antd.full.css
+ *   tools/build-plan.mjs 的复制清单已把 antd.full.css 排除
  *
  * ── 用法 ──
  *   node tools/purge-antd-css.mjs            # 由 full 重新生成 min

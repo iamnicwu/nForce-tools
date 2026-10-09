@@ -33,6 +33,8 @@
  *   H 懒加载              sectionNumber === N 的分支必须有对应 section
  *   I 样式守卫  ★P1-13    字号必须走刻度令牌、不得新增硬编码颜色、通知必须显式传 type
  *   J 页面资源可达性 ★      HTML 引用的每个相对路径，构建后都必须真的存在于 dist/
+ *                            （J2 追加：入口产物必须被手写 HTML 引用得上、且入口 bundle
+ *                             的静态依赖链完整 —— 守"页面变空壳且不报错"那类故障）
  *   K 日志规范 ★           第一方 JS 禁止绕过 common/logger.js 直接调 console.*
  *   L 全局依赖 ★           大写全局必须有出处；用库全局必须调过对应的 ensureXxx()
  *                            （直接拦下 `Handsontable` / `CometD` 这类"引用了不存在的库"）
@@ -44,6 +46,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import url from "node:url";
+
+// 构建计划与 vite.config.mjs 共用同一份数据（入口 + 逐字复制清单）。
+// 不要改回"正则解析打包器配置文件"：换打包器时那种写法会**静默退化**成一条 WARN，
+// 而这正是 J 组要防的那类"看着还在跑、其实没在守"的失效。
+import { COPY_RULES, ENTRIES, isExcluded } from "./build-plan.mjs";
 
 const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), "..");
 const SRC = path.join(ROOT, "src");
@@ -438,29 +445,45 @@ function parseNotificationTypes() {
  * 起因（真实缺陷，2026-09 修复）：
  *   login.html / popup.html 改成 `import { replaceIcons } from "./common/icons.js"` 之后，
  *   src/ 直接加载一切正常（源码目录本身就是原生 ESM），但 **构建产物 dist/ 里根本没有
- *   common/ 目录** —— icons.js 既不是 webpack 入口，也不在 CopyPlugin 的复制列表里。
+ *   common/ 目录** —— icons.js 既不是打包入口，也不在逐字复制清单里。
  *   于是 dist 下这个 import 404，replaceIcons() 从不执行，页面上的
  *   <i class="fa-*"> 全部退化成空白方块。
  *
  * 教训：HTML 里写一个相对路径很容易，但"这个路径在 dist/ 里到底存不存在"
- * 取决于 webpack 配置，两者相隔很远。这条检查把它拉近到一条命令。
+ * 取决于构建配置，两者相隔很远。这条检查把它拉近到一条命令。
+ *
+ * 构建计划（入口 / 复制清单）来自 tools/build-plan.mjs，与 vite.config.mjs 同源。
+ * 不要再改回"正则解析打包器配置文件"：换打包器时那种写法会静默退化成 WARN，
+ * 而这正是 J 组要防的"看着还在跑、其实没在守"。
  * ------------------------------------------------------------------ */
 
-/** 从 webpack.config.js 解析出：入口产出的文件名 + CopyPlugin 的复制范围 */
+/**
+ * 打包入口产出的文件名集合（与 vite.config.mjs 同源，见 tools/build-plan.mjs）。
+ * 复制清单不在这里返回 —— 判断「某个源文件会不会进 dist」须走 copiedToDist()，
+ * 因为它要把 exclude 规则算进去。
+ */
 function parseBuildPlan() {
-  const file = path.join(ROOT, "webpack.config.js");
-  if (!exists(file)) return null;
-  const cfg = read(file);
+  return { entries: new Set(Object.keys(ENTRIES).map((name) => `${name}.js`)) };
+}
 
-  const entries = new Set();
-  const em = cfg.match(/entry\s*:\s*\{([\s\S]*?)\n\s*\}/);
-  if (em) for (const m of em[1].matchAll(/([A-Za-z_$][\w$]*)\s*:\s*['"]/g)) entries.add(`${m[1]}.js`);
-
-  const copies = [];
-  for (const m of cfg.matchAll(/from\s*:\s*['"]([^'"]+)['"]\s*,\s*to\s*:\s*['"]([^'"]+)['"]/g)) {
-    copies.push({ from: m[1], to: m[2] });
+/**
+ * src/ 下某个「相对仓库根」的路径，是否会被构建复制进 dist。
+ *
+ * 与旧的 `copies.some(...)` 前缀匹配相比，这里**把 exclude 规则也算进去**了：
+ * 例如 `src/lib/js` 整目录会被复制，但它下面的 `cometd/**` 被显式排除
+ * （cometd 走打包器生成的懒加载 chunk，不再逐字复制）。前缀匹配会把
+ * `src/lib/js/cometd/cometd.js` 误判成"已覆盖" → 明明是死引用却报绿。
+ *
+ * @param {string} relPath 相对仓库根的 POSIX 路径（如 "src/lib/js/cometd/cometd.js"）
+ * @returns {boolean}
+ */
+function copiedToDist(relPath) {
+  for (const rule of COPY_RULES) {
+    if (relPath === rule.from) return true;
+    if (!relPath.startsWith(`${rule.from}/`)) continue;
+    return !isExcluded(relPath.slice(rule.from.length + 1), rule);
   }
-  return { entries, copies, file: rel(file) };
+  return false;
 }
 
 /** HTML 页面里引用的相对资源（script src / link href / 内联模块的 import from） */
@@ -1154,14 +1177,20 @@ function run() {
 
   /* --- J. 页面资源可达性：HTML/manifest 引用的路径必须能在 dist 里落地 --- */
   const plan = parseBuildPlan();
-  if (plan) {
-    const refs = [...collectHtmlRefs(), ...collectManifestRefs()];
-    // 追加：逐字复制到 dist 的 JS（非 webpack 入口，如 background.js）内部的
-    // 静态 import 也必须在 dist 里可达 —— 否则 ESM 加载直接失败。
-    // （入口 JS 的 import 由 webpack 打包解析，不在此列。）
-    for (const c of plan.copies) {
-      if (!c.from.endsWith(".js")) continue;
-      const abs = path.join(ROOT, c.from);
+  {
+    // 分级：HTML 引用断了 = 页面真的坏（图标变方框、样式不生效）→ ERROR。
+    // web_accessible_resources 里的死条目 Chrome 会静默忽略，只是白占一行 → WARN。
+    // content_scripts / background / popup 指错文件是真故障，也算 ERROR。
+    const INERT_KINDS = new Set(["web_accessible_resources"]);
+    const missing = [];
+
+    // ① 逐字复制进 dist 的 JS（非打包入口：service worker / 内容脚本 / 页面外壳脚本）
+    //    内部的静态 import 也必须在 dist 里可达 —— 它们**不经过打包器**，运行时由
+    //    浏览器按 dist 的实际布局解析说明符，少复制一个就直接 ESM 加载失败。
+    //    （打包入口的 import 由打包器解析进产物，不在此列，见 J2。）
+    for (const rule of COPY_RULES) {
+      if (!rule.from.endsWith(".js")) continue;
+      const abs = path.join(ROOT, rule.from);
       if (!exists(abs)) continue;
       const text = read(abs);
       for (const m of text.matchAll(/import\s+[^'";]*?from\s*["']([^"']+)["']/g)) {
@@ -1174,23 +1203,23 @@ function run() {
           continue;
         }
         if (plan.entries.has(path.basename(target))) continue;
-        const covered = plan.copies.some((cc) => target === cc.from || target.startsWith(cc.from + "/"));
-        if (!covered) {
+        // 用 copiedToDist() 而非 `COPY_RULES.some(前缀匹配)`：前者把 exclude 也算进去。
+        // 前缀匹配会把被显式排除的 src/lib/js/cometd/cometd.js 误判成"已覆盖"
+        // → 明明是死引用却报绿。
+        if (!copiedToDist(target)) {
           missing.push({
             from: rel(abs),
             line,
             ref: target,
             kind: "copy-import",
-            why: `被复制的 JS import 了它，但它既不是 webpack 入口，也不在 CopyPlugin 复制范围内 → dist/ 里没有`
+            why: `被逐字复制的 JS import 了它，但它既不是打包入口，也不在 tools/build-plan.mjs 的复制清单里（或被 exclude 掉了）→ dist/ 里没有`
           });
         }
       }
     }
-    // 分级：HTML 引用断了 = 页面真的坏（图标变方框、样式不生效）→ ERROR。
-    // web_accessible_resources 里的死条目 Chrome 会静默忽略，只是白占一行 → WARN。
-    // content_scripts / background / popup 指错文件是真故障，也算 ERROR。
-    const INERT_KINDS = new Set(["web_accessible_resources"]);
-    const missing = [];
+
+    // ② HTML / manifest 里的相对引用
+    const refs = [...collectHtmlRefs(), ...collectManifestRefs()];
     for (const r of refs) {
       const clean = String(r.ref).replace(/^\.\//, "");
       if (/^(https?:)?\/\//.test(clean) || clean.startsWith("data:")) continue;
@@ -1200,12 +1229,11 @@ function run() {
         missing.push({ ...r, why: `源文件 src/${clean} 不存在` });
         continue;
       }
-      if (plan.entries.has(path.basename(relPath))) continue; // webpack 入口，会产出同名 bundle
-      const covered = plan.copies.some((c) => relPath === c.from || relPath.startsWith(c.from + "/"));
-      if (!covered) {
+      if (plan.entries.has(path.basename(relPath))) continue; // 打包入口，会产出同名 bundle
+      if (!copiedToDist(relPath)) {
         missing.push({
           ...r,
-          why: `既不是 webpack 入口，也不在 CopyPlugin 的复制范围内 → dist/ 里不会有这个文件`
+          why: `既不是打包入口，也不在 tools/build-plan.mjs 的复制清单里 → dist/ 里不会有这个文件`
         });
       }
     }
@@ -1222,71 +1250,119 @@ function run() {
           .map((m) => `  ${m.from}${m.line ? `:${m.line}` : ""} → ${m.ref}  [${m.kind}]\n      ${m.why}`)
           .join("\n") +
           (level === "ERROR"
-            ? `\n修法：在 webpack.config.js 的 CopyWebpackPlugin 里补一条 { from: 'src/...', to: '...' }，` +
-              `\n或者把它变成 webpack 入口。现有入口：${[...plan.entries].join(", ")}`
+            ? `\n修法：在 tools/build-plan.mjs 的 COPY_RULES 里补一条 { from: 'src/...', to: '...' }，` +
+              `\n或者把它变成打包入口（ENTRIES）。现有入口：${[...plan.entries].join(", ")}`
             : `\n修法：删掉这些条目，或把路径改成真实位置（如 README.md → docs/README.md）`)
       );
     }
-    /* --- J2. 入口依赖的「初始 chunk」必须被 HTML 引用（2026-09-28 新增）------
+    /* --- J2. 打包产物的「静态依赖链」必须完整落地（2026-10-09 迁移 vite 时重写）---
      *
-     * 起因（真实缺陷，已修）：webpack 的 `optimization.splitChunks.chunks = 'all'`
-     * 会把两个入口（app / login_app）的公共模块抽成一个独立的**初始** chunk
-     * （实测是 753.js，内容正是 common/logger.js、common/icons.js 这些被两边同时
-     * import 的模块）。而本项目**没有 html-webpack-plugin** —— index.html /
-     * login.html 是 CopyWebpackPlugin 逐字复制的手写 HTML，只引用各自的入口 bundle。
+     * 起因（真实缺陷，2026-09-28 已修）：webpack 的
+     * `optimization.splitChunks.chunks = 'all'` 会把两个入口（app / login_app）的公共
+     * 模块抽成一个独立的**初始** chunk（实测 753.js，内容正是 common/logger.js、
+     * common/icons.js 这些被两边同时 import 的模块）。而本项目**没有
+     * html-webpack-plugin** —— index.html / login.html 是逐字复制的手写 HTML，
+     * 只引用各自的入口 bundle。于是这个 chunk 永远不会被加载，而入口 bundle 的
+     * 收尾是 `var a = o.O(void 0, [753], () => o(575))`，webpack 的 startup 回调
+     * 只有 `installedChunks[753] === 0` 时才跑 → **整个 app.js 一句都不执行**。
+     * 现象极其误导：顶栏与 CSS 正常渲染、内容区全空、图标全部未替换
+     * （unfixed=94），而 DevTools 里连一个报错都没有。
      *
-     * 于是这个 chunk 永远不会被加载，而入口 bundle 的收尾是
-     *   `var a = o.O(void 0, [753], () => o(575))`
-     * webpack 的 startup 回调只有 `installedChunks[753] === 0` 时才跑 →
-     * **整个 app.js 一句都不执行**。表现极其误导：顶栏与 CSS 正常渲染、内容区
-     * 全空、图标全部未替换（unfixed=94），而 DevTools 里连一个报错都没有。
+     * 迁移到 vite（内核 Rolldown）后，那个 webpack 专属的 `o.O(void 0, [ids])`
+     * 形状不复存在，但**同一类故障仍然会复发**，只是换了形态：
      *
-     * 检测：从 dist 的入口 bundle 里抓 `o.O(void 0, [<ids>], …)` 这个形状
-     * （webpack 只在存在**初始** chunk 依赖时才生成它），再回查对应 HTML 是否引用。
-     * 异步 chunk 走 `o.e(...)` + JSONP 自动加载，不在检查范围内（也不该被引用）。
+     *   a) 「产物产出了，却没有任何 HTML 引用它」—— 旧 J2 的病根本身。
+     *      手写 HTML 写死了 `./app.js` / `login_app.js`，若 `entryFileNames` 带上
+     *      hash（或改了 ENTRIES 的键名），dist/index.html 仍在请求 /app.js，
+     *      而盘上只有 app-3f2a1c.js → 页面只剩空壳，且**控制台一个报错都没有**
+     *      （脚本压根没被请求到）。
+     *   b) 入口 bundle 顶部的**静态相对 import**（打包器为共享模块生成的
+     *      `import "./chunk-xxx.js"`）指向的文件没落进 dist → 模块图在求值前就
+     *      整体失败。
+     *
+     * 注意一条与 webpack 时代**相反**的结论：chunk 文件名**可以**带 hash
+     * （见 vite.config.mjs 的 chunkFileNames）。它们由打包器生成的 import() 引用、
+     * 从不写死在 HTML 里；hash 反而能避免跨构建的旧残留混淆。这条守卫只关心
+     * 一件事：**被引用的东西真的存在**。
      */
     const DIST_DIR = path.join(ROOT, "dist");
-    const ENTRY_HTML = [
-      { bundle: "app.js", html: "index.html" },
-      { bundle: "login_app.js", html: "login.html" }
+    const HTML_FILES = ["index.html", "login.html", "popup.html"];
+
+    // 从 dist 里已产出的手写 HTML 收集 <script src> 引用的文件名
+    const htmlScriptRefs = new Map(); // html 文件名 → Set(被引用的脚本文件名)
+    for (const html of HTML_FILES) {
+      const p = path.join(DIST_DIR, html);
+      if (!exists(p)) continue;
+      htmlScriptRefs.set(
+        html,
+        new Set(
+          [...read(p).matchAll(/<script[^>]*\ssrc\s*=\s*["']([^"']+)["']/gi)]
+            .map((m) => m[1].replace(/^\.\//, "").split("/").pop())
+            .filter(Boolean)
+        )
+      );
+    }
+
+    // 从打包产物里抽出所有「相对说明符」依赖（静态 import/export、动态 import()、
+    // new URL(..., import.meta.url)）。压缩后的产物形如 `import{a}from"./chunk-x.js"`。
+    const REL_DEP_RES = [
+      /(?:import|export)\s*(?:[^;'"]{0,300}?\bfrom\s*)?["'](\.\.?\/[^"']+)["']/g,
+      /\bimport\s*\(\s*["'](\.\.?\/[^"']+)["']/g,
+      /\bnew\s+URL\s*\(\s*["'](\.\.?\/[^"']+)["']\s*,\s*import\.meta\.url/g
     ];
-    const chunkIssues = [];
-    for (const { bundle, html } of ENTRY_HTML) {
-      const bundlePath = path.join(DIST_DIR, bundle);
-      const htmlPath = path.join(DIST_DIR, html);
-      // 没构建过就跳过：这条守卫只在 dist/ 已产出的前提下有意义
-      if (!exists(bundlePath) || !exists(htmlPath)) continue;
-      const code = read(bundlePath);
-      const htmlText = read(htmlPath);
-      const ids = new Set();
-      for (const m of code.matchAll(/\.O\(\s*(?:void 0|undefined)\s*,\s*\[([\d,\s]+)\]/g)) {
-        m[1].split(",").map((s) => s.trim()).filter(Boolean).forEach((x) => ids.add(x));
+    const collectRelDeps = (code) => {
+      const specs = new Set();
+      for (const re of REL_DEP_RES) {
+        for (const m of code.matchAll(re)) specs.add(m[1].split(/[?#]/)[0]);
       }
-      for (const id of ids) {
-        if (!exists(path.join(DIST_DIR, `${id}.js`))) continue;
-        if (new RegExp(`["'/]${id.replace(/\./g, "\\.")}\\.js["']`).test(htmlText)) continue;
-        chunkIssues.push({ bundle, html, file: `${id}.js` });
+      return [...specs];
+    };
+
+    const buildIssues = [];
+    // 没构建过就整段跳过：这条守卫只在 dist/ 已产出的前提下有意义
+    if (htmlScriptRefs.size) {
+      for (const bundle of plan.entries) {
+        const referrers = [...htmlScriptRefs].filter(([, set]) => set.has(bundle)).map(([h]) => h);
+        // a-1) 入口产出了、却没有任何 HTML 引用它 → 永远不会被加载（旧 J2 的病根）
+        if (!referrers.length) {
+          buildIssues.push(
+            `打包入口 ${bundle} 没有被任何 HTML 引用 → 产物产出了却永远不会加载` +
+              `（手写 HTML 只认固定的文件名，见 vite.config.mjs entryFileNames）`
+          );
+          continue;
+        }
+        // a-2) HTML 引用了、盘上却不在 → 入口被改名 / 加了 hash
+        if (!exists(path.join(DIST_DIR, bundle))) {
+          buildIssues.push(
+            `${referrers.join(" / ")} 引用 ./${bundle}，但 dist/${bundle} 不存在` +
+              `（入口被改名或带了 hash → 页面会变成空壳，且控制台不报错）`
+          );
+          continue;
+        }
+        // b) 入口 bundle 的相对依赖必须全部落地
+        for (const spec of collectRelDeps(read(path.join(DIST_DIR, bundle)))) {
+          const target = path.resolve(DIST_DIR, spec);
+          if (!exists(target)) {
+            buildIssues.push(
+              `dist/${bundle} 依赖了 ${spec}，但 ${rel(target)} 不存在（模块图会在求值前整体失败）`
+            );
+          }
+        }
       }
     }
-    if (chunkIssues.length) {
+
+    if (buildIssues.length) {
       add(
         "ERROR",
         "J. 页面资源",
-        `有 ${chunkIssues.length} 个 webpack「初始 chunk」没被 HTML 引用 → 对应入口整段不执行` +
-          `（页面只剩空壳、内容全空，且控制台无任何报错）`,
-        chunkIssues
-          .map(
-            (c) =>
-              `  dist/${c.bundle} 依赖 dist/${c.file}，但 dist/${c.html} 里没有 <script> 引用它`
-          )
-          .join("\n") +
-          `\n修法：webpack.config.js 的 optimization.splitChunks 必须是 { chunks: 'async' }` +
-          `\n      （不要改回 'all'，也不要往 HTML 里手写 <script src="753.js"> —— chunk 名由 webpack 内部 id 决定，跨构建会变）` +
+        `构建产物的入口依赖链断了 ${buildIssues.length} 处 → 页面可能只剩空壳（且控制台未必报错）`,
+        buildIssues.map((s) => `  ${s}`).join("\n") +
+          `\n修法：① vite.config.mjs 的 build.rolldownOptions.output.entryFileNames 必须是 "[name].js"（不带 hash）；` +
+          `\n      ② ENTRIES 的键名必须与手写 HTML 里的 <script src> 逐字一致（tools/build-plan.mjs）；` +
+          `\n      ③ 入口 bundle 的静态依赖（共享 chunk / 动态 chunk）必须落在引用路径上。` +
           `\n验证：重新构建后再跑 npm run check:ui，并确认 dist/index.html 能渲染出磁贴`
       );
     }
-  } else {
-    add("WARN", "J. 页面资源", "未找到 webpack.config.js，无法校验引用在 dist 中是否可达", "");
   }
 
   /* --- K. 日志规范：禁止绕过统一 logger 直接调 console.* --- */

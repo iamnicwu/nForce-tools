@@ -57,7 +57,7 @@
    3. 打开右上角的 **"开发者模式"** 开关。
    4. 点击左上角的 **"加载已解压的扩展程序"**。
    5. 选择本插件的根目录（包含 `manifest.json` 的文件夹）。
-      - 已打包好的目录是 **`dist/`**（执行 `npx webpack --mode production` 生成）；
+      - 已打包好的目录是 **`dist/`**（执行 `npm run build` 生成）；
       - **`src/`** 本身也是可以直接加载的目录（源码为原生 ES Module，无需打包即可运行）。
    6. 插件安装成功，图标将显示在浏览器工具栏中。
 
@@ -189,7 +189,11 @@ nForce-tools/
 │   ├── icons/             # 图标资源
 │   ├── rules/             # 规则配置（含首页布局 ui_layout.json）
 │   └── docs/              # 文档（本文件）
-├── webpack.config.js  # 构建配置
+├── vite.config.mjs    # 构建配置（Vite，内核 Rolldown）
+├── tools/             # 构建与自检脚本
+│   ├── build-plan.mjs         # 打包入口 + 逐字复制清单（构建与自检共用同一份）
+│   ├── check-ui.mjs           # UI 一致性自检（npm run check:ui）
+│   └── purge-antd-css.mjs     # 把 antd.full.css 裁剪成 antd.min.css
 └── package.json
 ```
 
@@ -204,19 +208,23 @@ nForce-tools/
    需要 JSON 数据时，用 `fetch(chrome.runtime.getURL("...json"))` 读取；需要内置默认值就写成 JS 模块（参考 `ui_layout_default.js`）。
 2. **`src/index.html` 的 `<script src="./app.js" type="module">` 必须保留 `type="module"`**。
    `src/app.js` 是原生 ES Module，去掉会报 `Cannot use import statement outside a module`；
-   而 `dist/app.js` 是 webpack 打出来的自包含 IIFE，用 module 方式加载同样正常。
+   而 `dist/app.js` 是打包后的 ES Module bundle，用 module 方式加载同样正常。
 3. **`src/` 本身必须保持可直接加载**（目录内自带 manifest / index.html / app.js / rules / lib / icons），
    所以新增资源要同时考虑「打包后」和「不打包直接跑」两种情况。
 4. **启动时的会话校验失败不要降级成「未连接」**。
    CSP 或网络拦截会被误判为会话失效，只有服务端明确返回 401/403 或 `INVALID_SESSION_ID`（见 `sfConn.lastError`）才算真失效。
 5. 新增图标：在 `src/common/icons.js` 的 `Icons` 里加 SVG，并在 `IconMap` 里加 `fa-xxx → 名字` 映射。
    注意 `replaceIcons()` 是 `outerHTML` 替换，**自定义类名会丢失**，需要靠外层包裹元素做结构选择器。
-6. 构建：`node node_modules/webpack/bin/webpack.js --mode production`
-   （直接 `npm run build` 可能因 `.bin` shim 权限不足失败）。
+6. 构建：`npm run build`（先裁剪 `antd.min.css`，再 `vite build` 产出 `dist/`）。
+   产物布局的约定集中在 `tools/build-plan.mjs`：只有 `app.js` / `login_app.js` 两个入口会被打包，
+   其余文件（三个页面 HTML / manifest / service worker / 内容脚本 / 静态资源 / 第三方库）**逐字复制**，
+   不做压缩也不改写 —— 改这条清单时构建脚本与 `npm run check:ui` 会同时跟着变。
+   改完必须跑 `npm run check:ui`：它的 J 组会校验 HTML / manifest 里的相对引用在 `dist/` 里真的可达。
 
 ## 技术栈
 
 - **Frontend**: HTML5, CSS3, JavaScript (ES Module)，无框架
+- **构建**: Vite（内核 Rolldown）—— 只有两个入口打包，其余文件逐字复制进 `dist/`
 - **Salesforce Integration**: JSForce
 - **表格**: 自研纯 HTML 渲染（`common/table_utils.js`）
 - **Excel Processing**: SheetJS (xlsx) + JSZip
@@ -251,6 +259,13 @@ nForce-tools/
 
 - 默认常用功能从 6 项收窄为 **4 项**：**T-4 Outstanding / 获取报表数据 / 获取文件数据 / PCD 过期**（`favorites.ids = ["t4-list", "lts-report", "lts-file", "pcd-expired"]`，顺序即展示顺序）。其余功能不再默认置顶，需要时点卡片右下角的 `☆` 自行加入。
 - 该默认列表**不受已保存的自定义布局影响** —— `biz/ui_layout.js` 的 `mergeWithDefault()` 里 `favorites.ids` 始终取自默认布局，升级后自动生效；只有你自己用 `☆` 挑过的列表（`ui_favorites`）优先级更高，点常用功能区「编辑 → 恢复默认」即可切回新默认。
+
+**工程质量（不影响使用方式）**
+
+- **构建工具由 webpack 迁移到 Vite**（内核 Rolldown）。产物布局与迁移前一致（`dist/` 仍是可直接加载的扩展目录），依赖包数量大幅减少，构建耗时从数秒降到约 50ms。
+- 打包入口与「逐字复制清单」抽成单一来源 `tools/build-plan.mjs`，构建配置与 `npm run check:ui` 共用同一份：以后换打包器，一致性自检不会再静默失效。
+- `npm run check:ui` 的 J 组重写为「入口产物必须被手写 HTML 引用得上、且入口 bundle 的静态依赖链完整」，守的仍是「页面变空壳、而控制台一个报错都没有」那类故障。
+- 逐字复制的第三方库不再被二次压缩，与 `src/` 逐字节一致（许可证声明原样留在文件内）。
 
 ### v4.1 (2026-09-24)
 

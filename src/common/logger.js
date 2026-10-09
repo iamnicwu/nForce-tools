@@ -15,7 +15,7 @@
  *   3. 代码中调用 setLogLevel("debug")。
  *
  * 敏感信息（Session ID / Cookie / token）一律先过 maskSecret() 再输出。
- * 本文件自身不 import 任何模块，可被 webpack 打包、也可逐字复制到
+ * 本文件自身不 import 任何模块，可被打包器一并打进入口 bundle、也可逐字复制到
  * dist/ 供 background.js 以原生 ESM 方式 import。
  */
 
