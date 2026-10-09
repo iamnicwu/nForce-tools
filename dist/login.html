@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nForce Tools - 登录</title>
+    <!-- favicon：不声明就会去请求 /favicon.ico 并拿到 404（见 index.html 处的说明） -->
+    <link rel="icon" type="image/png" href="icons/icon-32.png">
+    <!-- Salesforce 客户端已换成自研的 common/sf_rest_client.js（约 8KB，普通 ESM，
+         由 login_app.js 直接 import）。原先 1.37MB 的 jsforce 已移除，本页不再需要任何惰性加载。 -->
+    <!-- 共享设计令牌 + 表单控件字体继承（原先这里只引了 FontAwesome CDN，
+         既没有 antd 也没有 main.css，导致所有 button/input 回退成 Arial） -->
+    <link rel="stylesheet" href="lib/css/main.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--brand-navy) 0%, var(--primary-color) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .login-container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 480px;
+            overflow: hidden;
+        }
+        
+        .login-header {
+            background: var(--brand-navy);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .login-header h1 {
+            font-size: var(--fs-3xl);
+            margin-bottom: 8px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .login-header h1 i {
+            color: var(--primary-color);
+        }
+        
+        .login-header p {
+            font-size: var(--fs-base);
+            color: rgba(255, 255, 255, 0.65);
+        }
+        
+        .login-body {
+            padding: 30px;
+        }
+        
+        .session-list {
+            margin-bottom: 20px;
+        }
+        
+        .session-card {
+            border: 2px solid var(--border-light);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .session-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .session-card.selected {
+            border-color: var(--primary-color);
+            background: var(--primary-bg);
+        }
+        
+        .session-env {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: var(--fs-xs);
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .session-env.sandbox {
+            background: var(--accent-orange-tint);
+            color: var(--accent-orange);
+        }
+        
+        .session-env.production {
+            background: var(--error-bg);
+            color: var(--error-strong);
+        }
+        
+        .session-env.unknown {
+            background: var(--bg-tertiary);
+            color: var(--text-tertiary);
+        }
+        
+        .session-domain {
+            color: var(--text-tertiary);
+            font-size: var(--fs-sm);
+            margin-bottom: 8px;
+        }
+        
+        .session-user {
+            font-size: var(--fs-lg);
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        
+        .session-email {
+            color: var(--text-secondary);
+            font-size: var(--fs-sm);
+        }
+        
+        .session-tab {
+            color: var(--text-secondary);
+            font-size: var(--fs-xs);
+            margin-top: 8px;
+        }
+        
+        .login-btn {
+            width: 100%;
+            height: 50px;
+            background: var(--primary-color);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: var(--fs-lg);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .login-btn:hover {
+            transform: translateY(-2px);
+            background: var(--primary-hover);
+            box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
+        }
+        
+        .login-btn:disabled {
+            background: var(--border-color);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .loading-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(24, 144, 255, 0.2);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: var(--text-tertiary);
+            font-size: var(--fs-base);
+        }
+        
+        .no-session {
+            text-align: center;
+            padding: 40px 20px;
+        }
+        
+        .no-session i {
+            font-size: var(--icon-2xl);
+            color: var(--border-color);
+            margin-bottom: 15px;
+        }
+        
+        .no-session h3 {
+            color: var(--text-primary);
+            margin-bottom: 10px;
+        }
+        
+        .no-session p {
+            color: var(--text-tertiary);
+            font-size: var(--fs-base);
+            margin-bottom: 20px;
+        }
+        
+        .manual-login-btn {
+            width: 100%;
+            height: 44px;
+            background: white;
+            border: 2px solid var(--primary-color);
+            border-radius: 6px;
+            color: var(--primary-color);
+            font-size: var(--fs-base);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .manual-login-btn:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .manual-login-section {
+            border-top: 1px solid var(--border-light);
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+        
+        .manual-login-section h4 {
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            font-size: var(--fs-base);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            color: var(--text-tertiary);
+            font-size: var(--fs-sm);
+            margin-bottom: 6px;
+        }
+        
+        .form-group input {
+            width: 100%;
+            height: 40px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0 12px;
+            font-size: var(--fs-base);
+            transition: all 0.3s ease;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+        }
+        
+        .error-msg {
+            color: var(--error-color);
+            font-size: var(--fs-sm);
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .error-msg.show {
+            display: block;
+        }
+        
+        .login-footer {
+            padding: 16px 30px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .copyright {
+            font-size: var(--fs-xs);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .copyright a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .copyright a:hover {
+            text-decoration: underline;
+        }
+        
+        .version {
+            font-size: var(--fs-xs);
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1><i class="fas fa-bolt"></i> nForce Tools</h1>
+            <p>检测到多个 Salesforce 环境，请选择登录</p>
+        </div>
+        
+        <div class="login-body">
+            <!-- Loading State -->
+            <div id="loading-state" class="loading-state">
+                <div class="spinner"></div>
+                <div class="loading-text">正在检测 Salesforce Session...</div>
+            </div>
+            
+            <!-- Session List -->
+            <div id="session-list-container" class="session-list" style="display: none;">
+                <!-- Dynamic session cards will be inserted here -->
+            </div>
+            
+            <!-- Login Button -->
+            <button id="login-btn" class="login-btn" disabled>
+                <i class="fas fa-sign-in-alt"></i>
+                <span>登录</span>
+            </button>
+            
+            <!-- No Session Found -->
+            <div id="no-session" class="no-session" style="display: none;">
+                <i class="fas fa-search"></i>
+                <h3>未检测到 Salesforce Session</h3>
+                <p>请确保已在浏览器中打开 Salesforce 页面并登录</p>
+                <button class="manual-login-btn" id="show-manual-login">
+                    <i class="fas fa-key"></i>
+                    手动输入 Session ID
+                </button>
+            </div>
+            
+            <!-- Manual Login Section -->
+            <div id="manual-login-section" class="manual-login-section" style="display: none;">
+                <h4><i class="fas fa-key"></i> 手动输入 Session ID</h4>
+                <div class="form-group">
+                    <label for="session-id">Session ID</label>
+                    <input type="text" id="session-id" placeholder="请输入 Salesforce Session ID">
+                </div>
+                <button id="manual-login-btn" class="login-btn" style="background: var(--text-tertiary);">
+                    <i class="fas fa-check"></i>
+                    <span>验证并登录</span>
+                </button>
+                <div id="error-msg" class="error-msg"></div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="login-footer">
+            <div class="copyright">
+                <i class="fas fa-bolt"></i>
+                <span>nForce Tools <span id="login-version">v-</span></span>
+            </div>
+            <div class="version">© 2026</div>
+        </div>
+    </div>
+    
+    <!-- Login App Script（login_app.js 引入 common/logger.js，需以 ESM 方式加载；
+         打包产物仍是 ES Module，module 方式加载天然兼容） -->
+    <!-- 本页**只能**引用外部脚本，不要再往里写内联代码，两个原因叠加：
+         ① 带 src 的 <script> 会整段忽略内联内容（check-ui 的 J 组现在拦这种写法）；
+         ② manifest 的 CSP 是 `script-src 'self'`（不含 'unsafe-inline'），内联脚本
+            会被整段拒绝执行，且不产生任何页面可见异常 —— 只在控制台留一条 CSP 报错。
+         原先的「图标替换 + 版本号」正是写在这后面的内联 <script type="module">，被 ② 静默拦掉，
+         于是登录页 7 个图标常年是空白方块、#login-version 常年停在占位符 "v-"。
+         现已并入 login_app.js（本页唯一的脚本），见其中「页面外壳」一节。 -->
+    <script src="login_app.js" type="module"></script>
+</body>
+</html>

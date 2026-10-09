@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nForce Tools</title>
+    <!-- favicon：不声明就会去请求 /favicon.ico 并拿到 404（见 index.html 处的说明） -->
+    <link rel="icon" type="image/png" href="icons/icon-32.png">
+    <link rel="stylesheet" href="lib/css/antd.min.css">
+    <!-- 加载共享样式：弹窗以前不引 main.css，自带一套 indigo 主色，
+         与主应用的 Ant Design 蓝不同，同一套变量名指向两种颜色 -->
+    <link rel="stylesheet" href="lib/css/main.css">
+    <style>
+        /* 弹窗是 320px 的窄容器，这里只覆盖「尺寸」相关规则。
+           颜色 / 字号 / 字族全部复用 main.css :root 的设计令牌。 */
+        body {
+            width: 320px;
+            height: auto;
+            min-height: 200px;
+            margin: 0;
+            padding: 1.5rem;
+            background-color: var(--bg-tertiary);
+            box-sizing: border-box;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background-color: var(--primary-bg);
+            border-radius: 16px;
+            margin-bottom: 1rem;
+        }
+        .icon {
+            font-size: var(--icon-xl);
+            color: var(--primary-color);
+        }
+        .title {
+            font-size: var(--fs-2xl);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            color: var(--text-primary);
+        }
+        .subtitle {
+            font-size: var(--fs-base);
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .footer {
+            margin-top: 1.5rem;
+            font-size: var(--fs-xs);
+            color: var(--text-light);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <div class="icon">
+                <i class="fas fa-cube"></i>
+            </div>
+        </div>
+        <h1 class="title">nForce Tools</h1>
+        <p class="subtitle">Salesforce 数据管理助手</p>
+        <!-- 按钮不再用 onclick="openFullApp()"：内联事件处理器同受 CSP
+             `script-src 'self'` 管辖（无 'unsafe-inline'），会被拒绝执行，
+             表现同样是「点了没反应」。改由 popup_app.js 绑 click。 -->
+        <button id="open-app-btn" class="ant-btn ant-btn-primary ant-btn-lg" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+            <i class="fas fa-external-link-alt"></i>
+            <span>打开完整应用</span>
+        </button>
+        <div class="footer" id="popup-version"></div>
+    </div>
+    <!-- 页面脚本必须走外部文件：内联 <script> 会被 CSP `script-src 'self'` 整段拒绝执行，
+         且不产生任何页面可见异常（只在控制台留一条 CSP 报错）。
+         popup_app.js 是**复制型**脚本（非打包入口，由 tools/build-plan.mjs 的复制清单
+         逐字搬进 dist；check-ui 的 J 组会校验它在 dist/ 里可达）。 -->
+    <script src="popup_app.js" type="module"></script>
+</body>
+</html>

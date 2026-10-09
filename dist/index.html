@@ -1,0 +1,1930 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nForce Tools</title>
+    <!-- favicon：**必须显式声明**。不声明时 Chrome 会自动去请求 `/favicon.ico`，
+         而扩展里没有这个文件 → DevTools 里留下一条
+         「Failed to load resource: the server responded with a status of 404」。
+         扩展页面、登录页、弹窗都一样，只是扩展页面下这条请求由浏览器内部发出，
+         在网络面板里不显眼，极易被当成真故障排查半天。
+         顺带让标签页/弹窗显示正经图标，而不是空白页图标。 -->
+    <link rel="icon" type="image/png" href="icons/icon-32.png">
+    <!--
+      只保留 dayjs（7KB）作为同步阻塞脚本：sf_service.js / session_info.js 会直接用到它，
+      且用量极小。其余库改为「按需加载」——
+        echarts   出图表/仪表盘时才需要 1.00MB
+        xlsx      导入导出时才需要   0.85MB
+        jszip     打 zip 时才需要    95KB
+      合计约 1.9MB 不再阻塞首屏。而侧边栏每点一次工具栏图标都会重新加载本页，
+      所以这笔成本是**每次打开面板**都要付的，必须拿掉。
+      加载入口见 src/common/lib_loader.js（app.js 启动后会在空闲时预热 echarts）。
+
+      Salesforce 客户端（原先的 jsforce，1.37MB）已换成自研的
+      common/sf_rest_client.js（约 8KB）：普通 ESM，静态 import 即可，
+      不需要惰性加载，也不占首屏。详见 plans/review-2026-09-28-jsforce.md。
+    -->
+    <script src="lib/js/dayjs.min.js"></script>
+    <!-- 引入 Ant Design CSS -->
+    <link rel="stylesheet" href="lib/css/antd.min.css">
+    <!-- 引入自定义CSS -->
+    <link rel="stylesheet" href="lib/css/main.css">
+</head>
+<body class="admin-body">
+    <!-- 主内容区 -->
+    <div class="main-content">
+        <!-- 顶部导航栏 -->
+        <header class="top-nav">
+            <div class="top-nav-left">
+                <img src="icons/nforce-tools.svg" alt="nForce Tools" class="top-nav-logo">
+            </div>
+            
+            <div class="top-nav-right">
+                <div class="nav-status">
+                    <span id="connection-status-badge" class="ant-tag">未连接</span>
+                </div>
+                
+                <!-- 系统环境指示器 -->
+                <div class="env-indicator u-hidden" id="env-indicator">
+                    <span id="env-badge" class="ant-tag"></span>
+                </div>
+
+                <!-- 设置入口：全局可见。布局配置等设置项都在这个页面里 -->
+                <button type="button" class="nav-settings-btn" id="settings-nav-btn" title="设置">
+                    <i class="fas fa-cog"></i>
+                    <span>设置</span>
+                </button>
+
+                <!-- 显示宿主切换：侧边栏里是「完整应用」（新标签页打开，宽屏更适合看表格与图表），
+                     标签页里是「侧边栏」（把应用停靠到浏览器右侧，可固定或隐藏）。
+                     图标与文案由 app.js 的 applyHostChrome() 按当前宿主注入；
+                     宿主判定失败时保持 hidden，不影响任何既有功能。 -->
+                <button type="button" class="nav-host-btn" id="host-switch-btn" hidden></button>
+                
+                <!-- 用户头像和信息 -->
+                <div class="user-profile">
+                    <div class="avatar-container" id="avatar-container">
+                        <div class="avatar" id="user-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                    <!-- 用户信息下拉菜单 -->
+                    <div class="user-menu u-hidden" id="user-menu">
+                        <div class="user-menu-header">
+                            <h3 id="user-name">用户信息</h3>
+                        </div>
+                        <div class="user-menu-content">
+                            <div class="user-info-item">
+                                <span class="label">用户名:</span>
+                                <span class="value" id="user-fullname">-</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span class="label">邮箱:</span>
+                                <span class="value" id="user-email">-</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span class="label">用户名:</span>
+                                <span class="value" id="user-username">-</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span class="label">连接状态:</span>
+                                <span class="value" id="user-connection-status">未连接</span>
+                            </div>
+                            <div class="user-info-item">
+                                <span class="label">系统环境:</span>
+                                <span class="value" id="user-system-environment">-</span>
+                            </div>
+                             
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- 页面内容 -->
+        <main class="page-content">
+            <div id="notification-container"></div>
+
+            <!-- ========== 首页：功能图标列表（由 rules/ui_layout.json 驱动） ========== -->
+            <section class="launcher-view" id="launcher-view">
+                <!-- Org 状态面板：直接展示 Salesforce Limits 用量（biz/org_limits.js 渲染，
+                     点击「查看全部」进入 section-27 的完整列表）。不占功能磁贴位 -->
+                <div id="org-dashboard-panel"></div>
+
+                <!-- 常用功能（有序列表，顺序完全由用户自己决定） -->
+                <div id="favorites-host"></div>
+
+                <!-- 其余功能分组（由布局配置渲染） -->
+                <div id="launcher-groups"></div>
+            </section>
+
+            <!-- ========== 详情页：单个功能 ========== -->
+            <section class="detail-view u-hidden" id="detail-view">
+                <!-- 返回按钮不单独占一行：enterDetailView 会把它移入当前功能卡片的头部（见 biz/ui.js） -->
+                <div id="detail-back-host">
+                    <button type="button" class="ant-btn detail-back" id="detail-back">
+                        <i class="fas fa-arrow-left"></i>
+                        <span>返回</span>
+                    </button>
+                </div>
+                <div class="detail-body">
+            <!-- 连接设置卡片 -->
+            <div id="section-1" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">连接设置</div>
+                        <div class="ant-card-extra"><span id="session-id-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="u-maxw-600 u-mx-auto">
+                        <form id="session-id-form">
+                            <div class="form-group">
+                                <label class="form-label" for="session_id">Salesforce Session ID</label>
+                                <div class="u-relative">
+                                    <i class="fas fa-key u-absolute u-left-16 u-top-half u-translate-y-half u-text-light u-z-1"></i>
+                                    <input type="text" id="session_id" name="session_id" placeholder="请输入您的Salesforce Session ID"
+                                           class="ant-input u-pl-48 u-h-40" required>
+                                </div>
+                                <div class="form-help">从Salesforce开发者控制台获取Session ID</div>
+                            </div>
+                            <button type="submit" class="ant-btn ant-btn-primary ant-btn-lg u-w-full" name="save_session_id">
+                                <i class="fas fa-save"></i>
+                                <span>保存Session ID</span>
+                            </button>
+                        </form>
+                        
+                        <div id="session-id-success" class="success-message u-hidden">
+                            <div class="icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div>
+                                <p>✓ Session ID已成功设置</p>
+                            </div>
+                        </div>
+
+                        <div class="u-relative u-my-32 u-text-center">
+                            <hr class="u-border-0 u-border-top">
+                            <span class="u-absolute u-top-half u-left-half u-translate-center u-bg-white u-px-16 u-text-secondary u-fs-xs">下一步</span>
+                        </div>
+
+                        <!-- 测试连接部分 -->
+                        <div class="form-group u-mb-24 u-text-center">
+                            <h3 class="u-mb-16 u-fs-xl">测试连接</h3>
+                            <form id="test-connection-form">
+                                <button type="submit" class="ant-btn ant-btn-default ant-btn-lg u-w-full" name="test_connection">
+                                    <i class="fas fa-plug"></i>
+                                    <span>测试Salesforce连接</span>
+                                </button>
+                                <div class="u-mt-16 u-fw-600 u-minh-24" id="connection-status"></div>
+                            </form>
+                        </div>
+                        
+                        <div id="connection-success" class="success-message u-hidden">
+                            <div class="icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div>
+                                <p>✓ Salesforce连接成功</p>
+                                <p>可以开始使用各项功能</p>
+                            </div>
+                        </div>
+                        <div id="connection-error" class="notification error u-hidden">
+                            <div class="icon">
+                                <i class="fas fa-exclamation-circle"></i>
+                            </div>
+                            <div class="content">
+                                <h3>Salesforce连接失败，请检查Session ID是否正确</h3>
+                            </div>
+                        </div>
+                        <div class="u-text-secondary u-mt-16 u-text-center" id="connection-info">
+                            <p>点击"测试连接"按钮以验证Salesforce连接</p>
+                            <p class="u-fs-base">连接成功后才能进行后续操作</p>
+                        </div>
+
+                        <div class="u-relative u-my-32 u-text-center">
+                            <hr class="u-border-0 u-border-top">
+                            <span class="u-absolute u-top-half u-left-half u-translate-center u-bg-white u-px-16 u-text-secondary u-fs-xs">或</span>
+                        </div>
+
+                        <!-- 自动获取会话：侧边栏里没有地址栏、也没法「重载当前页」，
+                             会话过期后这里是唯一的自救入口（原理与 login.html 的自动检测同源：
+                             用浏览器 Cookie 里的 sid 换一个可用的 Salesforce 会话）。
+                             注意：正常情况下**不需要**用户点这个按钮 —— 启动时、请求被判 401 时、
+                             回到面板时、以及后台看门狗都会自动走同一套恢复流程（见 app.js
+                             「会话自动恢复与自动续期」那一节）。按钮保留的意义是：用户想立刻催一下，
+                             或想看看到底是哪一步没成功（状态行会写明原因）。 -->
+                        <div class="form-group u-mb-24 u-text-center">
+                            <h3 class="u-mb-8 u-fs-xl">自动获取会话</h3>
+                            <p class="u-text-secondary u-fs-base u-mb-8">
+                                浏览器里还登录着 Salesforce 时，可直接用浏览器 Cookie 换取新会话，不必手动粘贴 Session ID。
+                            </p>
+                            <p class="u-text-secondary u-fs-base u-mb-16">
+                                <b>通常不必手动操作</b>：会话过期后会自动重新连接（含用着用着突然失效的情况）。
+                                只有长时间没连上时才需要点下面的按钮催一下。
+                            </p>
+                            <button type="button" class="ant-btn ant-btn-primary ant-btn-lg u-w-full" id="connection-reconnect-btn">
+                                <i class="fas fa-sync-alt"></i>
+                                <span>自动获取 Session 并重新连接</span>
+                            </button>
+                            <button type="button" class="ant-btn ant-btn-default u-w-full u-mt-16" id="connection-open-login-btn">
+                                <i class="fas fa-sign-in-alt"></i>
+                                <span>打开登录页（可在多个 org 中选择）</span>
+                            </button>
+                            <div class="u-mt-16 u-fw-600 u-minh-24" id="connection-reconnect-status" data-state="idle"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Session 链接卡片（连接与环境分组）：展示插件实际使用的 Salesforce 连接信息，可一键复制 -->
+            <div id="section-22" class="unified-card ant-card ant-card-bordered step-section theme-lts needs-connection">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Session 链接</div>
+                        <div class="ant-card-extra">
+                            <button type="button" class="ant-btn ant-btn-primary" id="session-info-copy-all">复制全部</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="session-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>以下内容包含 Salesforce Session ID，等同账号登录凭证：请勿截图外传或粘贴到不可信的地方。Session 失效后需要重新连接。</span>
+                    </div>
+                    <div id="session-info-list" class="session-info-list">
+                        <div class="kv-empty-state">
+                            <i class="fas fa-link"></i>
+                            <p>正在读取 Session 信息...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 获取当日数据卡片 -->
+            <div id="section-2" class="unified-card ant-card ant-card-bordered step-section theme-lts needs-connection">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">获取当日数据</div>
+                        <div class="ant-card-extra"><span id="daily-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-calendar-day u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">获取当日订单数据</h3>
+                            <ul class="section-desc">
+                                <li><strong>日期范围：</strong>
+                                    <ul>
+                                        <li>如果是<strong>周一</strong>，获取<strong>周六、周日及今天</strong>的数据。</li>
+                                        <li>其他时间，仅获取<strong>今天</strong>的数据。</li>
+                                    </ul>
+                                </li>
+                                <li><strong>筛选条件：</strong>
+                                    <ul>
+                                        <li><strong>产品：</strong>主产品 (Main Product) 且业务线为 FixedLine。</li>
+                                        <li><strong>状态：</strong>排除已完成、已取消或无效的订单 (如 Activated, Cancelled, Rejected 等)。</li>
+                                    </ul>
+                                </li>
+                                <li class="u-text-secondary u-fs-sm">* 此操作可能需要几分钟时间，请耐心等待。</li>
+                            </ul>
+                        </div>
+                        
+                        <form id="daily-data-form" class="unified-form">
+                            <div class="form-group text-left">
+                                <label class="ant-checkbox-wrapper">
+                                    <input type="checkbox" id="daily-custom-date-checkbox">
+                                    <span>自定义日期范围</span>
+                                </label>
+                            </div>
+                            
+                            <div class="u-hidden u-mb-16" id="daily-custom-date-container">
+                                <div class="date-range-container">
+                                    <div class="date-field">
+                                        <label for="daily-start-date">开始日期</label>
+                                        <input type="date" id="daily-start-date" class="ant-input">
+                                    </div>
+                                    <span class="date-separator">-</span>
+                                    <div class="date-field">
+                                        <label for="daily-end-date">结束日期</label>
+                                        <input type="date" id="daily-end-date" class="ant-input">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <button type="submit" name="get_daily_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-cloud-download-alt"></i>
+                                    <span>立即获取数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="daily-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-daily-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>导出Excel</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="daily-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="daily-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 获取报表数据卡片 -->
+            <div id="section-3" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-lts">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">获取报表数据</div>
+                        <div class="ant-card-extra"><span id="report-data-badge" class="ant-tag ant-tag-success u-hidden">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-chart-bar u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">获取报表统计数据</h3>
+                            <ul class="section-desc">
+                                <li><strong>日期范围：</strong> 服务请求日期 (Service Request Date) 在<strong>今天或之前</strong>。</li>
+                                <li><strong>筛选条件：</strong>
+                                    <ul>
+                                        <li><strong>产品：</strong>主产品 (Main Product) 且业务线为 FixedLine。</li>
+                                        <li><strong>状态：</strong>排除已完成、已取消或无效的订单 (如 Activated, Cancelled, Rejected 等)。</li>
+                                    </ul>
+                                </li>
+                                <li class="u-text-secondary u-fs-sm">* 此操作用于获取历史遗留未完成的订单数据。</li>
+                            </ul>
+                        </div>
+                        
+                        <form id="report-data-form" class="unified-form">
+                            <div class="form-group">
+                                <button type="submit" name="get_report_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-cloud-download-alt"></i>
+                                    <span>立即获取报表</span>
+                                </button>
+                            </div>
+                            <div class="form-group text-left">
+                                <label class="ant-checkbox-wrapper">
+                                    <input type="checkbox" id="report-sync-onedrive-checkbox">
+                                    <span>同时同步到 OneDrive</span>
+                                </label>
+                                <p class="form-hint">默认关闭。开启后会把本次获取的完整报表数据写入 OneDrive 工作簿（数据将上传到第三方存储）。</p>
+                            </div>
+                        </form>
+                        
+                        <div id="report-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-report-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>导出Excel</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="report-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="report-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 上传文件卡片 -->
+            <div id="section-4" class="unified-card ant-card ant-card-bordered step-section theme-lts needs-connection">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">根据上传文件获取数据</div>
+                        <div class="ant-card-extra"><span id="file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-file-upload u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">批量查询订单状态</h3>
+                            <ul class="section-desc">
+                                <li><strong>支持的 ID 类型：</strong>
+                                    <ul>
+                                        <li><strong>PCD ID：</strong>列名包含 "pcd" (如 PCD ID, pcd_id)。</li>
+                                        <li><strong>LTS ID (CUST_NUM)：</strong>列名包含 "cust" (如 CUST_NUM, cust id)。</li>
+                                    </ul>
+                                </li>
+                                <li><strong>处理逻辑：</strong>
+                                    <ul>
+                                        <li>自动识别工作表和列名。</li>
+                                        <li>自动去重 ID。</li>
+                                        <li>批量查询 Salesforce 获取最新详情。</li>
+                                    </ul>
+                                </li>
+                                <li class="u-text-secondary u-fs-sm">* 仅支持 .xlsx 格式文件。</li>
+                            </ul>
+                        </div>
+
+                        <form id="file-upload-form" class="unified-upload-area">
+                            <div class="upload-drag-wrapper" id="file-upload-wrapper">
+                                <div class="upload-icon">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </div>
+                                <p class="upload-text">点击或拖拽文件到此区域上传</p>
+                                <p class="upload-hint">仅支持 .xlsx 格式的Excel文件</p>
+                                <input type="file" id="file" name="file" accept=".xlsx">
+                            </div>
+                            <div class="action-buttons">
+                                <button type="button" id="get-latest-data-btn" class="ant-btn ant-btn-primary fetch-btn u-hidden">
+                                    <i class="fas fa-sync-alt"></i>
+                                    <span>获取最新数据</span>
+                                </button>
+                                <button type="button" id="export-latest-data" class="ant-btn ant-btn-default u-hidden">
+                                    <i class="fas fa-download"></i>
+                                    <span>导出数据</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 数据显示区域 -->
+                    <div id="latest-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="latest-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- LTS 模块卡片 -->
+            <div id="section-5" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-lts">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">LTS 模块</div>
+                        <div class="ant-card-extra">
+                            <label for="lts-md-upload" class="ant-btn ant-btn-sm u-pointer">
+                                <i class="fas fa-upload"></i> 更新概览
+                            </label>
+                            <input type="file" id="lts-md-upload" accept=".md">
+                        </div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <!-- 概览内容 -->
+                    <div id="lts-summary-content" class="markdown-body u-p-16 u-lh-1-6">
+                        <div class="u-text-center u-text-secondary">
+                            <i class="fas fa-spinner fa-spin"></i> 正在加载 LTS Fallout Summary...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 版本信息卡片 -->
+            <div id="section-6" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">项目说明</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div id="readme-content" class="markdown-body u-p-16 u-lh-1-6">
+                        <div class="u-text-center u-text-secondary">
+                            <i class="fas fa-spinner fa-spin"></i> 正在加载说明文档...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 布局配置卡片（属于「设置」分组，从首页 设置 → 布局配置 进入） -->
+            <div id="section-20" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">布局配置</div>
+                        <div class="ant-card-extra"><span class="ant-tag">JSON 驱动</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <p class="layout-panel-tip">
+                        调整 <code>groups[].tiles</code> 的顺序即可改变图标排列；删除某个 tile 即可隐藏该功能入口。
+                        <code>favorites.ids</code> 是首页「常用功能」的默认列表，<b>顺序即展示顺序，不随使用频率变化</b>；
+                        平时直接点功能卡片右下角的 <b>☆</b> 加入、点常用功能区右上角「编辑」调序即可，改动会自动保存在本地。
+                    </p>
+                    <textarea class="layout-json-input" id="layout-json-input" spellcheck="false"></textarea>
+                    <div class="layout-actions">
+                        <button type="button" class="ant-btn ant-btn-primary" id="layout-apply-btn">应用并保存</button>
+                        <button type="button" class="ant-btn" id="layout-export-btn">导出 JSON</button>
+                        <button type="button" class="ant-btn" id="layout-reset-btn">恢复默认</button>
+                    </div>
+                </div>
+            </div>
+            <!-- 插件偏好卡片（属于「设置」分组，从首页 设置 → 插件偏好 进入） -->
+            <div id="section-28" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">插件偏好</div>
+                        <div class="ant-card-extra"><span class="ant-tag">保存在本机</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <!-- ① Salesforce API 版本 -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">Salesforce API 版本</span>
+                            <span class="pref-group-value" id="api-version-current">—</span>
+                        </div>
+                        <p class="pref-desc">
+                            所有 Salesforce 请求（REST / Bulk / Tooling / 事件监听 CometD / Metadata 打包）
+                            都使用这个版本，请求路径里的 <code>/vXX.0/</code> 就是它。
+                        </p>
+                        <div class="pref-controls">
+                            <select class="ant-input pref-select" id="api-version-select" aria-label="常用 API 版本"></select>
+                            <input type="text" class="ant-input pref-input" id="api-version-custom"
+                                   placeholder="自定义，如 66.0" autocomplete="off" spellcheck="false"
+                                   aria-label="自定义 API 版本">
+                            <button type="button" class="ant-btn ant-btn-primary" id="api-version-save">保存</button>
+                            <button type="button" class="ant-btn" id="api-version-reset">恢复默认</button>
+                        </div>
+                        <p class="pref-hint" id="api-version-hint">
+                            保存后立即生效（无需重新登录）。若组织不支持该版本，请求会返回 404，换回较低版本即可。
+                        </p>
+                    </section>
+
+                    <!-- ② 侧边栏位置（只能读、不能设，原因见下方说明） -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">侧边栏位置</span>
+                            <span class="pref-group-value" id="panel-side-value">检测中…</span>
+                        </div>
+                        <p class="pref-desc">
+                            侧边栏在左侧还是右侧，是 <b>Chrome 的全局设置</b>，扩展无法用 API 修改
+                            —— Chrome 的 <code>sidePanel</code> 只提供 <code>getLayout()</code> 读取布局，
+                            没有对应的 <code>setLayout()</code>。所以这里只能帮你确认当前在哪一侧。
+                        </p>
+                        <div class="pref-controls">
+                            <button type="button" class="ant-btn" id="panel-side-refresh">重新检测</button>
+                        </div>
+                        <p class="pref-hint" id="panel-side-hint">
+                            改法：Chrome 菜单 → 设置 → 外观 →「侧边栏」→ 选「在左侧显示 / 在右侧显示」；
+                            也可以右键点击侧边栏边缘，直接选「移到左侧 / 移到右侧」。
+                            这个设置对所有侧边栏内容生效，不只是本扩展。
+                        </p>
+                    </section>
+
+                    <!-- ③ 侧边栏自动隐藏 -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">侧边栏自动隐藏</span>
+                            <span class="pref-group-value" id="panel-auto-hide-state">—</span>
+                        </div>
+                        <p class="pref-desc">
+                            开启后，鼠标离开侧边栏并停留一小会儿，面板会自动收起，把宽度还给网页；
+                            再按 <code>Alt+Shift+N</code> 即可重新打开（也可以在 Chrome 的扩展快捷键页改成自己顺手的手势）。
+                        </p>
+                        <div class="pref-controls">
+                            <label class="pref-switch" for="panel-auto-hide-toggle">
+                                <input type="checkbox" id="panel-auto-hide-toggle">
+                                <span>启用自动隐藏</span>
+                            </label>
+                            <select class="ant-input pref-select" id="panel-hide-delay-select"
+                                    aria-label="侧边栏隐藏延迟"></select>
+                        </div>
+                        <p class="pref-hint" id="panel-auto-hide-hint">
+                            延迟是「鼠标离开后等多久才收起」。焦点落在输入框或下拉框上时不会收起 ——
+                            原生下拉的选项弹窗属于浏览器界面，鼠标移过去在网页看来等于离开了文档。
+                        </p>
+                    </section>
+
+                    <!-- ④ 贴边浮窗 -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">贴边浮窗</span>
+                            <span class="pref-group-value" id="dock-state">—</span>
+                        </div>
+                        <p class="pref-desc">
+                            在 Salesforce 页面上贴一条感应边，<b>鼠标靠过去就滑出</b>这个工具面板。
+                            侧边栏本身做不到这一点：Chrome 规定 <code>sidePanel.open()</code> 只能由
+                            点击 / 快捷键 / 右键菜单触发，<b>鼠标移动不算用户动作</b>，所以「靠边即显示」
+                            只能由浮窗来实现。
+                        </p>
+                        <div class="pref-controls">
+                            <label class="pref-switch" for="dock-enable-toggle">
+                                <input type="checkbox" id="dock-enable-toggle">
+                                <span>在 Salesforce 页面启用</span>
+                            </label>
+                            <select class="ant-input pref-select" id="dock-side-select" aria-label="贴哪一边"></select>
+                            <select class="ant-input pref-select" id="dock-hide-delay-select"
+                                    aria-label="浮窗收回延迟"></select>
+                        </div>
+                        <p class="pref-hint" id="dock-hint">
+                            改完立即生效，无需刷新页面 —— 只对<b>已打开</b>的 Salesforce 标签页生效；
+                            新开的标签页会自动带上。浮窗与侧边栏是两套独立入口，可以同时开。
+                        </p>
+                    </section>
+                </div>
+            </div>
+            <!-- 设置总览卡片（顶部导航齿轮进入；布局配置是其中一项） -->
+            <div id="section-21" class="ant-card ant-card-bordered step-section">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">设置</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="settings-list">
+                        <button type="button" class="settings-row" data-goto="1">
+                            <span class="settings-row-icon u-tint-blue">
+                                <i class="fas fa-plug"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">连接设置</span>
+                                <span class="settings-row-desc">Session ID · 连接测试 · 用户与组织信息</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                        <button type="button" class="settings-row" data-goto="20">
+                            <span class="settings-row-icon u-tint-purple">
+                                <i class="fas fa-th-large"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">布局配置</span>
+                                <span class="settings-row-desc">首页图标排列 · 分组 · 常用功能默认列表</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                        <button type="button" class="settings-row" data-goto="28">
+                            <span class="settings-row-icon u-tint-teal">
+                                <i class="fas fa-cog"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">插件偏好</span>
+                                <span class="settings-row-desc">Salesforce API 版本 · 侧边栏位置 · 自动隐藏 · 贴边浮窗</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                        <button type="button" class="settings-row" data-goto="6">
+                            <span class="settings-row-icon u-tint-gray">
+                                <i class="fas fa-info-circle"></i>
+                            </span>
+                            <span class="settings-row-text">
+                                <span class="settings-row-label">项目说明</span>
+                                <span class="settings-row-desc">版本信息与使用说明</span>
+                            </span>
+                            <i class="fas fa-chevron-right settings-row-arrow"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- OTT 模块卡片 -->
+            <div id="section-7" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">OTT 模块</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="u-text-center u-p-32 u-text-secondary">
+                        <i class="fas fa-tv u-fs-icon-2xl u-mb-16 u-text-brand"></i>
+                        <h3>OTT 功能模块</h3>
+                        <p>此模块正在开发中...</p>
+                    </div>
+                </div>
+            </div>
+            <!-- PCD 模块卡片 -->
+            <div id="section-8" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">PCD 模块</div>
+                        <div class="ant-card-extra"><span id="pcd-daily-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-laptop-code u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">获取 PCD 所有Expired的数据</h3>
+                            <ul class="section-desc">
+                                <li>系统将从 Salesforce 获取 PCD 所有Expired的数据</li>
+                                
+                                <li class="u-text-secondary u-fs-sm">* 此操作可能需要几分钟时间，请耐心等待。</li>
+                            </ul>
+                        </div>
+                        
+                        <form id="pcd-daily-data-form" class="unified-form">
+                            <div class="form-group u-mb-16">
+                                <label class="u-block u-mb-8 u-fw-500" for="pcd-daily-soql-query">自定义 SOQL 查询</label>
+                                <textarea
+                                    id="pcd-daily-soql-query"
+                                    class="ant-input u-w-full u-resize-y u-font-mono u-fs-xs"
+                                    rows="8">SELECT order.Name,
+          order.OrderNumber,
+          order.Order_Nature__c,
+          order.Service_Request_Date__c,
+          order.Attention__c,
+          FulfillmentRemark__c,
+          order.id,
+          order.Custom_OrderStatus__c,
+          order.Custom_FulfilmentStatus__c,
+          FulfillmentId__c,
+          AppointmentId__c,
+          vlocity_cmt__FulfilmentStatus__c,
+          BRM_Request_Id__c,
+          LOB__c,
+          order.Is_Voluntary__c,
+          order.Self_Return__c
+      FROM OrderItem
+      WHERE
+          (MainProduct__c = TRUE OR Product2.vlocity_cmt__SubType__c = 'NowTV Standalone Starter Offer') AND
+          LOB__c !='' AND
+          order.Attention__c = '' AND
+          order.Service_Request_Date__c <= TODAY AND
+          order.Service_Request_Date__c > 2026-01-01 AND
+          order.Custom_OrderStatus__c NOT IN (
+              'Ready To Submit', 'Superseded', 'Activated',
+              'Cancel Requested', 'Cancelled', 'Rejected', 'Discarded')</textarea>
+                                <div class="u-mt-8 u-fs-xs u-text-secondary">
+                                    <i class="fas fa-info-circle"></i> 默认查询将获取 PCD Expiry 数据，可根据需要修改查询条件
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_daily_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-cloud-download-alt"></i>
+                                    <span>立即获取数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="pcd-daily-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-pcd-daily-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>导出Excel</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-daily-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-daily-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 获取 PCD 过期数据卡片 -->
+            <div id="section-29" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">获取 PCD 过期数据</div>
+                        <div class="ant-card-extra"><span id="pcd-expired-data-badge" class="ant-tag ant-tag-success u-hidden">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-clock u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">获取 PCD 过期数据</h3>
+                            <ul class="section-desc">
+                                <li>系统将从 Salesforce 获取 PCD 所有<strong>已过期 (Expired)</strong> 的订单数据。</li>
+                                <li class="u-text-secondary u-fs-sm">* 查询条件内置在插件里，无需手工填写 SOQL；此操作可能需要几分钟时间，请耐心等待。</li>
+                            </ul>
+                        </div>
+
+                        <form id="pcd-expired-data-form" class="unified-form">
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_expired_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-cloud-download-alt"></i>
+                                    <span>立即获取数据</span>
+                                </button>
+                            </div>
+                        </form>
+
+                        <div id="pcd-expired-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-pcd-expired-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>导出Excel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-expired-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-expired-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- VVIP 模块卡片 -->
+            <div id="section-9" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-vvip">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">VVIP</div>
+                        <div class="ant-card-extra"><span id="vvip-file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-star u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">VVIP 客户订单查询</h3>
+                            <ul class="section-desc">
+                                <li>上传包含 Account ID 的 Excel 文件</li>
+                                <li>系统将自动查询并返回对应的 PCD/LTS 订单状态</li>
+                                <li class="u-text-secondary u-fs-sm">* 仅支持 .xlsx 格式文件</li>
+                            </ul>
+                        </div>
+
+                        <form id="vvip-file-upload-form" class="unified-upload-area">
+                            <div class="upload-drag-wrapper" id="vvip-upload-wrapper">
+                                <div class="upload-icon">
+                                    <i class="fas fa-cloud-upload-alt u-text-brand"></i>
+                                </div>
+                                <p class="upload-text">点击或拖拽文件到此区域上传</p>
+                                <p class="upload-hint">仅支持 .xlsx 格式的Excel文件 (包含 Account ID)</p>
+                                <input type="file" id="vvip-file" name="file" accept=".xlsx">
+                            </div>
+                            <div class="action-buttons">
+                                <button type="button" id="get-vvip-data-btn" class="ant-btn ant-btn-primary fetch-btn u-hidden">
+                                    <i class="fas fa-sync-alt"></i>
+                                    <span>获取 PCD/LTS 状态</span>
+                                </button>
+                                <button type="button" id="export-vvip-data" class="ant-btn ant-btn-default u-hidden">
+                                    <i class="fas fa-download"></i>
+                                    <span>导出数据</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 数据显示区域 -->
+                    <div id="vvip-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="vvip-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- 数据分析 模块卡片 -->
+            <div id="section-10" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-analysis">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">数据分析</div>
+                        <div class="ant-card-extra"><span id="analysis-file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-chart-pie u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">数据分析与规则匹配</h3>
+                            <ul class="section-desc">
+                                <li>上传 Excel 数据文件并配置分析规则</li>
+                                <li>系统将根据规则自动分析和标记数据</li>
+                                <li class="u-text-secondary u-fs-sm">* 可上传自定义 JSON 规则文件</li>
+                            </ul>
+                        </div>
+
+                        <form id="analysis-file-upload-form" class="unified-upload-area u-maxw-full">
+                            <div class="analysis-layout u-flex u-gap-20">
+                                <!-- 左侧：Excel 文件上传 (60%) -->
+                                <div class="analysis-left u-flex-6">
+                                    <div class="upload-drag-wrapper" id="analysis-upload-wrapper">
+                                        <div class="upload-icon">
+                                            <i class="fas fa-cloud-upload-alt u-text-brand"></i>
+                                        </div>
+                                        <p class="upload-text">点击或拖拽文件到此区域上传</p>
+                                        <p class="upload-hint">仅支持 .xlsx 格式的Excel文件</p>
+                                        <input type="file" id="analysis-file" name="file" accept=".xlsx">
+                                    </div>
+                                </div>
+
+                                <!-- 右侧：规则上传和列表 (40%) -->
+                                <div class="analysis-right u-flex-4 u-flex u-flex-col">
+                                    <div class="form-group u-mb-16">
+                                        <div class="u-mb-8 u-fw-500">自定义规则 (可选)</div>
+                                        <label class="upload-drag-wrapper u-p-16 u-minh-auto" for="rules-file">
+                                            <div class="u-flex u-items-center u-justify-center u-gap-16">
+                                                <i class="fas fa-code u-fs-3xl u-text-brand"></i>
+                                                <div class="u-text-left">
+                                                    <p class="upload-text u-m-0">点击上传 JSON 规则文件</p>
+                                                    <p class="upload-hint u-m-0">如果不上传，将使用默认规则</p>
+                                                </div>
+                                            </div>
+                                            <input type="file" id="rules-file" name="rules_file" accept=".json">
+                                        </label>
+                                        <div class="u-mt-8 u-fs-xs u-text-brand u-hidden u-items-center u-gap-8" id="rules-file-info">
+                                            <i class="fas fa-check-circle"></i>
+                                            <span id="rules-file-name"></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="u-flex-1 u-border u-radius-sm u-p-10 u-ov-y-auto u-maxh-200 u-hidden" id="rules-list-container">
+                                        <div class="u-fw-500 u-mb-8 u-border-bottom u-pb-8 u-flex u-justify-between u-items-center">
+                                            <span>规则列表</span>
+                                            <span class="u-fs-xs u-text-light">可拖拽排序或使用按钮</span>
+                                        </div>
+                                        <ul class="u-list-none u-p-0 u-m-0" id="rules-list">
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button type="button" id="analyze-data-btn" class="ant-btn ant-btn-primary u-hidden u-bg-brand u-border-brand">
+                                    <i class="fas fa-chart-pie"></i>
+                                    <span>开始分析</span>
+                                </button>
+                                <button type="button" id="export-analysis-data" class="ant-btn ant-btn-default u-hidden">
+                                    <i class="fas fa-download"></i>
+                                    <span>导出结果</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 数据显示区域 -->
+                    <div id="analysis-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="analysis-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+
+                    <!-- 数据分析图表区域 -->
+                    <div class="u-hidden" id="analysis-charts-container">
+                        <div class="charts-row">
+                            <div class="ant-card ant-card-bordered chart-card">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-title">数据透视</div>
+                                </div>
+                                <div class="ant-card-body">
+                                    <div class="u-w-full u-h-400" id="analysis-chart-main"></div>
+                                </div>
+                            </div>
+                            <div class="ant-card ant-card-bordered chart-card">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-title">Issue 分布</div>
+                                </div>
+                                <div class="ant-card-body">
+                                    <div class="u-w-full u-h-400" id="analysis-chart-bar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- CVP7 模块卡片 -->
+            <div id="section-11" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">CVP7 模块</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-network-wired u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">CVP7 功能模块</h3>
+                            <ul class="section-desc">
+                                <li>此模块正在开发中...</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- T-4 report 模块卡片 -->
+            <div id="section-12" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-t2">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Outstanding T-4 connectivity</div>
+                        <div class="ant-card-extra"><span id="t2-data-badge" class="ant-tag ant-tag-success u-hidden">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-file-alt u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">获取 T-4 报表数据</h3>
+                            <ul class="section-desc">
+                                <li>系统将从 Salesforce 获取 T-4 报表数据</li>
+                                <li><strong>日期范围：</strong>
+                                    <ul>
+                                        <li><strong>默认逻辑：</strong>如果是周五，获取未来3天（周六、周日及下周一）的数据；其他时间获取未来2天的数据。</li>
+                                        <li><strong>自定义：</strong>您也可以在下方输入框中指定要查询的未来天数。</li>
+                                    </ul>
+                                </li>
+                                <li><strong>筛选条件：</strong>
+                                    <ul>
+                                        <li><strong>订单性质：</strong> 新装、外部移机、内部移机。</li>
+                                        <li><strong>状态：</strong> 排除已完成、已取消或无效的订单。</li>
+                                        <li><strong>排除：</strong> Fulfillment Detail 包含 "INVENTORY ASSIGNED" 或 "INVENTORY READY" 的记录。</li>
+                                    </ul>
+                                </li>
+                                <li class="u-text-secondary u-fs-sm">* 此操作可能需要几分钟时间，请耐心等待。</li>
+                            </ul>
+                        </div>
+                        
+                        <form id="t2-data-form" class="unified-form">
+                            <div class="form-group u-mb-16">
+                                <label class="u-block u-mb-8 u-text-secondary" for="t2-days-input">自定义未来天数 (可选)</label>
+                                <input type="number" id="t2-days-input" class="ant-input u-text-center" placeholder="默认: 周五3天，其他2天" min="1" max="30">
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" name="get_t2_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-cloud-download-alt"></i>
+                                    <span>立即获取数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="t2-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-t2-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>导出Excel</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="t2-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="t2-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- T-4 Outstanding分析 模块卡片 -->
+            <div id="section-13" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-t2">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">T-4 Outstanding分析</div>
+                        <div class="ant-card-extra"><span id="t2-analysis-file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-chart-bar u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">T-4 Outstanding 数据分析</h3>
+                            <ul class="section-desc">
+                                <li>上传 T-4 Excel 数据文件进行分析</li>
+                                <li>可选择上传规则文件自定义分析逻辑</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <form id="t2-analysis-file-upload-form" class="unified-upload-area" enctype="multipart/form-data">
+                        <div class="analysis-layout u-flex u-gap-20">
+                            <!-- 左侧：Excel 文件上传 (60%) -->
+                            <div class="analysis-left u-flex-6">
+                                <div class="form-group u-h-full">
+                                    <div class="upload-drag-wrapper" id="t2-analysis-upload-wrapper">
+                                        <div class="upload-icon">
+                                            <i class="fas fa-cloud-upload-alt u-text-brand"></i>
+                                        </div>
+                                        <p class="upload-text">点击或拖拽文件到此区域上传</p>
+                                        <p class="upload-hint">仅支持 .xlsx 格式的Excel文件</p>
+                                        <input class="u-hidden" type="file" id="t2-analysis-file" name="file" accept=".xlsx">
+                                    </div>
+                                </div>
+                                
+                                <!-- Sheet 选择器容器 -->
+                                <div class="u-mt-16 u-hidden" id="t2-sheet-selector-container">
+                                    <div class="u-mb-8 u-fw-500">选择工作表 (Sheet)</div>
+                                    <select id="t2-sheet-selector" class="ant-input u-w-full">
+                                        <!-- 选项将通过 JS 动态插入 -->
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- 右侧：规则上传和列表 (40%) -->
+                            <div class="analysis-right u-flex-4 u-flex u-flex-col">
+                                <!-- 规则文件上传 -->
+                                <div class="form-group u-mb-16">
+                                    <div class="u-mb-8 u-fw-500">自定义规则 (可选)</div>
+                                    <label class="file-upload ant-upload-drag u-p-16 u-minh-auto" for="t2-rules-file">
+                                        <div class="ant-upload-drag-container u-flex u-items-center u-justify-center u-gap-16">
+                                            <i class="fas fa-code u-fs-3xl u-text-brand"></i>
+                                            <div>
+                                                <p class="ant-upload-text u-m-0">点击上传 JSON 规则文件</p>
+                                                <p class="ant-upload-hint u-m-0 u-fs-xs">如果不上传，将使用默认规则</p>
+                                            </div>
+                                        </div>
+                                        <input class="u-hidden" type="file" id="t2-rules-file" name="rules_file" accept=".json">
+                                    </label>
+                                    <div class="u-mt-8 u-fs-xs u-text-brand u-hidden u-items-center u-gap-8" id="t2-rules-file-info">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span id="t2-rules-file-name"></span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 规则列表容器 -->
+                                <div class="u-flex-1 u-border u-radius-sm u-p-10 u-ov-y-auto u-maxh-300 u-hidden" id="t2-rules-list-container">
+                                    <div class="u-fw-500 u-mb-8 u-border-bottom u-pb-8 u-flex u-justify-between u-items-center">
+                                        <span>规则列表</span>
+                                        <span class="u-fs-xs u-text-light">可拖拽排序或使用按钮</span>
+                                    </div>
+                                    <ul class="u-list-none u-p-0 u-m-0" id="t2-rules-list">
+                                        <!-- 规则项将通过 JS 动态插入 -->
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="action-buttons">
+                            <button type="button" id="analyze-t2-data-btn" class="ant-btn ant-btn-primary u-hidden u-bg-brand u-border-brand">
+                                <i class="fas fa-chart-pie"></i>
+                                <span>开始分析</span>
+                            </button>
+                            <button type="button" id="export-t2-analysis-data" class="ant-btn ant-btn-default u-hidden">
+                                <i class="fas fa-download"></i>
+                                <span>导出结果</span>
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="t2-analysis-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="t2-analysis-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+
+                    <!-- ECharts 图表区域 -->
+                    <div class="u-hidden u-mt-32" id="t2-analysis-charts-container">
+                        <div class="charts-row">
+                            <div class="ant-card ant-card-bordered chart-card">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-title">订单状态分布</div>
+                                </div>
+                                <div class="ant-card-body">
+                                    <div class="u-w-full u-h-400" id="t2-analysis-chart-status"></div>
+                                </div>
+                            </div>
+                            <div class="ant-card ant-card-bordered chart-card">
+                                <div class="ant-card-head">
+                                    <div class="ant-card-head-title">履行状态分布</div>
+                                </div>
+                                <div class="ant-card-body">
+                                    <div class="u-w-full u-h-400" id="t2-analysis-chart-fulfillment"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <!-- 中午吃乜 模块卡片 -->
+            <div id="section-14" class="unified-card ant-card ant-card-bordered step-section theme-lunch">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">中午吃乜</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-utensils u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">今天中午吃什么？</h3>
+                            <ul class="section-desc">
+                                <li>不知道吃什么？让系统帮你决定！</li>
+                                <li>导入包含餐厅信息的 JSON 文件</li>
+                                <li>点击"摇一摇"随机选择一个地点</li>
+                            </ul>
+                        </div>
+
+                        <form id="lunch-file-upload-form" class="unified-upload-area">
+                            <div class="upload-drag-wrapper" id="lunch-upload-wrapper">
+                                <div class="upload-icon">
+                                    <i class="fas fa-file-import u-text-brand"></i>
+                                </div>
+                                <p class="upload-text">点击或拖拽 JSON 文件到此区域上传</p>
+                                <p class="upload-hint">支持 .json 格式文件</p>
+                                <input class="u-hidden" type="file" id="lunch-file" name="file" accept=".json">
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div id="lunch-actions" class="action-buttons u-hidden u-justify-center">
+                        <button type="button" id="shake-lunch-btn" class="ant-btn ant-btn-primary ant-btn-lg u-bg-brand u-border-brand u-h-50 u-fs-xl u-px-40">
+                            <i class="fas fa-dice"></i>
+                            <span>摇一摇</span>
+                        </button>
+                    </div>
+                    <div class="u-mt-16 u-text-center u-text-secondary">
+                        已加载 <span id="lunch-place-count">0</span> 个地点
+                    </div>
+                    
+                    <!-- 地点列表显示区域 -->
+                    <div class="u-mt-32 u-w-full u-maxw-600 u-ml-auto u-mr-auto u-hidden u-text-center" id="lunch-list-container">
+                        <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                            <span class="ant-divider-inner-text">可选地点</span>
+                        </div>
+                        <div class="u-flex u-flex-wrap u-gap-10 u-justify-center" id="lunch-list">
+                            <!-- 地点标签将通过 JS 动态插入 -->
+                        </div>
+                    </div>
+
+                    <!-- 结果显示区域 -->
+                    <div class="u-mt-32 u-hidden" id="lunch-result-container">
+                        <div class="ant-card ant-card-bordered u-w-300 u-mx-auto u-border-brand">
+                            <div class="ant-card-body u-text-center u-p-32">
+                                <h2 class="u-text-brand u-mb-8" id="lunch-result-name">-</h2>
+                                <p class="u-text-secondary u-mb-0" id="lunch-result-desc">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Bulk 操作 模块卡片 -->
+            <div id="section-15" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Bulk 操作</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-database u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">Bulk 2.0 查询</h3>
+                            <ul class="section-desc">
+                                <li>输入 SOQL 语句创建 Bulk 查询任务，或输入 Job ID 查看进度和结果。</li>
+                            </ul>
+                        </div>
+
+                        <div class="u-maxw-800 u-mx-auto">
+                            <div class="form-group u-mb-24">
+                                <label class="u-block u-mb-8 u-fw-500" for="bulk-soql-input">SOQL 查询语句</label>
+                                <textarea id="bulk-soql-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10000"></textarea>
+                            </div>
+                            <div class="form-group u-text-right u-mb-32">
+                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                    <i class="fas fa-play"></i> 创建 Bulk 任务
+                                </button>
+                            </div>
+
+                            <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                <span class="ant-divider-inner-text">任务状态查询</span>
+                            </div>
+
+                            <div class="form-group u-mb-24 u-flex u-gap-10 u-items-center">
+                                <input type="text" id="bulk-job-id-input" class="ant-input u-flex-1" placeholder="输入 Job ID (例如: 750xx0000000001AAA)">
+                                <button type="button" id="check-bulk-job-btn" class="ant-btn ant-btn-default">
+                                    <i class="fas fa-sync-alt"></i> 查询状态
+                                </button>
+                                <div class="u-hidden u-gap-10" id="download-bulk-actions">
+                                    <button type="button" id="download-bulk-csv-btn" class="ant-btn ant-btn-primary">
+                                        <i class="fas fa-file-csv"></i> 下载 CSV
+                                    </button>
+                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                        <i class="fas fa-file-archive"></i> 下载 ZIP
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="u-hidden u-bg-tertiary u-p-16 u-radius-sm u-border" id="bulk-job-status-container">
+                                <h4 class="u-mt-0 u-mb-16">任务状态</h4>
+                                <div class="u-font-mono u-pre-wrap u-break-all" id="bulk-job-status-content"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 正在运行的 Job 表格 -->
+                    <div class="u-mt-32">
+                        <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                            <span class="ant-divider-inner-text">正在运行的 Bulk Job</span>
+                        </div>
+                        <div id="bulk-jobs-container">
+                            <div class="u-flex u-justify-end u-mb-16">
+                                <button type="button" id="refresh-bulk-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm">
+                                    <i class="fas fa-sync-alt"></i> 刷新
+                                </button>
+                            </div>
+                            <div class="unified-table-wrapper u-border u-radius-md u-ov-hidden">
+                                <div id="bulk-jobs-table" class="data-table"></div>
+                            </div>
+                        </div>
+                        <div class="u-text-center u-p-32 u-text-secondary u-hidden" id="bulk-jobs-empty">
+                            <i class="fas fa-check-circle u-fs-3xl u-text-success u-mb-8"></i>
+                            <p>当前没有正在运行的 Bulk Job</p>
+                        </div>
+                        <div class="u-text-center u-p-32 u-text-secondary u-hidden" id="bulk-jobs-loading">
+                            <i class="fas fa-spinner fa-spin u-fs-3xl"></i>
+                            <p>正在加载 Bulk Job 信息...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- PCD PID Fallout 模块卡片 -->
+            <div id="section-16" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Data issue - PID fallout</div>
+                        <div class="ant-card-extra"><span id="pcd-pid-fallout-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-exclamation-triangle u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">PCD PID Fallout</h3>
+                            <ul class="section-desc">
+                                <li>查询存在 Fulfillment Data Issue 的订单项</li>
+                                <li><strong>筛选条件：</strong>
+                                    <ul>
+                                        <li>Fulfillment ID 不为空</li>
+                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
+                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <form id="pcd-pid-fallout-data-form" class="unified-form">
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_pid_fallout_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-search"></i>
+                                    <span>查询数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="pcd-pid-fallout-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-pcd-pid-fallout-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>下载CSV</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-pid-fallout-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-pid-fallout-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Data issue - QC issue 模块卡片 -->
+            <div id="section-17" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Data issue - QC issue</div>
+                        <div class="ant-card-extra"><span id="pcd-qc-issue-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-search u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">PCD QC Issue</h3>
+                            <ul class="section-desc">
+                                <li>查询存在 Fulfillment Data Issue 的订单及其 OrchestrationItem 数据</li>
+                                <li><strong>筛选条件：</strong>
+                                    <ul>
+                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
+                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
+                                        <li>订单状态不为 'Cancelled'</li>
+                                    </ul>
+                                </li>
+                                <li><strong>数据关联：</strong>
+                                    <ul>
+                                        <li>关联查询 OrchestrationItem (callout-noss/callout-opg)</li>
+                                        <li>按 Last_Submitted_Date__c 升序排列</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <form id="pcd-qc-issue-data-form" class="unified-form">
+                            <div class="form-group">
+                                <button type="submit" name="get_pcd_qc_issue_data" class="ant-btn ant-btn-primary fetch-btn">
+                                    <i class="fas fa-search"></i>
+                                    <span>查询数据</span>
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="pcd-qc-issue-data-actions" class="action-buttons u-hidden">
+                            <button type="button" id="export-pcd-qc-issue-data" class="ant-btn ant-btn-default">
+                                <i class="fas fa-download"></i>
+                                <span>下载CSV</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 数据显示区域 -->
+                    <div id="pcd-qc-issue-data-container" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>数据预览</h4>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="pcd-qc-issue-data-table" class="data-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Execute Anonymous 模块卡片 -->
+            <div id="section-18" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Execute Anonymous</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-code u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">Execute Anonymous Apex</h3>
+                            <ul class="section-desc">
+                                <li>输入 Apex 代码并在 Salesforce 环境中执行</li>
+                            </ul>
+                        </div>
+
+                        <div class="u-maxw-900 u-mx-auto">
+                            <div class="form-group u-mb-24">
+                                <label class="u-block u-mb-8 u-fw-500" for="apex-code-input">Apex 代码</label>
+                                <textarea id="apex-code-input" class="ant-input" rows="12" placeholder="// 输入您的 Apex 代码
+System.debug('Hello World');"></textarea>
+                            </div>
+                            <div class="form-group u-text-right u-mb-32">
+                                <button type="button" id="execute-anonymous-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
+                                    <i class="fas fa-play"></i> 执行代码
+                                </button>
+                            </div>
+
+                            <div class="u-hidden u-mt-32" id="anonymous-result-container">
+                                <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                    <span class="ant-divider-inner-text">执行结果</span>
+                                </div>
+                                <div class="u-bg-code u-text-code u-p-16 u-radius-sm u-font-code u-pre-wrap u-break-all u-maxh-400 u-ov-y-auto" id="anonymous-result-content"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Schedule Jobs 模块卡片 -->
+            <div id="section-19" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-schedule">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Schedule Jobs</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon u-bg-theme">
+                                <i class="fas fa-clock u-text-brand"></i>
+                            </div>
+                            <h3 class="section-title">Chrome Alarm Jobs</h3>
+                            <ul class="section-desc">
+                                <li>使用 Chrome Alarm API 创建和管理本地定时任务</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="u-maxw-1200 u-mx-auto">
+                        <!-- 创建任务表单 -->
+                        <div class="ant-card ant-card-bordered u-mb-24">
+                            <div class="ant-card-head">
+                                <div class="ant-card-head-wrapper">
+                                    <div class="ant-card-head-title">创建新任务</div>
+                                </div>
+                            </div>
+                            <div class="ant-card-body">
+                                <div class="u-flex u-gap-16 u-flex-wrap u-items-end">
+                                    <div class="form-group u-flex-1 u-minw-200">
+                                        <label class="u-block u-mb-8 u-fw-500" for="schedule-job-name">任务名称</label>
+                                        <input type="text" id="schedule-job-name" class="ant-input" placeholder="输入任务名称" />
+                                    </div>
+                                    <div class="form-group u-flex-fixed-150">
+                                        <label class="u-block u-mb-8 u-fw-500" for="schedule-job-delay">延迟(分钟)</label>
+                                        <input type="number" id="schedule-job-delay" class="ant-input" value="1" min="0" placeholder="延迟分钟数" />
+                                    </div>
+                                    <div class="form-group u-flex-fixed-150">
+                                        <label class="u-block u-mb-8 u-fw-500" for="schedule-job-period">周期(分钟)</label>
+                                        <input type="number" id="schedule-job-period" class="ant-input" value="" min="0" placeholder="留空则不重复" />
+                                    </div>
+                                    <div class="form-group u-flex-none">
+                                        <button type="button" id="create-schedule-job-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
+                                            <i class="fas fa-plus"></i> 创建任务
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Jobs 列表卡片 -->
+                        <div class="ant-card ant-card-bordered u-mb-24">
+                            <div class="ant-card-head">
+                                <div class="ant-card-head-wrapper u-flex u-items-center u-justify-between">
+                                    <div class="ant-card-head-title">定时任务列表</div>
+                                    <div class="u-flex u-gap-8">
+                                        <button type="button" id="refresh-schedule-jobs-btn" class="ant-btn ant-btn-primary ant-btn-sm u-bg-brand u-border-brand">
+                                            <i class="fas fa-sync"></i> 刷新列表
+                                        </button>
+                                        <button type="button" id="clear-all-schedule-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm u-text-error u-border-error">
+                                            <i class="fas fa-trash-alt"></i> 清除所有
+                                        </button>
+                                    </div>
+                                </div>
+                                </div>
+                                <div class="ant-card-body u-p-0">
+                                    <div id="schedule-jobs-container">
+                                        <div class="u-text-center u-p-32 u-text-secondary" id="schedule-jobs-loading">
+                                            <i class="fas fa-spinner fa-spin"></i> 正在加载...
+                                        </div>
+                                        <div class="u-text-center u-p-32 u-text-secondary u-hidden" id="schedule-jobs-empty">
+                                            <i class="fas fa-inbox u-fs-icon-2xl u-mb-16"></i>
+                                            <p>暂无定时任务</p>
+                                        </div>
+                                        <table id="schedule-jobs-table" class="schedule-jobs-table u-hidden u-w-full u-collapse u-table-fixed">
+                                            <colgroup>
+                                                <col class="u-w-25p">
+                                                <col class="u-w-10p">
+                                                <col class="u-w-10p">
+                                                <col class="u-w-15p">
+                                                <col class="u-w-25p">
+                                                <col class="u-w-15p">
+                                            </colgroup>
+                                            <thead>
+                                                <tr class="u-bg-tertiary u-border-bottom">
+                                                    <th>任务名称</th>
+                                                    <th>类型</th>
+                                                    <th>状态</th>
+                                                    <th>周期(分钟)</th>
+                                                    <th>下次执行</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="schedule-jobs-list">
+                                                
+                                                <!-- Jobs will be rendered here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：SOQL 数据导出（section-23） ===== -->
+                <div id="section-23" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">SOQL 数据导出</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon u-bg-theme">
+                                    <i class="fas fa-search u-text-brand"></i>
+                                </div>
+                                <h3 class="section-title">SOQL 查询</h3>
+                                <ul class="section-desc">
+                                    <li>输入 SOQL 执行查询，支持自动补全对象/字段、查询历史、自动翻页（上限 50000 行），结果可导出 Excel / CSV。</li>
+                                </ul>
+                            </div>
+
+                            <div class="u-maxw-1000 u-mx-auto">
+                                <div class="form-group u-mb-16">
+                                    <label class="u-block u-mb-8 u-fw-500" for="soql-object-input">对象（用于字段自动补全，可留空）</label>
+                                    <input type="text" id="soql-object-input" class="ant-input u-maxw-480" list="soql-object-list" placeholder="例如: Order / Account / Custom_Object__c">
+                                    <datalist id="soql-object-list"></datalist>
+                                    <datalist id="soql-field-list"></datalist>
+                                </div>
+                                <div class="form-group u-mb-16">
+                                    <div class="u-flex u-justify-between u-items-center u-mb-8">
+                                        <label class="u-fw-500" for="soql-query-input">SOQL 查询语句</label>
+                                        <select id="soql-history-select" class="ant-input u-maxw-360"></select>
+                                    </div>
+                                    <textarea id="soql-query-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 100"></textarea>
+                                </div>
+                                <div class="form-group u-flex u-gap-12 u-items-center u-text-right u-mb-16">
+                                    <label class="u-flex u-items-center u-gap-6 u-fs-sm">
+                                        <input type="checkbox" id="soql-query-all"> 含已删除记录（queryAll）
+                                    </label>
+                                    <span class="u-flex-1"></span>
+                                    <button type="button" id="run-soql-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                        <i class="fas fa-play"></i> 执行查询
+                                    </button>
+                                </div>
+                                <div class="u-mb-12 u-text-secondary u-fs-sm" id="soql-result-info"></div>
+                                <div class="u-hidden u-gap-10 u-mb-16" id="soql-export-actions">
+                                    <button type="button" id="export-soql-xlsx-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                        <i class="fas fa-file-excel"></i> 导出 Excel
+                                    </button>
+                                    <button type="button" id="export-soql-csv-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-file-csv"></i> 导出 CSV
+                                    </button>
+                                </div>
+                                <div id="soql-result-table"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：批量数据导入（section-24） ===== -->
+                <div id="section-24" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">批量数据导入</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon u-bg-theme">
+                                    <i class="fas fa-file-import u-text-brand"></i>
+                                </div>
+                                <h3 class="section-title">Data Import</h3>
+                                <ul class="section-desc">
+                                    <li>上传 CSV / Excel，映射字段后批量执行 insert / update / upsert，支持失败明细导出。</li>
+                                </ul>
+                            </div>
+
+                            <div class="u-maxw-1000 u-mx-auto">
+                                <div class="form-group u-mb-16">
+                                    <label class="u-block u-mb-8 u-fw-500">数据文件（.csv / .xlsx，首行为表头）</label>
+                                    <input type="file" id="import-file-input" class="ant-input" accept=".csv,.xlsx,.xls">
+                                    <div class="u-mt-6 u-text-secondary u-fs-sm" id="import-file-info"></div>
+                                </div>
+                                <div class="form-group u-mb-16 u-flex u-gap-12 u-flex-wrap">
+                                    <div class="u-flex-1 u-minw-220">
+                                        <label class="u-block u-mb-8 u-fw-500" for="import-object-input">目标对象 API 名称</label>
+                                        <input type="text" id="import-object-input" class="ant-input" placeholder="例如: Order_Item__c">
+                                    </div>
+                                    <div class="u-flex-fixed-180">
+                                        <label class="u-block u-mb-8 u-fw-500" for="import-op-select">操作类型</label>
+                                        <select id="import-op-select" class="ant-input">
+                                            <option value="insert">insert（新增）</option>
+                                            <option value="update">update（更新）</option>
+                                            <option value="upsert">upsert（存在则更新）</option>
+                                        </select>
+                                    </div>
+                                    <div class="u-flex-fixed-140">
+                                        <label class="u-block u-mb-8 u-fw-500" for="import-batch-size">批大小（≤200）</label>
+                                        <input type="number" id="import-batch-size" class="ant-input" value="200" min="1" max="200">
+                                    </div>
+                                </div>
+                                <div class="u-hidden u-mb-24" id="import-mapping-wrapper">
+                                    <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                        <span class="ant-divider-inner-text">字段映射</span>
+                                    </div>
+                                    <div id="import-mapping-container"></div>
+                                </div>
+                                <div class="u-text-right u-mb-16">
+                                    <button type="button" id="run-import-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                        <i class="fas fa-upload"></i> 开始导入
+                                    </button>
+                                </div>
+                                <div class="u-mb-12 u-text-secondary u-fs-sm" id="import-result-info"></div>
+                                <div id="import-result-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：Metadata 工具（section-25） ===== -->
+                <div id="section-25" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">Metadata 工具</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon u-bg-theme">
+                                    <i class="fas fa-box-open u-text-brand"></i>
+                                </div>
+                                <h3 class="section-title">Metadata 检索 / 打包下载</h3>
+                                <ul class="section-desc">
+                                    <li>按类型检索组织内组件（Apex 类、报表、Layout 等），一键打包下载 Metadata zip。</li>
+                                </ul>
+                            </div>
+
+                            <div class="u-maxw-1000 u-mx-auto">
+                                <div class="form-group u-mb-16 u-flex u-gap-10 u-items-end u-flex-wrap">
+                                    <div class="u-flex-1 u-minw-260">
+                                        <label class="u-block u-mb-8 u-fw-500" for="metadata-type-select">Metadata 类型</label>
+                                        <select id="metadata-type-select" class="ant-input"><option value="">-- 请先加载类型 --</option></select>
+                                    </div>
+                                    <div class="u-flex-fixed-180">
+                                        <label class="u-block u-mb-8 u-fw-500" for="metadata-folder-input">文件夹（Report 等类型可选）</label>
+                                        <input type="text" id="metadata-folder-input" class="ant-input" placeholder="留空=全部">
+                                    </div>
+                                    <button type="button" id="load-metadata-types-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-list"></i> 加载类型
+                                    </button>
+                                    <button type="button" id="list-metadata-members-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                        <i class="fas fa-search"></i> 检索成员
+                                    </button>
+                                </div>
+                                <div class="u-mb-12 u-text-secondary u-fs-sm" id="metadata-list-info"></div>
+                                <div class="u-mb-24" id="metadata-members-table"></div>
+                                <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                    <span class="ant-divider-inner-text">打包下载</span>
+                                </div>
+                                <div class="form-group u-mb-16">
+                                    <label class="u-block u-mb-8 u-fw-500" for="metadata-members-input">手动指定成员 FullName（可选，逗号或换行分隔；留空则下载上面检索到的全部成员）</label>
+                                    <textarea id="metadata-members-input" class="ant-input" rows="3" placeholder="例如: MyApexClass1, MyApexClass2"></textarea>
+                                </div>
+                                <div class="u-flex u-gap-12 u-items-center">
+                                    <button type="button" id="metadata-retrieve-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                        <i class="fas fa-download"></i> 打包下载 (.zip)
+                                    </button>
+                                    <span class="u-text-secondary u-fs-sm" id="metadata-retrieve-status"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== Inspector 移植功能：事件监听（section-26） ===== -->
+                <div id="section-26" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">事件监听</div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon u-bg-theme">
+                                    <i class="fas fa-satellite-dish u-text-brand"></i>
+                                </div>
+                                <h3 class="section-title">Event Monitor</h3>
+                                <ul class="section-desc">
+                                    <li>通过 Streaming API（CometD）实时监听 Platform Event / Change Data Capture 事件消息。</li>
+                                </ul>
+                            </div>
+
+                            <div class="u-maxw-1000 u-mx-auto">
+                                <div class="form-group u-mb-16 u-flex u-gap-10 u-items-end u-flex-wrap">
+                                    <div class="u-flex-fixed-220">
+                                        <label class="u-block u-mb-8 u-fw-500" for="event-type-select">事件类型</label>
+                                        <select id="event-type-select" class="ant-input">
+                                            <option value="standardPlatformEvent">标准 Platform Event</option>
+                                            <option value="platformEvent">自定义 Platform Event</option>
+                                            <option value="customChannel">自定义事件通道</option>
+                                            <option value="changeEvent">Change Data Capture</option>
+                                        </select>
+                                    </div>
+                                    <div class="u-flex-1 u-minw-240">
+                                        <label class="u-block u-mb-8 u-fw-500" for="event-channel-select">事件通道</label>
+                                        <select id="event-channel-select" class="ant-input"><option value="">-- 请先加载 --</option></select>
+                                    </div>
+                                    <div class="u-flex-fixed-140">
+                                        <label class="u-block u-mb-8 u-fw-500" for="event-replay-input">Replay Id</label>
+                                        <input type="number" id="event-replay-input" class="ant-input" value="-1">
+                                    </div>
+                                    <button type="button" id="event-reload-channels-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-sync-alt"></i> 刷新通道
+                                    </button>
+                                </div>
+                                <div class="form-group u-mb-16">
+                                    <label class="u-block u-mb-8 u-fw-500" for="event-custom-channel-input">手动指定通道（可选，直接填通道名或完整路径，如 My_Event__e）</label>
+                                    <input type="text" id="event-custom-channel-input" class="ant-input" placeholder="留空则使用上面选择的通道">
+                                    <div class="u-mt-6 u-text-secondary u-fs-xs" id="event-prefix-hint">通道前缀：/event/</div>
+                                </div>
+                                <div class="form-group u-flex u-gap-10 u-items-center u-mb-16">
+                                    <button type="button" id="event-subscribe-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                        <i class="fas fa-headphones"></i> 开始监听
+                                    </button>
+                                    <button type="button" id="event-unsubscribe-btn" class="ant-btn ant-btn-default" disabled>
+                                        <i class="fas fa-stop"></i> 停止监听
+                                    </button>
+                                    <button type="button" id="event-clear-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-broom"></i> 清空
+                                    </button>
+                                    <button type="button" id="event-export-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-file-code"></i> 导出 JSON
+                                    </button>
+                                    <span class="u-flex-1"></span>
+                                    <span class="u-text-secondary u-fs-sm" id="event-log-count">0 条</span>
+                                </div>
+                                <div class="u-mb-12 u-text-secondary u-fs-sm" id="event-status"></div>
+                                <div id="event-log-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- ===== Org Dashboard：Salesforce Org Limits 用量看板（section-27） ===== -->
+                <div id="section-27" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                    <div class="ant-card-head">
+                        <div class="ant-card-head-wrapper">
+                            <div class="ant-card-head-title">Org Dashboard</div>
+                            <div class="ant-card-extra">
+                                <button type="button" class="ant-btn ant-btn-primary ant-btn-sm" id="org-limits-refresh-btn">
+                                    <i class="fas fa-sync"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ant-card-body">
+                        <div class="section-content">
+                            <div class="section-header">
+                                <div class="section-icon u-bg-theme">
+                                    <i class="fas fa-tachometer-alt u-text-brand"></i>
+                                </div>
+                                <h3 class="section-title">Org Limits 用量</h3>
+                                <ul class="section-desc">
+                                    <li>通过 Limits API 实时展示当前 Org 的限额用量：API 调用、数据 / 文件存储等。</li>
+                                    <li>进度条颜色：<strong>60% 以上</strong>为警告色、<strong>85% 以上</strong>为危险色，接近上限时请控制批量操作节奏。</li>
+                                </ul>
+                            </div>
+                            <div id="org-limits-content">
+                                <div class="org-limits-loading">
+                                    <i class="fas fa-spinner fa-spin"></i> 正在从 Salesforce 获取 Org Limits...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <!-- Loading Mask -->
+    <div id="loading-mask" class="loading-mask u-hidden">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">
+                <h3>正在从Salesforce获取数据...</h3>
+                <p id="loading-count">已获取 <span id="record-count">0</span> 条记录</p>
+            </div>
+        </div>
+        <!-- 日志显示区域 -->
+        <div id="loading-log" class="loading-log u-hidden">
+            <div class="loading-log-header">处理日志</div>
+            <div id="loading-log-content" class="loading-log-content"></div>
+        </div>
+    </div>
+    
+    <!-- 引入自定义JavaScript -->
+    <!-- 保持 type="module"：src/app.js 是原生 ESM，去掉会报
+         "Cannot use import statement outside a module"；
+         而打包产物 dist/app.js 是自包含 IIFE，用 module 方式加载同样正常 -->
+    <script src="./app.js" type="module"></script>
+</body>
+</html>

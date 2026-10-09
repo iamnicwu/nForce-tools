@@ -3,8 +3,12 @@
 # 曾因笔误写成 `.node_modules`（前面多一个点）导致 21781 个依赖文件被提交进公开仓库。
 node_modules/
 build/
-dist/
 dist_backup_before_inspector_tools/
+
+# dist/ **有意改为入库**（2026-10-09）：GitHub 上要能直接拿到「已打包好的扩展目录」，
+# 不必先本地跑 npm run build。代价是每次构建都会产生 diff（4 个 chunk 文件名带内容 hash）。
+# 提交约定：dist 单独开一个 commit，别和源码改动混在一起 —— 回滚源码时不必连带回滚产物。
+# ⚠️ dist/ 里的所有文件都由 `npm run build` 生成，**不要手改**；改 src/ 后重新构建再提交。
 
 # 打包快照（每个约 1MB）
 # 用通配符而不是逐个列名字：曾因只列了旧版本，`src 4.2.1.zip` 漏网成为未跟踪文件。
