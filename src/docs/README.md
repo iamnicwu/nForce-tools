@@ -189,6 +189,7 @@ nForce-tools/
 │   ├── icons/             # 图标资源
 │   ├── rules/             # 规则配置（含首页布局 ui_layout.json）
 │   └── docs/              # 文档（本文件）
+├── .github/workflows/build.yml   # CI：构建 + 一致性自检 + 单测 + dist 同步核对
 ├── vite.config.mjs    # 构建配置（Vite，内核 Rolldown）
 ├── tools/             # 构建与自检脚本
 │   ├── build-plan.mjs         # 打包入口 + 逐字复制清单（构建与自检共用同一份）
@@ -220,6 +221,7 @@ nForce-tools/
    其余文件（三个页面 HTML / manifest / service worker / 内容脚本 / 静态资源 / 第三方库）**逐字复制**，
    不做压缩也不改写 —— 改这条清单时构建脚本与 `npm run check:ui` 会同时跟着变。
    改完必须跑 `npm run check:ui`：它的 J 组会校验 HTML / manifest 里的相对引用在 `dist/` 里真的可达。
+   **`dist/` 已入库**，所以改完源码要重新构建、并把 `dist/` 单独提交一个 commit（CI 会核对两者是否同步）。
 
 ## 技术栈
 
@@ -266,6 +268,8 @@ nForce-tools/
 - 打包入口与「逐字复制清单」抽成单一来源 `tools/build-plan.mjs`，构建配置与 `npm run check:ui` 共用同一份：以后换打包器，一致性自检不会再静默失效。
 - `npm run check:ui` 的 J 组重写为「入口产物必须被手写 HTML 引用得上、且入口 bundle 的静态依赖链完整」，守的仍是「页面变空壳、而控制台一个报错都没有」那类故障。
 - 逐字复制的第三方库不再被二次压缩，与 `src/` 逐字节一致（许可证声明原样留在文件内）。
+- **`dist/` 纳入版本管理**：可直接从仓库取用「已打包好的扩展目录」，不必先本地构建。代价是每次构建都会产生 diff，因此约定 **`dist/` 单独提交一个 commit**、且**不要手改 `dist/` 里的任何文件**（全部由 `npm run build` 生成）。
+- **CI 换成 Vite 版**：原先自动生成的 `.github/workflows/webpack.yml`（内容是 `npx webpack`）在迁移后必然报红，已替换为 `.github/workflows/build.yml` —— `npm ci` → 构建 → 一致性自检 → 单元测试，最后核对 `dist/` 是否与源码同步。
 
 ### v4.1 (2026-09-24)
 
