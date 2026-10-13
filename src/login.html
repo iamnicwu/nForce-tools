@@ -138,33 +138,34 @@
             margin-top: 8px;
         }
         
+        /* 登录页按钮与主应用的主操作按钮对齐：同样是 44px 高、--radius-md 圆角、
+           hover 只变色不位移。原先这里是 50px + translateY(-2px) 上浮，
+           于是同一个扩展里「点登录」和「点获取数据」手感不一样。 */
         .login-btn {
             width: 100%;
-            height: 50px;
+            height: 44px;
             background: var(--primary-color);
             border: none;
-            border-radius: 6px;
-            color: white;
+            border-radius: var(--radius-md);
+            color: var(--text-inverse);
             font-size: var(--fs-lg);
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: background-color 0.2s, box-shadow 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
         }
         
-        .login-btn:hover {
-            transform: translateY(-2px);
+        .login-btn:hover:not(:disabled) {
             background: var(--primary-hover);
-            box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
+            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.28);
         }
         
         .login-btn:disabled {
             background: var(--border-color);
             cursor: not-allowed;
-            transform: none;
             box-shadow: none;
         }
         

@@ -12,7 +12,7 @@ import { createLogger } from "../common/logger.js";
 
 const log = createLogger("SESSION");
 import { appState } from "./state.js";
-import { showNotification, escapeHtml } from "../common/utils.js";
+import { showNotification, escapeHtml, formatDateTime } from "../common/utils.js";
 // 本模块是「点了才渲染」的懒加载页，注入的 <i class="fas fa-*"> 需要手动替换成
 // SVG（项目没有 FontAwesome 字体，漏替换就是 3 个空白方块）。
 import { replaceIcons } from "../common/icons.js";
@@ -127,7 +127,7 @@ function buildHtml() {
 
 /** 拼一份纯文本，供「复制全部」使用 */
 function buildPlainText() {
-  const now = typeof dayjs === "function" ? dayjs().format("YYYY-MM-DD HH:mm:ss") : new Date().toLocaleString();
+  const now = formatDateTime();
   return [
     "nForce Tools - Salesforce Session",
     `生成时间: ${now}`,

@@ -138,6 +138,22 @@
                     </div>
                 </div>
                 <div class="ant-card-body">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <i class="fas fa-plug u-text-brand"></i>
+                        </div>
+                        <div class="section-desc">
+                            <p>粘贴 Session ID，或者直接用浏览器里已登录的 Salesforce 会话。</p>
+                            <details class="fn-more">
+                                <summary>两种连接方式怎么选</summary>
+                                <ul>
+                                    <li>手动：从 Salesforce 开发者控制台复制 Session ID，粘到下面。</li>
+                                    <li>自动：浏览器里还登录着 Salesforce 时，用 Cookie 换一个新会话，不必手动粘贴。</li>
+                                    <li>会话过期会自动重连（含用着用着突然失效的情况），平时不用管；长时间连不上才需要点一次。</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
                     <div class="u-maxw-600 u-mx-auto">
                         <form id="session-id-form">
                             <div class="form-group">
@@ -199,8 +215,7 @@
                             </div>
                         </div>
                         <div class="u-text-secondary u-mt-16 u-text-center" id="connection-info">
-                            <p>点击"测试连接"按钮以验证Salesforce连接</p>
-                            <p class="u-fs-base">连接成功后才能进行后续操作</p>
+                            <p>Session ID 可能已过期。可以去开发者控制台重新复制一个，或改用下面的自动获取。</p>
                         </div>
 
                         <div class="u-relative u-my-32 u-text-center">
@@ -217,12 +232,8 @@
                              或想看看到底是哪一步没成功（状态行会写明原因）。 -->
                         <div class="form-group u-mb-24 u-text-center">
                             <h3 class="u-mb-8 u-fs-xl">自动获取会话</h3>
-                            <p class="u-text-secondary u-fs-base u-mb-8">
-                                浏览器里还登录着 Salesforce 时，可直接用浏览器 Cookie 换取新会话，不必手动粘贴 Session ID。
-                            </p>
                             <p class="u-text-secondary u-fs-base u-mb-16">
-                                <b>通常不必手动操作</b>：会话过期后会自动重新连接（含用着用着突然失效的情况）。
-                                只有长时间没连上时才需要点下面的按钮催一下。
+                                平时不用点，会话过期会自动重连；长时间没连上时用它催一下。
                             </p>
                             <button type="button" class="ant-btn ant-btn-primary ant-btn-lg u-w-full" id="connection-reconnect-btn">
                                 <i class="fas fa-sync-alt"></i>
@@ -271,25 +282,20 @@
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-calendar-day u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">获取当日订单数据</h3>
-                            <ul class="section-desc">
-                                <li><strong>日期范围：</strong>
+                            <div class="section-desc">
+                                <p>拉取今天的订单。周一会把周末两天一起补上。</p>
+                                <details class="fn-more">
+                                    <summary>日期范围与筛选条件</summary>
                                     <ul>
-                                        <li>如果是<strong>周一</strong>，获取<strong>周六、周日及今天</strong>的数据。</li>
-                                        <li>其他时间，仅获取<strong>今天</strong>的数据。</li>
+                                        <li>日期：周一取周六、周日加今天；其余时间只取今天。</li>
+                                        <li>产品：主产品 (Main Product)，业务线 FixedLine。</li>
+                                        <li>状态：排除已完成、已取消、已失效的订单。</li>
                                     </ul>
-                                </li>
-                                <li><strong>筛选条件：</strong>
-                                    <ul>
-                                        <li><strong>产品：</strong>主产品 (Main Product) 且业务线为 FixedLine。</li>
-                                        <li><strong>状态：</strong>排除已完成、已取消或无效的订单 (如 Activated, Cancelled, Rejected 等)。</li>
-                                    </ul>
-                                </li>
-                                <li class="u-text-secondary u-fs-sm">* 此操作可能需要几分钟时间，请耐心等待。</li>
-                            </ul>
+                                </details>
+                            </div>
                         </div>
                         
                         <form id="daily-data-form" class="unified-form">
@@ -331,6 +337,11 @@
                     </div>
                     
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="daily-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -352,20 +363,19 @@
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-chart-bar u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">获取报表统计数据</h3>
-                            <ul class="section-desc">
-                                <li><strong>日期范围：</strong> 服务请求日期 (Service Request Date) 在<strong>今天或之前</strong>。</li>
-                                <li><strong>筛选条件：</strong>
+                            <div class="section-desc">
+                                <p>查历史遗留的未完成订单，服务请求日期在今天或之前。</p>
+                                <details class="fn-more">
+                                    <summary>筛选条件</summary>
                                     <ul>
-                                        <li><strong>产品：</strong>主产品 (Main Product) 且业务线为 FixedLine。</li>
-                                        <li><strong>状态：</strong>排除已完成、已取消或无效的订单 (如 Activated, Cancelled, Rejected 等)。</li>
+                                        <li>产品：主产品 (Main Product)，业务线 FixedLine。</li>
+                                        <li>状态：排除已完成、已取消、已失效的订单。</li>
                                     </ul>
-                                </li>
-                                <li class="u-text-secondary u-fs-sm">* 此操作用于获取历史遗留未完成的订单数据。</li>
-                            </ul>
+                                </details>
+                            </div>
                         </div>
                         
                         <form id="report-data-form" class="unified-form">
@@ -393,6 +403,11 @@
                     </div>
                     
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="report-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -407,33 +422,27 @@
             <div id="section-4" class="unified-card ant-card ant-card-bordered step-section theme-lts needs-connection">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">根据上传文件获取数据</div>
+                        <div class="ant-card-head-title">获取文件数据</div>
                         <div class="ant-card-extra"><span id="file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-file-upload u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">批量查询订单状态</h3>
-                            <ul class="section-desc">
-                                <li><strong>支持的 ID 类型：</strong>
+                            <div class="section-desc">
+                                <p>上传 ID 清单，批量回查这些订单的最新状态。支持 .xlsx。</p>
+                                <details class="fn-more">
+                                    <summary>列名怎么认</summary>
                                     <ul>
-                                        <li><strong>PCD ID：</strong>列名包含 "pcd" (如 PCD ID, pcd_id)。</li>
-                                        <li><strong>LTS ID (CUST_NUM)：</strong>列名包含 "cust" (如 CUST_NUM, cust id)。</li>
+                                        <li>PCD ID：列名含 <code>pcd</code>，如 PCD ID、pcd_id。</li>
+                                        <li>LTS ID (CUST_NUM)：列名含 <code>cust</code>，如 CUST_NUM、cust id。</li>
+                                        <li>工作表与列名自动识别，重复 ID 会先去重。</li>
                                     </ul>
-                                </li>
-                                <li><strong>处理逻辑：</strong>
-                                    <ul>
-                                        <li>自动识别工作表和列名。</li>
-                                        <li>自动去重 ID。</li>
-                                        <li>批量查询 Salesforce 获取最新详情。</li>
-                                    </ul>
-                                </li>
-                                <li class="u-text-secondary u-fs-sm">* 仅支持 .xlsx 格式文件。</li>
-                            </ul>
+                                </details>
+                            </div>
                         </div>
 
                         <form id="file-upload-form" class="unified-upload-area">
@@ -459,6 +468,11 @@
                     </div>
 
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="latest-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -469,11 +483,11 @@
                     </div>
                 </div>
             </div>
-            <!-- LTS 模块卡片 -->
+            <!-- LTS 概览卡片 -->
             <div id="section-5" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-lts">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">LTS 模块</div>
+                        <div class="ant-card-head-title">LTS 概览</div>
                         <div class="ant-card-extra">
                             <label for="lts-md-upload" class="ant-btn ant-btn-sm u-pointer">
                                 <i class="fas fa-upload"></i> 更新概览
@@ -483,6 +497,14 @@
                     </div>
                 </div>
                 <div class="ant-card-body">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <i class="fas fa-home u-text-brand"></i>
+                        </div>
+                        <div class="section-desc">
+                            <p>LTS Fallout Summary 概览。右上角「更新概览」可换成你自己的 Markdown。</p>
+                        </div>
+                    </div>
                     <!-- 概览内容 -->
                     <div id="lts-summary-content" class="markdown-body u-p-16 u-lh-1-6">
                         <div class="u-text-center u-text-secondary">
@@ -685,11 +707,11 @@
                     </div>
                 </div>
             </div>
-            <!-- OTT 模块卡片 -->
+            <!-- OTT卡片 -->
             <div id="section-7" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">OTT 模块</div>
+                        <div class="ant-card-head-title">OTT</div>
                     </div>
                 </div>
                 <div class="ant-card-body">
@@ -700,26 +722,23 @@
                     </div>
                 </div>
             </div>
-            <!-- PCD 模块卡片 -->
+            <!-- PCD卡片 -->
             <div id="section-8" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">PCD 模块</div>
+                        <div class="ant-card-head-title">PCD</div>
                         <div class="ant-card-extra"><span id="pcd-daily-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-laptop-code u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">获取 PCD 所有Expired的数据</h3>
-                            <ul class="section-desc">
-                                <li>系统将从 Salesforce 获取 PCD 所有Expired的数据</li>
-                                
-                                <li class="u-text-secondary u-fs-sm">* 此操作可能需要几分钟时间，请耐心等待。</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>拉取 PCD 待跟进的订单。数据量大时跑得比较久。</p>
+                            </div>
                         </div>
                         
                         <form id="pcd-daily-data-form" class="unified-form">
@@ -776,6 +795,11 @@
                     </div>
                     
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="pcd-daily-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -786,25 +810,23 @@
                     </div>
                 </div>
             </div>
-            <!-- 获取 PCD 过期数据卡片 -->
+            <!-- PCD 过期卡片 -->
             <div id="section-29" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">获取 PCD 过期数据</div>
+                        <div class="ant-card-head-title">PCD 过期</div>
                         <div class="ant-card-extra"><span id="pcd-expired-data-badge" class="ant-tag ant-tag-success u-hidden">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-clock u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">获取 PCD 过期数据</h3>
-                            <ul class="section-desc">
-                                <li>系统将从 Salesforce 获取 PCD 所有<strong>已过期 (Expired)</strong> 的订单数据。</li>
-                                <li class="u-text-secondary u-fs-sm">* 查询条件内置在插件里，无需手工填写 SOQL；此操作可能需要几分钟时间，请耐心等待。</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>拉取 PCD 已过期的订单。查询条件内置，不用自己写 SOQL。</p>
+                            </div>
                         </div>
 
                         <form id="pcd-expired-data-form" class="unified-form">
@@ -825,6 +847,11 @@
                     </div>
 
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="pcd-expired-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -846,15 +873,12 @@
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-star u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">VVIP 客户订单查询</h3>
-                            <ul class="section-desc">
-                                <li>上传包含 Account ID 的 Excel 文件</li>
-                                <li>系统将自动查询并返回对应的 PCD/LTS 订单状态</li>
-                                <li class="u-text-secondary u-fs-sm">* 仅支持 .xlsx 格式文件</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>上传 Account ID 清单，查这些客户的 PCD / LTS 订单状态。支持 .xlsx。</p>
+                            </div>
                         </div>
 
                         <form id="vvip-file-upload-form" class="unified-upload-area">
@@ -880,6 +904,11 @@
                     </div>
 
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="vvip-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -901,15 +930,12 @@
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-chart-pie u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">数据分析与规则匹配</h3>
-                            <ul class="section-desc">
-                                <li>上传 Excel 数据文件并配置分析规则</li>
-                                <li>系统将根据规则自动分析和标记数据</li>
-                                <li class="u-text-secondary u-fs-sm">* 可上传自定义 JSON 规则文件</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>上传数据表和规则，按规则给数据打标记。规则也可以直接用 JSON 上传。</p>
+                            </div>
                         </div>
 
                         <form id="analysis-file-upload-form" class="unified-upload-area u-maxw-full">
@@ -971,6 +997,11 @@
                     </div>
 
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="analysis-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -1003,23 +1034,22 @@
                     </div>
                 </div>
             </div>
-            <!-- CVP7 模块卡片 -->
+            <!-- CVP7卡片 -->
             <div id="section-11" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">CVP7 模块</div>
+                        <div class="ant-card-head-title">CVP7</div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-network-wired u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">CVP7 功能模块</h3>
-                            <ul class="section-desc">
-                                <li>此模块正在开发中...</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>这个模块还没做完，暂时用不了。</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1028,34 +1058,28 @@
             <div id="section-12" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-t2">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">Outstanding T-4 connectivity</div>
+                        <div class="ant-card-head-title">T-4 Outstanding</div>
                         <div class="ant-card-extra"><span id="t2-data-badge" class="ant-tag ant-tag-success u-hidden">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-file-alt u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">获取 T-4 报表数据</h3>
-                            <ul class="section-desc">
-                                <li>系统将从 Salesforce 获取 T-4 报表数据</li>
-                                <li><strong>日期范围：</strong>
+                            <div class="section-desc">
+                                <p>拉取 T-4 报表，关注未来几天要转派的单。</p>
+                                <details class="fn-more">
+                                    <summary>日期范围与筛选条件</summary>
                                     <ul>
-                                        <li><strong>默认逻辑：</strong>如果是周五，获取未来3天（周六、周日及下周一）的数据；其他时间获取未来2天的数据。</li>
-                                        <li><strong>自定义：</strong>您也可以在下方输入框中指定要查询的未来天数。</li>
+                                        <li>日期：周五取未来 3 天（周六、周日、下周一），其余时间取未来 2 天；也可以在下方输入框自己指定天数。</li>
+                                        <li>订单性质：新装、外部移机、内部移机。</li>
+                                        <li>状态：排除已完成、已取消、已失效的订单。</li>
+                                        <li>排除 Fulfillment Detail 含 <code>INVENTORY ASSIGNED</code> 或 <code>INVENTORY READY</code> 的记录。</li>
                                     </ul>
-                                </li>
-                                <li><strong>筛选条件：</strong>
-                                    <ul>
-                                        <li><strong>订单性质：</strong> 新装、外部移机、内部移机。</li>
-                                        <li><strong>状态：</strong> 排除已完成、已取消或无效的订单。</li>
-                                        <li><strong>排除：</strong> Fulfillment Detail 包含 "INVENTORY ASSIGNED" 或 "INVENTORY READY" 的记录。</li>
-                                    </ul>
-                                </li>
-                                <li class="u-text-secondary u-fs-sm">* 此操作可能需要几分钟时间，请耐心等待。</li>
-                            </ul>
+                                </details>
+                            </div>
                         </div>
                         
                         <form id="t2-data-form" class="unified-form">
@@ -1080,6 +1104,11 @@
                     </div>
                     
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="t2-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -1090,25 +1119,23 @@
                     </div>
                 </div>
             </div>
-            <!-- T-4 Outstanding分析 模块卡片 -->
+            <!-- T-4 分析 模块卡片 -->
             <div id="section-13" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-t2">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">T-4 Outstanding分析</div>
+                        <div class="ant-card-head-title">T-4 分析</div>
                         <div class="ant-card-extra"><span id="t2-analysis-file-upload-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-chart-bar u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">T-4 Outstanding 数据分析</h3>
-                            <ul class="section-desc">
-                                <li>上传 T-4 Excel 数据文件进行分析</li>
-                                <li>可选择上传规则文件自定义分析逻辑</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>上传 T-4 报表做分析。想换判定逻辑，再传一份规则文件。</p>
+                            </div>
                         </div>
                     </div>
                     
@@ -1183,6 +1210,11 @@
                     </form>
                     
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="t2-analysis-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -1216,25 +1248,22 @@
 
                 </div>
             </div>
-            <!-- 中午吃乜 模块卡片 -->
+            <!-- 中午食乜 模块卡片（命名与磁贴标签 ui_layout*.js 保持一致） -->
             <div id="section-14" class="unified-card ant-card ant-card-bordered step-section theme-lunch">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">中午吃乜</div>
+                        <div class="ant-card-head-title">中午食乜</div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-utensils u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">今天中午吃什么？</h3>
-                            <ul class="section-desc">
-                                <li>不知道吃什么？让系统帮你决定！</li>
-                                <li>导入包含餐厅信息的 JSON 文件</li>
-                                <li>点击"摇一摇"随机选择一个地点</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>导入餐厅清单，摇一摇随机挑一个。</p>
+                            </div>
                         </div>
 
                         <form id="lunch-file-upload-form" class="unified-upload-area">
@@ -1250,7 +1279,7 @@
                     </div>
                     
                     <div id="lunch-actions" class="action-buttons u-hidden u-justify-center">
-                        <button type="button" id="shake-lunch-btn" class="ant-btn ant-btn-primary ant-btn-lg u-bg-brand u-border-brand u-h-50 u-fs-xl u-px-40">
+                        <button type="button" id="shake-lunch-btn" class="ant-btn ant-btn-primary ant-btn-lg u-bg-brand u-border-brand">
                             <i class="fas fa-dice"></i>
                             <span>摇一摇</span>
                         </button>
@@ -1290,13 +1319,12 @@
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-database u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">Bulk 2.0 查询</h3>
-                            <ul class="section-desc">
-                                <li>输入 SOQL 语句创建 Bulk 查询任务，或输入 Job ID 查看进度和结果。</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>提交 SOQL 跑 Bulk 查询，也可以直接拿 Job ID 查进度。</p>
+                            </div>
                         </div>
 
                         <div class="u-maxw-800 u-mx-auto">
@@ -1305,7 +1333,7 @@
                                 <textarea id="bulk-soql-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10000"></textarea>
                             </div>
                             <div class="form-group u-text-right u-mb-32">
-                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                <button type="button" id="create-bulk-job-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
                                     <i class="fas fa-play"></i> 创建 Bulk 任务
                                 </button>
                             </div>
@@ -1323,7 +1351,7 @@
                                     <button type="button" id="download-bulk-csv-btn" class="ant-btn ant-btn-primary">
                                         <i class="fas fa-file-csv"></i> 下载 CSV
                                     </button>
-                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                    <button type="button" id="download-bulk-zip-btn" class="ant-btn ant-btn-default">
                                         <i class="fas fa-file-archive"></i> 下载 ZIP
                                     </button>
                                 </div>
@@ -1366,27 +1394,27 @@
             <div id="section-16" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">Data issue - PID fallout</div>
+                        <div class="ant-card-head-title">PID Fallout</div>
                         <div class="ant-card-extra"><span id="pcd-pid-fallout-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-exclamation-triangle u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">PCD PID Fallout</h3>
-                            <ul class="section-desc">
-                                <li>查询存在 Fulfillment Data Issue 的订单项</li>
-                                <li><strong>筛选条件：</strong>
+                            <div class="section-desc">
+                                <p>找出卡在 Fulfillment Data Issue 的订单项。</p>
+                                <details class="fn-more">
+                                    <summary>筛选条件</summary>
                                     <ul>
-                                        <li>Fulfillment ID 不为空</li>
-                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
-                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
+                                        <li>Fulfillment ID 不为空。</li>
+                                        <li>Fulfillment Status 为 <code>In Progress - Fulfillment Data Issue</code>。</li>
+                                        <li>订单状态不在排除列表内：Activated、Superseded、Amend Requested、Submitted、Ready To Submit。</li>
                                     </ul>
-                                </li>
-                            </ul>
+                                </details>
+                            </div>
                         </div>
                         
                         <form id="pcd-pid-fallout-data-form" class="unified-form">
@@ -1407,6 +1435,11 @@
                     </div>
                     
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="pcd-pid-fallout-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -1417,37 +1450,32 @@
                     </div>
                 </div>
             </div>
-            <!-- Data issue - QC issue 模块卡片 -->
+            <!-- QC Issue 模块卡片 -->
             <div id="section-17" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-pcd">
                 <div class="ant-card-head">
                     <div class="ant-card-head-wrapper">
-                        <div class="ant-card-head-title">Data issue - QC issue</div>
+                        <div class="ant-card-head-title">QC Issue</div>
                         <div class="ant-card-extra"><span id="pcd-qc-issue-data-badge" class="ant-tag ant-tag-success">已完成</span></div>
                     </div>
                 </div>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-search u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">PCD QC Issue</h3>
-                            <ul class="section-desc">
-                                <li>查询存在 Fulfillment Data Issue 的订单及其 OrchestrationItem 数据</li>
-                                <li><strong>筛选条件：</strong>
+                            <div class="section-desc">
+                                <p>和 PID Fallout 取同一批订单，另外带上 OrchestrationItem 明细。</p>
+                                <details class="fn-more">
+                                    <summary>筛选条件与数据关联</summary>
                                     <ul>
-                                        <li>订单的 Fulfillment Status 为 'In Progress - Fulfillment Data Issue'</li>
-                                        <li>订单状态不在排除列表中 (Activated, Superseded, Amend Requested, Submitted, Ready To Submit)</li>
-                                        <li>订单状态不为 'Cancelled'</li>
+                                        <li>Fulfillment Status 为 <code>In Progress - Fulfillment Data Issue</code>，且订单不是 <code>Cancelled</code>。</li>
+                                        <li>订单状态不在排除列表内：Activated、Superseded、Amend Requested、Submitted、Ready To Submit。</li>
+                                        <li>关联 OrchestrationItem，类型 callout-noss / callout-opg。</li>
+                                        <li>结果按 <code>Last_Submitted_Date__c</code> 升序。</li>
                                     </ul>
-                                </li>
-                                <li><strong>数据关联：</strong>
-                                    <ul>
-                                        <li>关联查询 OrchestrationItem (callout-noss/callout-opg)</li>
-                                        <li>按 Last_Submitted_Date__c 升序排列</li>
-                                    </ul>
-                                </li>
-                            </ul>
+                                </details>
+                            </div>
                         </div>
                         
                         <form id="pcd-qc-issue-data-form" class="unified-form">
@@ -1468,6 +1496,11 @@
                     </div>
                     
                     <!-- 数据显示区域 -->
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>查询结果会显示在这里</p>
+                    </div>
                     <div id="pcd-qc-issue-data-container" class="unified-table-wrapper u-hidden">
                         <div class="table-container-header">
                             <h4>数据预览</h4>
@@ -1488,13 +1521,12 @@
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-code u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">Execute Anonymous Apex</h3>
-                            <ul class="section-desc">
-                                <li>输入 Apex 代码并在 Salesforce 环境中执行</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>临时跑一段 Apex。</p>
+                            </div>
                         </div>
 
                         <div class="u-maxw-900 u-mx-auto">
@@ -1529,13 +1561,12 @@ System.debug('Hello World');"></textarea>
                 <div class="ant-card-body">
                     <div class="section-content">
                         <div class="section-header">
-                            <div class="section-icon u-bg-theme">
+                            <div class="section-icon">
                                 <i class="fas fa-clock u-text-brand"></i>
                             </div>
-                            <h3 class="section-title">Chrome Alarm Jobs</h3>
-                            <ul class="section-desc">
-                                <li>使用 Chrome Alarm API 创建和管理本地定时任务</li>
-                            </ul>
+                            <div class="section-desc">
+                                <p>建本地定时任务，到点自动触发。浏览器关掉就不会跑。</p>
+                            </div>
                         </div>
                     </div>
 
@@ -1576,7 +1607,7 @@ System.debug('Hello World');"></textarea>
                                 <div class="ant-card-head-wrapper u-flex u-items-center u-justify-between">
                                     <div class="ant-card-head-title">定时任务列表</div>
                                     <div class="u-flex u-gap-8">
-                                        <button type="button" id="refresh-schedule-jobs-btn" class="ant-btn ant-btn-primary ant-btn-sm u-bg-brand u-border-brand">
+                                        <button type="button" id="refresh-schedule-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm">
                                             <i class="fas fa-sync"></i> 刷新列表
                                         </button>
                                         <button type="button" id="clear-all-schedule-jobs-btn" class="ant-btn ant-btn-default ant-btn-sm u-text-error u-border-error">
@@ -1630,19 +1661,25 @@ System.debug('Hello World');"></textarea>
                 <div id="section-23" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
                     <div class="ant-card-head">
                         <div class="ant-card-head-wrapper">
-                            <div class="ant-card-head-title">SOQL 数据导出</div>
+                            <div class="ant-card-head-title">SOQL 导出</div>
                         </div>
                     </div>
                     <div class="ant-card-body">
                         <div class="section-content">
                             <div class="section-header">
-                                <div class="section-icon u-bg-theme">
+                                <div class="section-icon">
                                     <i class="fas fa-search u-text-brand"></i>
                                 </div>
-                                <h3 class="section-title">SOQL 查询</h3>
-                                <ul class="section-desc">
-                                    <li>输入 SOQL 执行查询，支持自动补全对象/字段、查询历史、自动翻页（上限 50000 行），结果可导出 Excel / CSV。</li>
-                                </ul>
+                                <div class="section-desc">
+                                    <p>写 SOQL 查数据，结果导出 Excel 或 CSV。</p>
+                                    <details class="fn-more">
+                                        <summary>编辑器能力</summary>
+                                        <ul>
+                                            <li>对象和字段有自动补全，查询历史会留着。</li>
+                                            <li>结果超过一页自动翻页，上限 50000 行。</li>
+                                        </ul>
+                                    </details>
+                                </div>
                             </div>
 
                             <div class="u-maxw-1000 u-mx-auto">
@@ -1664,13 +1701,13 @@ System.debug('Hello World');"></textarea>
                                         <input type="checkbox" id="soql-query-all"> 含已删除记录（queryAll）
                                     </label>
                                     <span class="u-flex-1"></span>
-                                    <button type="button" id="run-soql-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                    <button type="button" id="run-soql-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
                                         <i class="fas fa-play"></i> 执行查询
                                     </button>
                                 </div>
                                 <div class="u-mb-12 u-text-secondary u-fs-sm" id="soql-result-info"></div>
                                 <div class="u-hidden u-gap-10 u-mb-16" id="soql-export-actions">
-                                    <button type="button" id="export-soql-xlsx-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                    <button type="button" id="export-soql-xlsx-btn" class="ant-btn ant-btn-default">
                                         <i class="fas fa-file-excel"></i> 导出 Excel
                                     </button>
                                     <button type="button" id="export-soql-csv-btn" class="ant-btn ant-btn-default">
@@ -1687,19 +1724,24 @@ System.debug('Hello World');"></textarea>
                 <div id="section-24" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
                     <div class="ant-card-head">
                         <div class="ant-card-head-wrapper">
-                            <div class="ant-card-head-title">批量数据导入</div>
+                            <div class="ant-card-head-title">批量导入</div>
                         </div>
                     </div>
                     <div class="ant-card-body">
                         <div class="section-content">
                             <div class="section-header">
-                                <div class="section-icon u-bg-theme">
+                                <div class="section-icon">
                                     <i class="fas fa-file-import u-text-brand"></i>
                                 </div>
-                                <h3 class="section-title">Data Import</h3>
-                                <ul class="section-desc">
-                                    <li>上传 CSV / Excel，映射字段后批量执行 insert / update / upsert，支持失败明细导出。</li>
-                                </ul>
+                                <div class="section-desc">
+                                    <p>上传 CSV / Excel，映射字段后批量写入，支持 insert / update / upsert。</p>
+                                    <details class="fn-more">
+                                        <summary>失败怎么处理</summary>
+                                        <ul>
+                                            <li>单条失败不会中断整批，跑完可以导出失败明细。</li>
+                                        </ul>
+                                    </details>
+                                </div>
                             </div>
 
                             <div class="u-maxw-1000 u-mx-auto">
@@ -1733,7 +1775,7 @@ System.debug('Hello World');"></textarea>
                                     <div id="import-mapping-container"></div>
                                 </div>
                                 <div class="u-text-right u-mb-16">
-                                    <button type="button" id="run-import-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                    <button type="button" id="run-import-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
                                         <i class="fas fa-upload"></i> 开始导入
                                     </button>
                                 </div>
@@ -1754,13 +1796,12 @@ System.debug('Hello World');"></textarea>
                     <div class="ant-card-body">
                         <div class="section-content">
                             <div class="section-header">
-                                <div class="section-icon u-bg-theme">
+                                <div class="section-icon">
                                     <i class="fas fa-box-open u-text-brand"></i>
                                 </div>
-                                <h3 class="section-title">Metadata 检索 / 打包下载</h3>
-                                <ul class="section-desc">
-                                    <li>按类型检索组织内组件（Apex 类、报表、Layout 等），一键打包下载 Metadata zip。</li>
-                                </ul>
+                                <div class="section-desc">
+                                    <p>按类型找 Org 里的组件，勾选后打包成 zip 下载。</p>
+                                </div>
                             </div>
 
                             <div class="u-maxw-1000 u-mx-auto">
@@ -1776,7 +1817,7 @@ System.debug('Hello World');"></textarea>
                                     <button type="button" id="load-metadata-types-btn" class="ant-btn ant-btn-default">
                                         <i class="fas fa-list"></i> 加载类型
                                     </button>
-                                    <button type="button" id="list-metadata-members-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                    <button type="button" id="list-metadata-members-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
                                         <i class="fas fa-search"></i> 检索成员
                                     </button>
                                 </div>
@@ -1790,7 +1831,7 @@ System.debug('Hello World');"></textarea>
                                     <textarea id="metadata-members-input" class="ant-input" rows="3" placeholder="例如: MyApexClass1, MyApexClass2"></textarea>
                                 </div>
                                 <div class="u-flex u-gap-12 u-items-center">
-                                    <button type="button" id="metadata-retrieve-btn" class="ant-btn ant-btn-primary u-bg-success u-border-success">
+                                    <button type="button" id="metadata-retrieve-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
                                         <i class="fas fa-download"></i> 打包下载 (.zip)
                                     </button>
                                     <span class="u-text-secondary u-fs-sm" id="metadata-retrieve-status"></span>
@@ -1810,13 +1851,12 @@ System.debug('Hello World');"></textarea>
                     <div class="ant-card-body">
                         <div class="section-content">
                             <div class="section-header">
-                                <div class="section-icon u-bg-theme">
+                                <div class="section-icon">
                                     <i class="fas fa-satellite-dish u-text-brand"></i>
                                 </div>
-                                <h3 class="section-title">Event Monitor</h3>
-                                <ul class="section-desc">
-                                    <li>通过 Streaming API（CometD）实时监听 Platform Event / Change Data Capture 事件消息。</li>
-                                </ul>
+                                <div class="section-desc">
+                                    <p>订阅 Platform Event 和 Change Data Capture，实时看事件往下流。</p>
+                                </div>
                             </div>
 
                             <div class="u-maxw-1000 u-mx-auto">
@@ -1848,7 +1888,7 @@ System.debug('Hello World');"></textarea>
                                     <div class="u-mt-6 u-text-secondary u-fs-xs" id="event-prefix-hint">通道前缀：/event/</div>
                                 </div>
                                 <div class="form-group u-flex u-gap-10 u-items-center u-mb-16">
-                                    <button type="button" id="event-subscribe-btn" class="ant-btn ant-btn-primary u-bg-indigo u-border-indigo">
+                                    <button type="button" id="event-subscribe-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
                                         <i class="fas fa-headphones"></i> 开始监听
                                     </button>
                                     <button type="button" id="event-unsubscribe-btn" class="ant-btn ant-btn-default" disabled>
@@ -1884,14 +1924,18 @@ System.debug('Hello World');"></textarea>
                     <div class="ant-card-body">
                         <div class="section-content">
                             <div class="section-header">
-                                <div class="section-icon u-bg-theme">
+                                <div class="section-icon">
                                     <i class="fas fa-tachometer-alt u-text-brand"></i>
                                 </div>
-                                <h3 class="section-title">Org Limits 用量</h3>
-                                <ul class="section-desc">
-                                    <li>通过 Limits API 实时展示当前 Org 的限额用量：API 调用、数据 / 文件存储等。</li>
-                                    <li>进度条颜色：<strong>60% 以上</strong>为警告色、<strong>85% 以上</strong>为危险色，接近上限时请控制批量操作节奏。</li>
-                                </ul>
+                                <div class="section-desc">
+                                    <p>看当前 Org 的限额用了多少：API 调用、存储、记录数。</p>
+                                    <details class="fn-more">
+                                        <summary>颜色怎么读</summary>
+                                        <ul>
+                                            <li>用量超过 60% 转黄，超过 85% 转红，涨过 100% 会标成「超额」。</li>
+                                        </ul>
+                                    </details>
+                                </div>
                             </div>
                             <div id="org-limits-content">
                                 <div class="org-limits-loading">

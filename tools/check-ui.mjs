@@ -41,6 +41,7 @@
  *   M 体积预算 ★           同步 <script> 合计 / 单库 / 第三方库总量的上界
  *   N 仓库卫生 ★           .DS_Store / Thumbs.db 等系统垃圾文件
  *   O 内联脚本有效性 ★     带 src 的 <script> 不得再有内联内容（会被整段忽略）
+ *   P 磁贴标签↔卡片标题     同一个功能在首页和详情页必须同名
  */
 
 import fs from "node:fs";
@@ -214,17 +215,27 @@ const SINGLE_LIB_BUDGET_BYTES = 1.2 * 1024 * 1024;
 // 同时保证「再塞一个 1MB 级的大库」会被拦住。
 const TOTAL_LIB_BUDGET_BYTES = 3 * 1024 * 1024;
 
-/** 1) index.html：section 编号 → { classes, line } */
+/** 1) index.html：section 编号 → { classes, line, title } */
 function parseIndexHtml() {
   const file = path.join(SRC, "index.html");
   const text = read(file);
   const sections = new Map();
   const re = /<div id="section-(\d+)" class="([^"]*)"/g;
+  const marks = [];
   let m;
   while ((m = re.exec(text))) {
-    const line = text.slice(0, m.index).split("\n").length;
-    sections.set(Number(m[1]), { classes: m[2], line, file: rel(file) });
+    marks.push({ step: Number(m[1]), classes: m[2], index: m.index });
   }
+  // 卡片标题不在 section 起始标签那一行，得按「下一个 section 之前」切块再找。
+  // 不写死行数：section 之间相差几十到几百行，切多了会把下一页的标题算进来。
+  marks.forEach((mk, i) => {
+    const end = i + 1 < marks.length ? marks[i + 1].index : text.length;
+    const chunk = text.slice(mk.index, end);
+    const line = text.slice(0, mk.index).split("\n").length;
+    const tm = chunk.match(/<div class="ant-card-head-title">([\s\S]*?)<\/div>/);
+    const title = tm ? tm[1].replace(/<[^>]+>/g, "").trim() : null;
+    sections.set(mk.step, { classes: mk.classes, line, title, file: rel(file) });
+  });
   // 同时收集 HTML 里出现的所有 id（用于死引用检查）
   const htmlIds = new Set();
   for (const idm of text.matchAll(/\sid="([^"]+)"/g)) htmlIds.add(idm[1]);
@@ -1486,6 +1497,29 @@ function run() {
       `  首行：${o.head}\n` +
         `修法：拆成两个标签：<script src="${o.src}" type="module"></script>` +
         ` 然后再写 <script type="module">…</script>`
+    );
+  }
+
+  /* --- P. 磁贴标签 ↔ 卡片标题必须同名 ---
+     为什么单列一条：这两处是**同一个功能在两个画面上的名字**，首页磁贴是入口、
+     卡片头是目的地。2026-10 整理时对了一遍，29 个 section 里有 12 个不一致，
+     包括「PID Fallout」→「Data issue - PID fallout」、「T-4 Outstanding」→
+     「Outstanding T-4 connectivity」，还有一个中途改过一半的
+     「T-4 Outstanding分析」（中英拼在一起，连空格都没有）。
+
+     这种不一致不会让页面报错，所以从来没人发现；但用户点「A」进去看到「B」，
+     第一反应是"我是不是点错了"。以磁贴标签为准对齐，因为那是用户已经先看到、
+     先记住的名字，而且窄侧边栏里短标签更好排。 */
+  for (const t of tiles) {
+    const sec = html.sections.get(t.step);
+    if (!sec || !sec.title) continue;
+    if (sec.title === t.label) continue;
+    add(
+      "WARN",
+      "P. 磁贴标签↔卡片标题",
+      `点「${t.label}」进去，页面标题写的是「${sec.title}」`,
+      `  ${sec.file}:${sec.line}  <div class="ant-card-head-title"> 改成「${t.label}」\n` +
+        `  （或反过来把 ${t.source} 里磁贴的 label 改成「${sec.title}」——两处必须同名）`
     );
   }
 

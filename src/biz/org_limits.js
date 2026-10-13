@@ -24,7 +24,7 @@ const log = createLogger("LIMITS");
 import { sfConn } from "./sf_service.js";
 import { appState } from "./state.js";
 import { showSection } from "./ui.js";
-import { showNotification, escapeHtml } from "../common/utils.js";
+import { showNotification, escapeHtml, formatDateTime } from "../common/utils.js";
 import { replaceIcons } from "../common/icons.js";
 import { ensureECharts } from "../common/lib_loader.js";
 
@@ -409,7 +409,7 @@ function ensureLimitsShell(host) {
   if (host.querySelector("#org-limits-list")) return;
 
   const timeText = lastFetchedAt
-    ? `上次刷新：${new Date(lastFetchedAt).toLocaleString()}`
+    ? `上次刷新：${formatDateTime(lastFetchedAt)}`
     : "";
 
   host.innerHTML = `
@@ -489,7 +489,7 @@ function renderLimitsUpdated(host) {
   const el = host.querySelector("#org-limits-updated");
   if (!el) return;
   el.textContent = lastFetchedAt
-    ? `上次刷新：${new Date(lastFetchedAt).toLocaleString()}`
+    ? `上次刷新：${formatDateTime(lastFetchedAt)}`
     : "";
 }
 

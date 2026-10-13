@@ -21,7 +21,7 @@ const logImport = createLogger("IMPORT");
 const logMeta = createLogger("META");
 const logEvent = createLogger("EVENT");
 import { sfConn, defaultApiVersion } from "./sf_service.js";
-import { showNotification, escapeHtml } from "../common/utils.js";
+import { showNotification, escapeHtml, formatDateTime } from "../common/utils.js";
 import { ensureXLSX, ensureJSZip } from "../common/lib_loader.js";
 
 const SOQL_MAX_RECORDS = 50000; // Data Export 单次查询的记录数上限（安全阀）
@@ -878,7 +878,7 @@ export async function subscribeEventChannel() {
       const ev = {
         _channel: channelPath,
         _replayId: message.data && message.data.event ? message.data.event.replayId : "-",
-        _receivedAt: new Date().toLocaleTimeString(),
+        _receivedAt: formatDateTime(),
         _data: message.data
       };
       eventLog.unshift(ev);

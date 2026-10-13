@@ -219,6 +219,28 @@ export function escapeHtml(text) {
 }
 
 /**
+ * 统一的时间戳文案。
+ *
+ * 为什么不能用裸的 `toLocaleString()`：输出跟随**浏览器语言**，不跟随界面语言。
+ * 中文 Chrome 上会得到 `10/13/2026, 12:21:56 PM` —— 月/日/年倒序还带英文 AM/PM，
+ * 跟页面里其他日期（`2026-10-13 12:21:56`）拼在一起就是两种格式。
+ * （踩过：Org Dashboard 的「上次刷新」和 Session 链接的「生成时间」各写一种。）
+ *
+ * dayjs 在 index.html 里是同步加载的经典脚本，能直接用；万一没加载成功，
+ * 退回显式指定 locale + 24 小时制，至少不再输出英文 AM/PM。
+ *
+ * @param {number|string|Date} [value] - 时间戳 / ISO 串 / Date，缺省为当前时间
+ * @returns {string} `YYYY-MM-DD HH:mm:ss`
+ */
+export function formatDateTime(value) {
+  const v = value === undefined || value === null ? Date.now() : value;
+  if (typeof globalThis.dayjs === 'function') {
+    return globalThis.dayjs(v).format('YYYY-MM-DD HH:mm:ss');
+  }
+  return new Date(v).toLocaleString('zh-CN', { hour12: false });
+}
+
+/**
  * 把「被拒绝的理由 / 抛出的错误」转成一段安全可读的文案。
  *
  * 为什么需要它：全局错误处理器里曾经直接写 `event.reason.message`。

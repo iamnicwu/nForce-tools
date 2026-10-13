@@ -57,7 +57,27 @@ function formatHeader(col) {
  * @param {boolean} [options.rawHeader] - 为 true 时表头不过滤 __c / Order_ / 下划线
  * @returns {number} 实际渲染的行数（0 表示未渲染）
  */
-export function renderDataTable(container, table, data, options = {}) {
+export /**
+ * 结果容器的显隐。
+ *
+ * 除了内联 display，还要同步 u-hidden 类 —— 「结果区空状态」（.result-empty）
+ * 是靠 CSS 的 `:has(.unified-table-wrapper:not(.u-hidden))` 自动让位的；
+ * 只写内联样式的话 :has() 判不出来，占位会一直挂在表格下面。
+ * 内联样式仍然要留着：它优先级最高，才盖得住 .u-hidden 的 display:none。
+ */
+function showContainer(el) {
+  if (!el) return;
+  el.style.display = "block";
+  el.classList.remove("u-hidden");
+}
+
+function hideContainer(el) {
+  if (!el) return;
+  el.style.display = "none";
+  el.classList.add("u-hidden");
+}
+
+function renderDataTable(container, table, data, options = {}) {
   const containerEl =
     typeof container === "string" ? document.getElementById(container) : container;
   const tableEl = typeof table === "string" ? document.getElementById(table) : table;
@@ -73,7 +93,7 @@ export function renderDataTable(container, table, data, options = {}) {
   // 空数据：清空并隐藏容器
   if (!Array.isArray(data) || data.length === 0) {
     tableEl.innerHTML = "";
-    if (containerEl) containerEl.style.display = "none";
+    hideContainer(containerEl);
     return 0;
   }
 
@@ -83,7 +103,7 @@ export function renderDataTable(container, table, data, options = {}) {
 
   if (cols.length === 0) {
     tableEl.innerHTML = "";
-    if (containerEl) containerEl.style.display = "none";
+    hideContainer(containerEl);
     return 0;
   }
 
@@ -119,7 +139,7 @@ export function renderDataTable(container, table, data, options = {}) {
 
   // 容器滚动设置
   if (containerEl) {
-    containerEl.style.display = "block";
+    showContainer(containerEl);
     containerEl.style.overflowX = "auto";
     containerEl.style.overflowY = "auto";
     containerEl.style.maxHeight = "500px";

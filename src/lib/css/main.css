@@ -733,21 +733,10 @@ optgroup {
 }
 
 /* 按钮样式 - 适配 Ant Design Button */
-/* .btn 类已在 HTML 中替换为 .ant-btn，这里保留一些自定义调整 */
-.ant-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.015);
-}
-
-.ant-btn-lg {
-    height: 40px;
-    padding: 6.4px 15px;
-    font-size: var(--fs-lg);
-    border-radius: 2px;
-}
+/* .btn 类已在 HTML 中替换为 .ant-btn。
+   形状（高度 / 内边距 / 圆角）统一在下方「按钮：统一形状」一节，这里不再写 —— 
+   曾经这里有一份 height:40px + border-radius:2px 的 .ant-btn-lg，被后者完全覆盖，
+   两处并存只会让下一个改的人不知道该信哪一份。 */
 
 /* 文件上传 */
 .file-upload {
@@ -1531,50 +1520,82 @@ optgroup {
    统一UI组件样式
    ========================================== */
 
-/* 统一页面标题区域 */
+/* ---------- 功能页头部（2026-10-13 重做） ----------
+   旧版是「80px 居中圆形图标 + 居中 24px 大标题 + 居中的说明列表」，
+   一屏里出现三个「标题级」元素，光头部就吃掉 250px，正文被挤到折叠线以下。
+
+   新版是一条横向信息带：左侧跟随模块色的小方章 + 一句话摘要；
+   筛选条件、字段口径这类「不常看但出错时要查」的内容收进默认折叠的 <details>。
+
+   这里不再重复放标题 —— 卡片头（.ant-card-head-title）已经是本页标题，
+   写第二遍只会稀释层级，让人不知道该看哪个。 */
 .section-header {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 2rem;
-    text-align: center;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    text-align: left;
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--theme-color, var(--primary-color));
+    border-radius: 10px;
 }
 
+/* 底色与图标颜色**不能**只靠 HTML 上的 u-bg-theme / u-text-brand：
+   - 底章是个 <div>，工具类确实生效；
+   - 但图标 <i> 会被 common/icons.js 用 `el.outerHTML = <svg class="svg-icon">`
+     整体替换，**`<i>` 上的 class 一个都不保留** —— 于是 u-text-brand 连同
+     u-fs-3xl 之类的尺寸类一起消失。实测下来 21 个功能页的头部图标全是
+     继承来的 rgba(0,0,0,0.85)（近黑），坐在彩色底章上，成了"有颜色但不亮"。
+   所以 color 必须由容器给，子 svg 靠 fill="currentColor" 继承下来。 */
 .section-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 1.5rem;
+    width: 34px;
+    height: 34px;
+    margin-bottom: 0;
+    border-radius: 9px;
+    background: var(--theme-bg, var(--primary-bg));
+    color: var(--theme-color, var(--primary-color));
 }
 
-/* 图标尺寸：FontAwesome 的 <i> 会被 common/icons.js 换成 <svg class="svg-icon">，
-   所以每条「容器 i」规则都必须同时写「容器 .svg-icon」——只写 i 的话替换后
-   永远匹配不到，图标会缩回 1em（14px）并丢掉容器给的颜色。 */
+/* 容器 i / 容器 .svg-icon —— FontAwesome 的 <i> 会被换成 <svg class="svg-icon">，
+   所以每条「容器 i」规则都必须同时写「容器 .svg-icon」，只写 i 的话替换后
+   永远匹配不到，图标会缩回 1em（14px）。 */
 .section-icon i,
 .section-icon .svg-icon {
-    font-size: var(--icon-xl);
+    font-size: var(--icon-md);
 }
 
-.section-title {
-    font-size: var(--fs-2xl);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-}
+/* 注意：这里**不要**再写 .section-header .section-title { display: none }。
+   曾经的兜底规则本意是「万一旧结构残留就压掉重复标题」，实际效果是把内容
+   静默隐藏 —— 页面看着正常，标题就是不出现，排查时很难想到是 CSS 干的。
+   结构性错误应该在 HTML 里改掉，不该靠 CSS 藏。 */
 
 .section-desc {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: var(--fs-sm);
+    line-height: 1.6;
     color: var(--text-secondary);
-    max-width: 500px;
-    text-align: left;
-    margin: 0 auto;
-    padding-left: 20px;
+    list-style: none;
 }
 
-.section-desc li {
-    margin-bottom: 4px;
+/* 摘要行：一句话说明这个功能做什么，永远可见 */
+.section-desc > p {
+    margin: 0;
+}
+
+.section-desc > li {
+    margin-bottom: 2px;
+}
+
+.section-desc > li:last-child {
+    margin-bottom: 0;
 }
 
 .section-desc strong {
@@ -1582,21 +1603,170 @@ optgroup {
 }
 
 .section-desc ul {
-    padding-left: 20px;
-    margin-top: 5px;
+    padding-left: 16px;
+    margin: 4px 0 0;
 }
 
 .section-desc ul li {
     list-style-type: circle;
+    font-size: var(--fs-xs);
 }
 
-/* 统一内容区域容器 */
-.section-content {
+/* ---------- 折叠细节（.fn-more） ----------
+   把「每次都要看」和「偶尔才查」的东西分开：摘要永远可见，细节点开才占地方。
+   用原生 <details>，不引 JS —— 三处（HTML/CSS/无事件绑定）都不会漂移。 */
+.fn-more {
+    margin-top: 8px;
+    font-size: var(--fs-xs);
+}
+
+.fn-more > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 10px;
+    list-style: none;
+    cursor: pointer;
+    font-size: var(--fs-xs);
+    color: var(--theme-color, var(--primary-color));
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    user-select: none;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.fn-more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.fn-more > summary::before {
+    content: "▸";
+    line-height: 1;
+}
+
+.fn-more[open] > summary::before {
+    content: "▾";
+}
+
+.fn-more > summary:hover,
+.fn-more[open] > summary {
+    background: var(--theme-bg, var(--primary-bg));
+    border-color: var(--theme-color, var(--primary-color));
+}
+
+.fn-more > summary:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.fn-more > ul {
+    margin: 8px 0 2px;
+    padding-left: 18px;
+}
+
+.fn-more > ul li {
+    margin-bottom: 3px;
+    line-height: 1.6;
+}
+
+.fn-more code {
+    font-family: var(--font-mono);
+}
+
+/* ---------- 结果区空状态（2026-10-13） ----------
+   11 个功能页的结果表都由 table_utils 的 renderDataTable 渲染，初始隐藏。
+   在这之前，没取数的页面就只剩「说明 + 一个按钮 + 大片空白」，
+   一屏 900px 只用掉三分之一，看着像没做完。
+   这里补一个虚线占位框：查询之前页面也有结构，查询之后它自动让位。 */
+.result-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2rem 0;
+    gap: 6px;
+    min-height: 128px;
+    margin-top: 16px;
+    padding: 20px;
+    text-align: center;
+    color: var(--text-light);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-lg);
+}
+
+.result-empty i,
+.result-empty .svg-icon {
+    font-size: var(--icon-lg);
+    color: var(--text-light);
+}
+
+.result-empty p {
+    margin: 0;
+    font-size: var(--fs-sm);
+}
+
+/* 结果表一出现，占位自动让位。
+   用「相邻兄弟」而不是祖先 :has(…) —— 占位与结果容器是紧挨着的两个兄弟，
+   而它们的位置在 .section-content 之外（在 .ant-card-body 里），
+   拿 .section-content 当锚点永远匹配不上，占位会一直挂在表格上面。
+   前提是 renderDataTable 会同步切 u-hidden 类（见 common/table_utils.js 的
+   showContainer / hideContainer）—— 只改内联样式的话这条规则不生效。
+   :has() 需要 Chrome 105+，扩展只跑 Chrome，可以用。 */
+.result-empty:has(+ .unified-table-wrapper:not(.u-hidden)) {
+    display: none;
+}
+
+/* 统一内容区域容器。
+   注意是 stretch 不是 center：center 会把每个子块压成 min-content 宽度，
+   详情页里那些宽内容（Org Limits 的搜索栏与列表）会被挤成中间一条窄带，
+   宽屏下左右各留几百像素空白。居中交给需要居中的那一个子块自己声明。 */
+.section-content {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0;
+}
+
+/* ---------- 按钮：统一形状（2026-10-13） ----------
+   动手前全站有 22 种 class 组合，同一个「主操作」按钮有四种高度
+   （fetch-btn 48 / ant-btn-lg 40 / 默认 32 / ant-btn-sm 24），
+   圆角也有两种（ant-btn-lg 的 2px 与其余 6px 并排），颜色还被
+   u-bg-indigo / u-bg-success / u-bg-brand 就地改掉。
+   这里把形状收成三档，圆角一律 --radius-md，与输入框、卡片取齐。
+
+   u-bg-indigo / u-bg-success 这类"就地改色"不再使用；
+   需要模块色的按钮走 u-bg-brand + u-border-brand（= var(--theme-color)），
+   其余主操作统一主蓝，次操作统一白底描边。
+
+   box-sizing 必须显式写：项目没有全局 border-box，<button> 靠浏览器 UA 样式
+   拿到 border-box，但 <label class="ant-btn"> 形式的按钮（如 LTS 的「更新概览」
+   包着 file input）没有 —— 同一档按钮会高出 2px（30 → 32），
+   而这种差异只在量具体高度时才看得见。 */
+.ant-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-sizing: border-box;
+    height: 36px;
+    padding: 0 16px;
+    font-size: var(--fs-base);
+    border-radius: var(--radius-md);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.015);
+}
+
+/* 三档只改高度/内边距/字号；display / box-sizing / 圆角都继承 .ant-btn，
+   所以 -sm / -lg 必须与 .ant-btn 同时出现（全站用法均如此）。 */
+.ant-btn-sm {
+    height: 30px;
+    padding: 0 12px;
+    font-size: var(--fs-sm);
+}
+
+.ant-btn-lg {
+    height: 44px;
+    padding: 0 20px;
+    font-size: var(--fs-lg);
 }
 
 /* 统一操作按钮区域 */
@@ -1612,12 +1782,12 @@ optgroup {
     min-width: 140px;
 }
 
-/* 「获取数据」主按钮统一样式：所有模块同色（主蓝）同尺寸（通栏 48px）。
+/* 「获取数据」主按钮统一样式：所有模块同色（主蓝）同尺寸（通栏 44px）。
    之前各模块分别写了 ant-btn-lg + 内联 theme-color / success-color，
    颜色和高度各不相同 —— 统一收敛到这里，禁止再写内联覆盖 */
 .fetch-btn {
     width: 100%;
-    height: 48px;
+    height: 44px;
     font-size: var(--fs-lg);
 }
 
@@ -1631,6 +1801,28 @@ optgroup {
 .ant-btn-primary.fetch-btn:active {
     background-color: var(--primary-active);
     border-color: var(--primary-active);
+}
+
+/* ---------- 卡片头的模块色标记（2026-10-13） ----------
+   详情页此前唯一的颜色线索是内容区那个 80px 圆图标（现已缩小），
+   于是 29 个页面看上去都是同一张白卡片。这里在卡片头标题左侧补一道
+   3px 的模块色竖条，与首页功能分组的左侧色条用同一套语言，
+   让「我现在在哪个模块」在滚动之前就能看出来。 */
+.step-section > .ant-card-head .ant-card-head-title {
+    position: relative;
+    padding-left: 12px;
+}
+
+.step-section > .ant-card-head .ant-card-head-title::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 3px;
+    height: 16px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    background: var(--theme-color, var(--primary-color));
 }
 
 /* 统一文件上传拖拽区域 */
@@ -1877,18 +2069,13 @@ optgroup {
 
 /* 响应式调整 */
 @media (max-width: 768px) {
+    /* 2026-10-13：这里原本把 .section-icon 放大到 64px、图标字号提到 24px，
+       那是给旧版「80px 居中圆形图标」做的窄屏降级。新头部是 34px 的横向方章，
+       窄栏里本来就应该更紧凑，继续留着只会让同一枚图标在宽窄两侧跳两种尺寸。 */
     .section-header {
-        margin-bottom: 1.5rem;
-    }
-    
-    .section-icon {
-        width: 64px;
-        height: 64px;
-    }
-    
-    .section-icon i,
-    .section-icon .svg-icon {
-        font-size: var(--fs-3xl);
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 14px;
     }
     
     .action-buttons {
@@ -2560,6 +2747,19 @@ optgroup {
     text-overflow: ellipsis;
 }
 
+/* 锁图标容器：**始终**在 DOM 里（未锁定时只把里面的 svg 藏起来）。
+   但它是 .tile 的第三个 flex 子项 —— 宽度 0 也照样占掉一个 gap，
+   等于每张磁贴白丢 8px 的标签宽度。移出常规流后宽度重新还给 .tile-text。
+   里面的 svg 本来就是绝对定位（相对 .tile 右上角），wrapper 变成 0 尺寸的
+   绝对定位盒之后它的定位结果不变。 */
+.tile-lock-wrap {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+}
+
 /* 磁贴外层：让「☆ 加入常用」按钮能放在 <a> 之外，避免可点击元素互相嵌套 */
 .tile-cell {
     position: relative;
@@ -2567,22 +2767,29 @@ optgroup {
     min-width: 0;
 }
 
+/* 星标是绝对定位的圆形按钮，需要靠父级 padding-right 给它让出地盘。
+   但要用 :has() 按「这张磁贴到底有没有星标」来定，不能按宽度或网格一刀切：
+     · 分组磁贴（.launcher-group）带「☆ 加入常用」→ 必须 ≥ 6px 偏移 + 22px 按钮
+     · 常用功能区的磁贴**没有星标**（编辑态换成底部的 ← → ×）→ 白留 30px 等于
+       把标签挤到只剩几十像素。实测：统一 30px 时常用功能区标签只有 79px，
+       而这里本就该有 95px。
+   曾经是三套硬编码值（基础 36 / ≤560px 28 / 常用功能区 14），谁也说不清哪个对；
+   现在改成「有星标才预留」，值只有一个。 */
 .tile-cell > .tile {
     flex: 1;
     min-width: 0;
-    /* 给右侧的 ☆ / ★ 按钮预留位置 */
-    padding-right: 36px;
+    padding-right: 14px;
 }
 
-.favorites-grid .tile-cell > .tile {
-    padding-right: 14px;
+.tile-cell:has(> .tile-fav-btn) > .tile {
+    padding-right: 30px;
 }
 
 /* 卡片右下角的「加入 / 移出常用功能」星标 */
 .tile-fav-btn {
     position: absolute;
     top: 50%;
-    right: 9px;
+    right: 6px;
     z-index: 2;
     display: inline-flex;
     align-items: center;
@@ -3096,6 +3303,11 @@ optgroup {
 
 .org-dash-alert-link {
     margin-left: auto;
+    /* 必须不收缩 + 不换行：告警文案是个匿名文本节点，跟按钮同处一个 flex 行。
+       400px 侧边栏里文案一长，按钮就先被压扁 —— 「查看详情」竖排成两行、
+       高度 40px，看着像渲染坏了。（实测 400px：48x40 = 两行；1280px：66x23 = 一行） */
+    flex-shrink: 0;
+    white-space: nowrap;
     padding: 2px 8px;
     font-size: var(--fs-xs);
     color: inherit;
@@ -3452,10 +3664,8 @@ optgroup {
         padding: 8px 10px;
     }
 
-    /* 磁贴右侧给 ☆ 保留的位置同步收窄，否则文字可用宽度只剩几十像素 */
-    .tile-cell > .tile {
-        padding-right: 28px;
-    }
+    /* 这里原本还有一条 .tile-cell > .tile { padding-right: 28px }：
+       星标预留值已经统一到基础规则的 30px，不再需要按宽度覆盖。 */
 
     .tile-icon {
         width: 28px;
