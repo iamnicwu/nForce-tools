@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nForce Tools · UI 可读性与排版收口（第三轮 · 2026-10-13）</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --panel: #ffffff;
+    --line: #e5e8ee;
+    --line-soft: #eef1f5;
+    --text: #1f2329;
+    --text-2: #5a6472;
+    --text-3: #8b95a3;
+    --brand: #1890ff;
+    --ok: #52c41a;
+    --warn: #faad14;
+    --err: #f5222d;
+    --code-bg: #f3f5f9;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 24px 80px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.75 -apple-system, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.2px; }
+  .sub { color: var(--text-2); margin: 0 0 32px; font-size: 14px; }
+  h2 {
+    font-size: 19px; margin: 44px 0 14px; padding-left: 12px;
+    border-left: 3px solid var(--brand); line-height: 1.3;
+  }
+  h3 { font-size: 15px; margin: 26px 0 8px; }
+  p { margin: 0 0 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; margin: 0 0 14px;
+  }
+  .card > :last-child { margin-bottom: 0; }
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: #2f54eb;
+  }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+    background: var(--code-bg); border-radius: 8px; padding: 12px 14px;
+    overflow-x: auto; margin: 10px 0;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+  th { color: var(--text-2); font-weight: 600; background: #fafbfc; }
+  td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  td.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block; font-size: 11.5px; font-weight: 600;
+    padding: 1px 7px; border-radius: 10px; vertical-align: 1px;
+  }
+  .tag.fix { background: #e6f7ff; color: #0958d9; }
+  .tag.verify { background: #f6ffed; color: #389e0d; }
+  .tag.todo { background: #fffbe6; color: #ad6800; }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 0; }
+  .ba figure { margin: 0; }
+  .ba figcaption {
+    font-size: 12px; color: var(--text-3); margin-bottom: 5px;
+    font-family: var(--mono);
+  }
+  .ba img {
+    width: 100%; display: block; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff;
+  }
+  .ba img.tall { max-height: 620px; object-fit: cover; object-position: top; }
+  .delta { display: flex; gap: 22px; flex-wrap: wrap; margin: 10px 0 0; }
+  .delta div { font-size: 13px; color: var(--text-2); }
+  .delta b { font-family: var(--mono); color: var(--text); font-size: 15px; }
+  .old { color: var(--text-3); text-decoration: line-through; }
+  .new { color: #0958d9; font-weight: 600; }
+  ul { margin: 8px 0 12px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+  .note {
+    background: #fffbe6; border: 1px solid #ffe58f; border-radius: 8px;
+    padding: 12px 16px; font-size: 13.5px; color: #614700;
+  }
+  .ok { background: #f6ffed; border-color: #b7eb8f; color: #237804; }
+  .kbd {
+    font-family: var(--mono); font-size: 12px; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; background: #fafbfc;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>UI 可读性与排版收口</h1>
+<p class="sub">
+  nForce Tools v4.4.0 · 2026-10-13 · 第三轮，承接第二轮结尾那份「还没动的」6 项清单<br>
+  前两轮解决的是「统一」（按钮形状 / 说明层级 / 空状态），这一轮解决「读得准、排得下」——
+  6 项里有 4 项必须靠具体数字才能确认改没改好，所以每一项都带量测
+</p>
+
+<div class="card">
+  <p style="margin-bottom:0">
+    报告分三层：<b>① – ⑥</b> 是清单逐项；<b>⑦</b> 是在做这些改动时踩到的两个 CSS 坑
+    （都会静默失败，不报错、不抛异常）；<b>⑧</b> 是我改完仍然留着、并说明为什么留着的三处。
+    所有数字都能用 <code>round3/</code> 目录里同 case 同尺寸的前后截图复看。
+  </p>
+</div>
+
+<h2>1 · 仪表盘没有刻度（这批里唯一影响读数的）</h2>
+
+<p>
+  首页 Org 状态卡的四张小仪表盘只有色带和指针，<b>一个数字都没有</b>——
+  指针指到哪、离 60% 那条线还有多远，全靠猜。而它旁边明明写着「16.8%」。
+</p>
+<p>
+  改前是 <code>splitNumber: 5</code> + <code>axisLabel.show: false</code>：画出 6 道分度线，
+  却一个标数都不给。而且分区色带的界线在 <b>60% / 85%</b>，分度线落在 <b>20% 的整数倍</b>上——
+  <b>85 那条界线两边没有任何刻度</b>，刻度尺和色带在说两件事。
+</p>
+
+<pre><code>splitNumber: 2,          // 5 → 2：分度线落在 0 / 中点 / 上限 三个锚点上
+radius: "78%",           // 100% → 78%：给刻度数字让位
+axisLabel: { show: true, distance: 10, fontSize: 9, color: GAUGE_LABEL }</code></pre>
+
+<table>
+  <thead><tr><th>项</th><th>改前</th><th>改后</th></tr></thead>
+  <tbody>
+    <tr><td>刻度分度线</td><td>6 道（0/20/40/60/80/100）</td><td><b>3 个锚点（0 / 中点 / 上限）</b></td></tr>
+    <tr><td>刻度数字</td><td class="old">不显示</td><td><b>0 · 50 · 100（Data Storage 是 0 · 70 · 140）</b></td></tr>
+    <tr><td>半径</td><td class="num">100%</td><td class="num"><b>78%</b></td></tr>
+    <tr><td>数字颜色</td><td>—</td><td><code>rgba(0,0,0,0.45)</code> = <code>--text-secondary</code></td></tr>
+  </tbody>
+</table>
+
+<p>
+  半径必须一起收：<code>radius: 100%</code> 时 0 和上限两个数字被顶到画布外，
+  <b>实测直接裁掉</b>。首页那张画布只有 <b>132 × 104</b>（宽由高决定），
+  9px 是三个数字能同时容下、又不和指针打架的上限；<code>distance: 4</code> 时
+  「0」正好落在分区带里，被进度弧的圆头盖掉一半，所以给到 10。
+</p>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · 3× 放大（6 道线，0 个数字）</figcaption>
+    <img src="round3/before/gauge-400.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 3× 放大（0 / 50 / 100 可读）</figcaption>
+    <img src="round3/after/gauge-400.png" alt="改后">
+  </figure>
+</div>
+
+<div class="note">
+  <b>canvas 不认 <code>var()</code>。</b>
+  ECharts 是 canvas 绘制，CSS 变量和数学函数一律不生效，颜色必须以字面量写进 JS。
+  这里登记了三个常量并逐个注明对应哪个令牌：
+  <code>GAUGE_TEXT</code> / <code>GAUGE_TICK</code> / <code>GAUGE_LABEL</code>。
+  改的时候改的是令牌值，JS 里那行注释跟着一起改 —— 这是这个项目唯一允许写死十六进制的例外。
+</div>
+
+<h2>2 · 首页分组：一个 1 项的分组不再霸占一整行</h2>
+
+<p>
+  首页 8 个分组里有 5 个只装了 1~2 项（数据分析 / OTT / CVP7 / 杂项 / 连接与环境）。
+  改前每个 <code>.launcher-group</code> 都是 <code>width: 100%</code> 的块纵向排列，
+  于是「数据分析」这种<b>只有一张磁贴</b>的分组也占满整行，右侧 4/5 全空。
+</p>
+<p>
+  改成一张<b>棋盘</b>：每个分组按「自己的磁贴数」占 1..N 格，1 项的分组只占 1 格，
+  两个 1 项的分组就能并排站一行。
+</p>
+
+<pre><code>#launcher-groups { display: grid;
+                   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+                   gap: 12px 8px; align-items: start; }
+
+.launcher-group { --span: min(var(--tile-count, var(--cols)), var(--cols));
+                  grid-column: span var(--span); }</code></pre>
+<p>
+  <code>--tile-count</code> 由 <code>biz/ui_layout.js</code> 写在行内（数据侧），
+  CSS 只做 <code>min(格数, 列数)</code>。<code>min()</code> 写在 <code>span</code> 后面
+  <b>实测可用</b>：注入 <code>--n:2 / --c:3</code> 时计算值解成整数 <code>span 2</code>，
+  宽度与写死的 <code>span 2</code> 完全一致 —— 没有它就得为每一档、每个条目数各写一条规则。
+</p>
+
+<table>
+  <thead><tr><th>宽度</th><th>棋盘总高 改前 → 改后</th><th>每组一行 → 并排</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="num">400px</td>
+      <td class="num">1267px → <b>1153px</b></td>
+      <td>8 行全是「1 个分组」→ 数据分析 + OTT 并排（7 行）</td>
+    </tr>
+    <tr>
+      <td class="num">560px</td>
+      <td class="num">1163px → <b>1153px</b></td>
+      <td>同上</td>
+    </tr>
+    <tr>
+      <td class="num">1280px</td>
+      <td class="num">1154px → <b>897px</b>（−22%）</td>
+      <td>8 行 → <b>6 行</b>：数据分析+OTT、PCD+CVP7 各并一排</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · 1280px（每个分组一整行，下方大片留白）</figcaption>
+    <img src="round3/before/home-1280.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 1280px（1 项分组并排，棋盘矮了 257px）</figcaption>
+    <img src="round3/after/home-1280.png" alt="改后">
+  </figure>
+</div>
+
+<h3>顺带把列数收成单点</h3>
+<p>
+  做棋盘时发现列数是三条互相打架的规则叠出来的：基础 <code>minmax(176px)</code>、
+  <code>≤768px</code> 硬写 <code>1fr 1fr</code>、<code>≤560px</code> 又改成 <code>minmax(138px)</code>。
+  结果列数<b>非单调</b>：
+</p>
+<pre><code>viewport  300 340 360 400 480 560 640 768 900 1280
+改前列数    1   1   2   2   2   3   2   2   4    6     ← 560→640 掉回 2 列
+改前磁贴宽 224 264 139 157 197 156 272 336 193  188   ← 磁贴从 156 涨到 336
+改后列数    1   1   2   2   2   2   3   3   4    5
+改后磁贴宽 224 264 139 157 197 237 179 221 193  227</code></pre>
+<p>
+  560px 用 3 列（156px）排，640px 反而掉回 2 列、磁贴涨到 336px，800px 又跳回 3 列。
+  现在收敛成一条单调阶梯，<b>唯一来源是 <code>.launcher-view</code> 的 <code>--cols</code></b>：
+</p>
+<pre><code>≤359px → 1  ·  360~599 → 2  ·  600~899 → 3  ·  900~1099 → 4  ·  ≥1100 → 5</code></pre>
+<p>
+  带宽上下界是按「磁贴 132~271px」定的：下限保证最长标签不截断，
+  上限来自 <code>.launcher-view</code> 的 <code>max-width: 1200px</code>——
+  6 列时每格只有 193px，描述又开始截断（见下一节）。
+</p>
+
+<h2>3 · 标签与描述的截断</h2>
+
+<p>
+  上一轮修掉的两个根因（锁图标白吃一个 gap、星标预留三套值）之外，还剩两类截断。
+  这一轮把 <b>描述</b>交给「列数 × 最小轨道宽」，把 <b>标签</b>交给「窄档折行」。
+</p>
+
+<h3>3.1 描述：最小轨道宽 176px → 由列数决定</h3>
+<p>
+  <code>grid-template-columns: repeat(auto-fill, minmax(176px, 1fr))</code> 在 1280px 下
+  算出 <b>6 列、每格 ~188px</b>，扣掉图标 34 + 间距 10 + 让给星标的 30 + 左右内边距，
+  描述只剩 ~100px —— 最长的那条「T-4 connectivity 清单」要 120px。
+  改后由 <code>--span</code> 决定列数，1280px 排 5 列（每格 227px）。
+</p>
+<p>
+  <b>附带好处：</b>「1 项的分组」里那张孤零零的磁贴，宽度与整行分组里的磁贴完全一致了——
+  这是同一个 <code>--span</code> 变量的副作用，不是巧合。
+</p>
+
+<h3>3.2 标签：窄档（≤768px）允许折两行</h3>
+<p>
+  描述在 <code>≤768px</code> 本来就是 <code>display: none</code>，磁贴右半边是空的——
+  标签却仍然 <code>nowrap + ellipsis</code>。「T-4 Outstanding」要 126px，
+  而 2 列 157px 的磁贴只剩 95px，于是被截成「T-4 Outstandi…」。
+  既然纵向空着，就没必要靠省略号收尾：
+</p>
+<pre><code>@media (max-width: 768px) {
+  .tile-desc { display: none; }
+  .tile-label {           /* 最多折两行，不再截断 */
+    white-space: normal; display: -webkit-box;
+    -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  }
+}</code></pre>
+<p>
+  限两行是防更长的名字把磁贴撑成三行高。「Outstanding」「Anonymous」这种最长的单词约 77px，
+  2 列 157px 的磁贴放得下，所以折行一定成立、不会退化成二次截断。
+</p>
+
+<table>
+  <thead><tr><th>宽度</th><th>列 / 磁贴宽 改前 → 改后</th><th>标签截断</th><th>描述截断</th></tr></thead>
+  <tbody>
+    <tr><td class="num">400px</td><td class="mono">2 列 / 157 → 2 列 / 157</td><td class="num">5 → <b>0</b></td><td>描述隐藏</td></tr>
+    <tr><td class="num">480px</td><td class="mono">2 列 / 197 → 2 列 / 197</td><td class="num">1 → <b>0</b></td><td>描述隐藏</td></tr>
+    <tr><td class="num">560px</td><td class="mono">3 列 / 156 → 2 列 / 237</td><td class="num">5 → <b>0</b></td><td>描述隐藏</td></tr>
+    <tr><td class="num">640px</td><td class="mono">2 列 / 272 → 3 列 / 179</td><td class="num">0 → 0</td><td>描述隐藏</td></tr>
+    <tr><td class="num">768px</td><td class="mono">2 列 / 336 → 3 列 / 221</td><td class="num">0 → 0</td><td>描述隐藏</td></tr>
+    <tr><td class="num">900px</td><td class="mono">4 列 / 193 → 4 列 / 193</td><td class="num">1 → 1</td><td class="num">9 → 10</td></tr>
+    <tr><td class="num">1280px</td><td class="mono">6 列 / 188 → 5 列 / 227</td><td class="num">2 → <b>0</b></td><td class="num">12 → <b>0</b></td></tr>
+  </tbody>
+</table>
+
+<div class="delta">
+  <div>标签截断合计 <span class="old">14 条</span> → <b>1 条</b></div>
+  <div>描述截断合计 <span class="old">21 条</span> → <b>10 条</b>（1280px 归零）</div>
+</div>
+<p style="margin-top:10px">
+  唯一残留的是 <b>900px 那一条</b>：4 列 193px 时描述可用 ~116px，而最长要 126px，
+  有 9~10 条压在临界线上（改前同样是 9 条，不是这轮引入的）。想让这一档彻底干净，
+  把 4 列的阈值从 <code>900px</code> 抬到 <code>1000px</code> 即可 —— 代价是 900~999px 只排 3 列。
+</p>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · 400px（标签截成「T-4 Outstandi…」）</figcaption>
+    <img class="tall" src="round3/before/home-400.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 400px（折两行，名字完整）</figcaption>
+    <img class="tall" src="round3/after/home-400.png" alt="改后">
+  </figure>
+</div>
+
+<div class="ba" style="margin-top:16px">
+  <figure>
+    <figcaption>改前 · 640px（2 列 272px：磁贴巨大、一行只放两张）</figcaption>
+    <img class="tall" src="round3/before/home-640.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 640px（3 列 179px，标签折两行）</figcaption>
+    <img class="tall" src="round3/after/home-640.png" alt="改后">
+  </figure>
+</div>
+
+<h2>4 · 星标与排序按钮：键盘完全用不了</h2>
+
+<p>
+  星标（☆ / ★）和常用功能区编辑态的 <span class="kbd">←</span>
+  <span class="kbd">→</span> <span class="kbd">×</span> 都是
+  <code>&lt;span role="button" tabindex="0"&gt;</code>。
+  <code>role</code> + <code>tabindex</code> 只承诺了「能被 Tab 聚焦、被读屏念成按钮」，
+  <b>不附带任何键盘行为</b> —— 浏览器只对真正的 <code>&lt;button&gt;</code>
+  自动把 Enter / Space 翻成 click。原来这里只有 click 委托，于是键盘用户
+  Tab 到星标、按回车，<b>什么都不会发生</b>。
+</p>
+
+<pre><code>document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+  const target = e.target.closest(".tile-fav-btn, .tile-edit-btn");
+  if (!target) return;
+  e.preventDefault();   // Space 不拦会把页面往下滚
+  target.click();       // 走同一条委托逻辑，不复制一份动作代码
+});</code></pre>
+
+<p>顺手补齐了读屏要的两个属性（sighted 用户看 ★ / ☆，读屏用户只能靠 aria）：</p>
+<pre><code>aria-pressed="${favorited ? "true" : "false"}"
+aria-label="${favorited ? "从常用功能移除" : "加入常用功能"}"   // 不加会念出 "★" 这个字符本身</code></pre>
+
+<p>
+  用 CDP 派发<b>真实键盘事件</b>（不是 <code>element.click()</code>）走一遍：
+</p>
+<pre><code>初始        aria-pressed=false  ☆  收藏数 4
+Tab ×11     焦点落在 .tile-fav-btn
+Enter       aria-pressed=true   ★  收藏数 5   ← 改前：无变化
+Space       aria-pressed=false  ☆  收藏数 4</code></pre>
+
+<h3>还有一个看不见的焦点</h3>
+<p>
+  <code>.tile-fav-btn</code> 默认 <code>opacity: 0</code>（只在 <code>.tile-cell:hover</code>
+  时才浮出来），可它同时带着 <code>tabindex="0"</code> ——
+  键盘用户 Tab 过来时，焦点落在<b>一个完全看不见的元素</b>上，屏幕上零反馈。
+  补上焦点样式后实测：Tab 命中时 <code>:focus-visible</code> 匹配、
+  <code>opacity</code> 稳定为 <b>1</b>。
+</p>
+<pre><code>.tile-fav-btn:focus-visible, .tile-edit-btn:focus-visible {
+  opacity: 1; outline: 2px solid var(--primary-color); outline-offset: 1px;
+}
+.tile:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }</code></pre>
+<div class="note ok">
+  键盘走 <code>outline</code>、鼠标 hover 走变色 + 阴影，两条路径区分开 ——
+  「鼠标正悬停」和「键盘已聚焦」不会互相冒充。
+  <br><b>测量提示：</b><code>.tile-fav-btn</code> 上有 <code>transition: opacity 0.18s</code>，
+  <code>:focus-visible</code> 刚匹配时读 <code>opacity</code> 会读到过渡起点（0）。
+  这不是 bug，要等过渡走完再读（实测 +500ms 为 1）。
+</div>
+
+<h2>5 · 设置页四行不等高</h2>
+
+<p>
+  设置页那四个行式按钮（连接设置 / 布局配置 / 插件偏好 / 项目说明）在 <b>400px</b> 下高度是
+  <b>72 / 72 / 86 / 72</b> —— 「插件偏好」的描述换到了第二行。根因是高度由图标盒
+  （42px）加内边距（14px×2）撑出来，一旦描述换行就跟着漂。
+</p>
+
+<table>
+  <thead><tr><th>宽度 / 行</th><th>改前高</th><th>改后高</th><th>图标盒</th></tr></thead>
+  <tbody>
+    <tr><td>400px · 连接设置</td><td class="num">72px</td><td class="num"><b>65px</b></td><td class="num">42 → 34px</td></tr>
+    <tr><td>400px · 布局配置</td><td class="num">72px</td><td class="num"><b>65px</b></td><td class="num">42 → 34px</td></tr>
+    <tr><td>400px · 插件偏好</td><td class="num old">86px</td><td class="num"><b>65px</b></td><td class="num">42 → 34px</td></tr>
+    <tr><td>400px · 项目说明</td><td class="num">72px</td><td class="num"><b>65px</b></td><td class="num">42 → 34px</td></tr>
+  </tbody>
+</table>
+
+<ul>
+  <li><b>图标盒统一到 34px</b>：全站三个「图标盒」原本是 34 / 34 / <b>42</b>，42 只此一处；
+      现在与 <code>.section-icon</code>、<code>.tile-icon</code> 同尺寸、同 9px 圆角。</li>
+  <li><b>描述强制一行省略</b>（<code>nowrap + ellipsis</code>）：描述是补充信息，
+      标签已经说明这一行是干什么的，允许换行只会让四行各走各的高度。</li>
+  <li><b>文案也缩了</b>：「插件偏好」的描述由
+      <span class="old">Salesforce API 版本 · 侧边栏位置 · 自动隐藏 · 贴边浮窗</span>
+      改成「API 版本 · 侧边栏 · 自动隐藏 · 贴边浮窗」，一行放得下，不必靠省略号。</li>
+</ul>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · 400px（第三行 86px，比别人高 14px）</figcaption>
+    <img src="round3/before/settings-400.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 400px（四行 65px 齐平）</figcaption>
+    <img src="round3/after/settings-400.png" alt="改后">
+  </figure>
+</div>
+
+<h2>6 · 表单挤成一条窄条居中</h2>
+
+<p>
+  SOQL 导出 / Bulk 操作在 1280px 下，表单缩成一条窄条<b>水平居中</b>，
+  左右各留 400 多像素的白。这不是 <code>max-width</code> 的问题（限宽本来就是有意的），
+  是限宽那层包裹<b>根本没占满可用宽度</b>：
+</p>
+
+<table>
+  <thead><tr><th>页面</th><th>可用父宽</th><th>包裹层宽 改前 → 改后</th><th>左空 改前 → 改后</th><th>max-width</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>SOQL 导出（<code>#section-23</code>）</td>
+      <td class="num">1166px</td>
+      <td class="num">313px → <b>1000px</b></td>
+      <td class="num">427 → <b>83px</b></td>
+      <td class="num">1000px</td>
+    </tr>
+    <tr>
+      <td>Bulk 操作（<code>#section-15</code>）</td>
+      <td class="num">1166px</td>
+      <td class="num">298px → <b>800px</b></td>
+      <td class="num">434 → <b>183px</b></td>
+      <td class="num">800px</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>左右空白相等（83/83 与 183/183）说明改后是「占满可用宽度、到 max-width 为止、再居中」。</p>
+
+<pre><code>.section-content > [class*="u-maxw-"] { width: 100%; }</code></pre>
+
+<div class="note">
+  <b>只加 <code>width</code>，不动 <code>max-width</code></b> —— 两者不是同一个属性，不存在覆盖关系。
+  并且限定为 <code>.section-content</code> 的<b>直接子元素</b>：输入框、下拉框这些自己带
+  <code>u-maxw-480 / u-maxw-360</code> 的控件不在这一层，不会被误伤（复核过，仍是 480 / 360）。
+</div>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · SOQL 导出 1280px（313px 窄条居中）</figcaption>
+    <img src="round3/before/soql-1280.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · SOQL 导出 1280px（1000px，按钮到右边缘）</figcaption>
+    <img src="round3/after/soql-1280.png" alt="改后">
+  </figure>
+</div>
+
+<h2>7 · 做这些改动时踩到的两个坑</h2>
+
+<p>两个都是<b>静默失败</b>：不报错、不抛异常、页面照常渲染，只有一个属性悄悄不生效。</p>
+
+<h3>7.1 <code>calc()</code> 里的乘法有顺序</h3>
+<p>
+  分组内边距要随格数收缩（1 格 6px → 5 格 14px），公式 <code>4px + 2 × 格数</code>。
+  写成下面第一种，<b>整条 <code>padding</code> 被丢弃</b>：
+</p>
+<pre><code>padding: 10px calc(4px + 2 * var(--span));    /* ✗ padding-left 计算值回落成 0px */
+padding: 10px calc(4px + var(--span) * 2px);  /* ✓ 8px（--span=2 时） */</code></pre>
+<p>
+  原因：<code>--span</code> 的值是一个 <code>min()</code> 表达式，而
+  <b>「数字 × 数学函数」不是合法语法</b>（数学函数只能出现在乘号的左侧被乘／右侧乘数位置，
+  且参与运算的另一边必须是数字字面量……反过来写就解析失败）。
+  最难发现的地方在于：同一条规则里的 <code>grid-column: span var(--span)</code>
+  <b>照常生效</b> —— 只有 <code>padding</code> 这一个属性没了，看起来像「公式算错」而不是「语法被拒」。
+</p>
+
+<div class="note">
+  用 8 种写法做过对照（<code>/tmp/t-calc.mjs</code>）：只有
+  <code>var(--span) * 2px</code>（乘号后置）与纯 <code>min()</code> 两种算得出值，
+  <code>2 * var(--span)</code>、<code>calc(2*var(--span)*1px)</code> 这类全部回落成 0。
+</div>
+
+<h3>7.2 纵向 flex 里，<code>auto</code> 外边距会否掉 <code>stretch</code></h3>
+<p>
+  第 6 节那个「窄条居中」的直接根因。<code>.section-content</code> 是
+  <code>align-items: stretch</code> 的纵向 flex，包裹层带 <code>u-mx-auto</code>（左右 auto 外边距）——
+  按 Flexbox 规范，<b>cross 轴上的 auto 外边距优先于 <code>align-self</code></b>，
+  于是 <code>stretch</code> 失效，包裹层退化成 shrink-to-fit，宽度由内容撑出来。
+  <br>313px 正好是 SOQL textarea 的自然宽度，298px 是 Bulk 的 —— 看着像「表单被设置了窄宽度」，
+  实际是「宽度从来没被设过」。
+</p>
+
+<h2>8 · 改完仍然留着的三处（有意）</h2>
+
+<table>
+  <thead><tr><th>现象</th><th>为什么留着</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>1280px 第一行「连接与环境」只占 2/5 格，右侧留白。</b></td>
+      <td>棋盘按<b>分组顺序</b>贪心排布。加 <code>grid-auto-flow: dense</code> 能让后面的
+          1 项分组回填这些空格（1280px 从 6 行缩到 5 行），但会打乱用户在「布局配置」里
+          亲手排的分组顺序 —— 一个 1 项分组会跳到「连接与环境」旁边去。
+          <b>顺序是用户配置的语义，密度不是</b>，所以不开。</td>
+    </tr>
+    <tr>
+      <td><b>900~999px 有 9~10 条描述压在截断临界。</b></td>
+      <td>4 列 193px 时描述可用 ~116px，最长要 126px。这是唯一残留的临界档，
+          改前同样是 9 条。要让干净就把 4 列阈值从 900 抬到 1000，代价是这一档掉到 3 列。</td>
+    </tr>
+    <tr>
+      <td><b>SOQL 查询输入框仍是 480px 上限</b>（<code>u-maxw-480</code>）。</td>
+      <td>有上限本身是合理设计（一行 SQL 也不会写 1000px 宽），只是现在外面那层撑开了，
+          对比之下显得窄。想放开的话改 <code>index.html</code> 里的工具类即可。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>9 · 验证记录</h2>
+
+<table>
+  <thead><tr><th>检查</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>npm run check:ui</code>（A–P 组）</td>
+      <td><span class="tag verify">ERROR 0 · WARN 0 · INFO 0</span>
+          （磁贴 24 · section 29 · 图标映射 72 · 硬编码色 0 · 裸 console 0）</td>
+    </tr>
+    <tr>
+      <td><code>npx jest</code></td>
+      <td><span class="tag verify">157 passed / 5 suites</span>（与基线一致）</td>
+    </tr>
+    <tr>
+      <td>截图套件 · <b>src</b>（<code>panel-shot.mjs --base=:8765</code>）</td>
+      <td><span class="tag verify">退出码 0</span>
+          横向溢出 0 · 画布未跟随 0 · 停错 section 0 · 期望不符 0 · 请求版本不符 0</td>
+    </tr>
+    <tr>
+      <td>截图套件 · <b>dist</b>（<code>--base=:8766</code>）</td>
+      <td><span class="tag verify">退出码 0</span> 同上五条全 0</td>
+    </tr>
+    <tr>
+      <td>反向自检 <code>neg-cases.json</code></td>
+      <td><span class="tag verify">退出码 1（期望）</span>
+          <code>停错 section 1 个 · 期望不符 2 个 · 请求版本不符 1 个 → FAIL</code>，与技能文档逐字一致</td>
+    </tr>
+    <tr>
+      <td>真实键盘事件（Enter / Space 派发到星标）</td>
+      <td><span class="tag verify">aria-pressed false→true→false · 收藏数 4→5→4</span></td>
+    </tr>
+    <tr>
+      <td>键盘焦点可见性（<code>:focus-visible</code>）</td>
+      <td><span class="tag verify">匹配 · opacity 0 → 1（等过渡走完）</span></td>
+    </tr>
+    <tr>
+      <td>列数单调性（300 → 1280 共 11 档）</td>
+      <td><span class="tag verify">1 / 2 / 2 / 2 / 2 / 2 / 3 / 3 / 4 / 5 / 5，单调不回头</span></td>
+    </tr>
+    <tr>
+      <td>磁贴宽度一致性（1 格 vs 5 格分组）</td>
+      <td><span class="tag verify">218px vs 227px（差 9px）</span>；内边距固定时是 202 vs 227（差 25px）</td>
+    </tr>
+    <tr>
+      <td>芯片对齐（分组标题左边缘竖线）</td>
+      <td><span class="tag verify">小分组与大分组 chipX 均为 53px</span></td>
+    </tr>
+    <tr>
+      <td>横向溢出（300 / 400 / 1280 三档）</td>
+      <td><span class="tag verify">pageScroll 0 · docScroll 0</span></td>
+    </tr>
+    <tr>
+      <td><code>npm run build</code> → dist</td>
+      <td><span class="tag verify">构建成功 · 逐字复制 31 个扩展文件</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note" style="margin-top:14px">
+  <b>套件自身的抖动记一笔。</b>
+  第一轮 src 跑出来是 <code>停错 section 1 个 → FAIL</code>，红的是
+  <code>prefs-panel-300</code>（链式点击 <code>settings-nav-btn,[data-goto='28']</code>，
+  停在了 section-21 而不是 28）。同一轮 <b>dist 跑的是同一个用例、同一份 CSS，却通过了</b>；
+  单独重跑这条 <b>3/3 全过</b>，完整矩阵重跑也全绿 —— 判定为时序抖动，不是回归。
+  根因写在 <code>shim.js</code> 自己的注释里：链式点击两步之间只留 <code>CLICK_STEP_MS = 200</code>，
+  而上一步的 <code>showSection()</code> 会触发视图切换，第二步点下去时
+  <code>app.js</code> 里 <code>.settings-row</code> 的监听可能还没绑上 ——
+  <b>现象是「点了没反应」，但看起来跟真失败一模一样</b>。
+  所以看到这一条红时，先单独重跑再下结论。
+</div>
+
+<p style="color:var(--text-3); font-size:13px; margin-top:28px">
+  截图：<code>round3/before/</code> 与 <code>round3/after/</code>（各 7 张，同 case 同尺寸；
+  <code>gauge-400</code> 是 3× 放大裁切，用于看刻度数字）。
+  量测脚本：<code>/tmp/t-r3side.mjs</code>（列数 / 棋盘 / 截断 / 设置行 / 表单，一套指标两边跑）、
+  <code>/tmp/t-trunc.mjs</code>、<code>/tmp/t-kbd.mjs</code>（真实键盘）、
+  <code>/tmp/t-fv.mjs</code>（:focus-visible）、<code>/tmp/t-calc.mjs</code>（8 种 calc 写法）。
+</p>
+
+</div>
+</body>
+</html>
