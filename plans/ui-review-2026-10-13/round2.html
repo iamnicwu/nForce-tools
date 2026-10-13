@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nForce Tools · UI 统一化改造记录（2026-10-13）</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --panel: #ffffff;
+    --line: #e5e8ee;
+    --line-soft: #eef1f5;
+    --text: #1f2329;
+    --text-2: #5a6472;
+    --text-3: #8b95a3;
+    --brand: #1890ff;
+    --ok: #52c41a;
+    --warn: #faad14;
+    --err: #f5222d;
+    --code-bg: #f3f5f9;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 24px 80px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.75 -apple-system, "PingFang SC", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.2px; }
+  .sub { color: var(--text-2); margin: 0 0 32px; font-size: 14px; }
+  h2 {
+    font-size: 19px; margin: 44px 0 14px; padding-left: 12px;
+    border-left: 3px solid var(--brand); line-height: 1.3;
+  }
+  h3 { font-size: 15px; margin: 26px 0 8px; }
+  p { margin: 0 0 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px; margin: 0 0 14px;
+  }
+  .card > :last-child { margin-bottom: 0; }
+  code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: #2f54eb;
+  }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+    background: var(--code-bg); border-radius: 8px; padding: 12px 14px;
+    overflow-x: auto; margin: 10px 0;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+  th { color: var(--text-2); font-weight: 600; background: #fafbfc; }
+  td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block; font-size: 11.5px; font-weight: 600;
+    padding: 1px 7px; border-radius: 10px; vertical-align: 1px;
+  }
+  .tag.fix { background: #e6f7ff; color: #0958d9; }
+  .tag.verify { background: #f6ffed; color: #389e0d; }
+  .tag.todo { background: #fffbe6; color: #ad6800; }
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 0; }
+  .ba figure { margin: 0; }
+  .ba figcaption {
+    font-size: 12px; color: var(--text-3); margin-bottom: 5px;
+    font-family: var(--mono);
+  }
+  .ba img {
+    width: 100%; display: block; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff;
+  }
+  .ba img.tall { max-height: 620px; object-fit: cover; object-position: top; }
+  .delta { display: flex; gap: 22px; flex-wrap: wrap; margin: 10px 0 0; }
+  .delta div { font-size: 13px; color: var(--text-2); }
+  .delta b { font-family: var(--mono); color: var(--text); font-size: 15px; }
+  .old { color: var(--text-3); text-decoration: line-through; }
+  .new { color: #0958d9; font-weight: 600; }
+  ul { margin: 8px 0 12px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+  .note {
+    background: #fffbe6; border: 1px solid #ffe58f; border-radius: 8px;
+    padding: 12px 16px; font-size: 13.5px; color: #614700;
+  }
+  .ok { background: #f6ffed; border-color: #b7eb8f; color: #237804; }
+  .kbd {
+    font-family: var(--mono); font-size: 12px; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; background: #fafbfc;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>UI 统一化改造记录</h1>
+<p class="sub">
+  nForce Tools v4.4.0 · 2026-10-13 · 针对「模块间不统一 / 说明占地方 / 按钮形状不统一 / 页面单调 / AI 味」五项<br>
+  第 1–6 节按 29 个功能页横向对比量；第 7 节按 400 / 560 / 1280 三档宽度纵向量
+</p>
+
+<div class="card">
+  <p style="margin-bottom:0">
+    第一轮评审报告（同目录 <code>index.html</code>）给的是问题清单；这一轮是**照着清单改**。
+    改完用 CDP 把 **29 个功能页全量量了一遍**（不靠肉眼抽看截图），所有结论都有具体数字。
+    唯一需要你拍板的是一处命名方向调整，标在「待确认」里。
+  </p>
+</div>
+
+<h2>1 · 说明块：250px → 58–78px</h2>
+
+<p>
+  原来每个功能页开头是「80px 居中圆图标 + 居中 24px 大标题 + 居中说明列表」，
+  一屏里出现三个标题级元素。最长的 section-17 有 224 字 / 5 条，正文被挤到折叠线以下。
+</p>
+<p>
+  改成一条横向信息带：跟模块色的小方章 + 一句话摘要；「字段口径 / 筛选条件」这类
+  <em>不常看但出错时要查</em>的内容收进默认折叠的 <code>&lt;details&gt;</code>。
+  标题不再重复写第二遍——卡片头已经是本页标题。
+</p>
+
+<div class="delta">
+  <div>头部高度 <span class="old">约 250px</span> → <b>58px</b>（无折叠）/ <b>78px</b>（带折叠）</div>
+  <div>摘要字数 最长达 <span class="old">224 字</span> → <b>11–53 字</b></div>
+  <div>折叠细节 <b>0 处</b> → <b>9 个页面</b></div>
+</div>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · 获取报表数据</figcaption>
+    <img src="round2/before/v2-report-tab-1280.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 获取报表数据</figcaption>
+    <img src="round2/after/v2-report-tab-1280.png" alt="改后">
+  </figure>
+</div>
+
+<p style="margin-top:14px">
+  连接设置页（未连接时的落地页）是内联说明最密的一页，除了加信息带，还把两段
+  「点击"测试连接"按钮以验证Salesforce连接」这类说明书腔的文案删掉/收进折叠：
+</p>
+<div class="ba">
+  <figure>
+    <figcaption>改前 · 连接设置</figcaption>
+    <img class="tall" src="round2/before/v2-conn-panel-400.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 连接设置</figcaption>
+    <img class="tall" src="round2/after/v2-conn-panel-400.png" alt="改后">
+  </figure>
+</div>
+
+<h2>2 · 按钮：22 种 class 组合 → 三档高度、一种圆角</h2>
+
+<p>全量量完 71 个可见按钮，高度分布从五种收到三档；剩下的 <code>72px</code> 是设置页的行式按钮（<code>.settings-row</code>，不是操作按钮，本来就该是另一个尺寸）。</p>
+
+<table>
+  <thead><tr><th>指标</th><th>改前</th><th>改后</th></tr></thead>
+  <tbody>
+    <tr><td>按钮高度档位</td><td>24 / 32 / 40 / 48 / 50px（5 种）</td><td><b>30 / 36 / 44px（3 档）</b></td></tr>
+    <tr><td>圆角</td><td>2px 与 6px 并存</td><td><b>统一 6px</b>（<code>--radius-md</code>）</td></tr>
+    <tr><td>就地改色</td><td>22 种 class 组合，<code>u-bg-indigo</code>/<code>u-bg-success</code> 混用</td><td>主操作取模块色 / 次操作白底描边</td></tr>
+  </tbody>
+</table>
+
+<h3>顺带修掉一个只在量高度时才看得见的 bug</h3>
+<p>
+  项目没有全局 <code>box-sizing: border-box</code>。<code>&lt;button&gt;</code> 靠浏览器 UA 样式拿到 border-box，
+  但 <code>&lt;label class="ant-btn"&gt;</code> 形式的按钮（LTS 的「更新概览」包着 file input）没有——
+  同一档按钮会高出 2px：
+</p>
+<pre><code>.ant-btn {
+  box-sizing: border-box;  /* ← 补上这行 */
+  height: 36px;
+  ...
+}</code></pre>
+<div class="delta">
+  <div>section-5「更新概览」<span class="old">32px</span> → <b>30px</b>（与其它 <code>-sm</code> 一致）</div>
+</div>
+
+<h2>3 · 空页面：11 个结果区有了结构</h2>
+
+<p>
+  11 个结果表初始带 <code>u-hidden</code>，空页面只剩「说明 + 一个按钮 + 一大片空白」——
+  这是「页面单调」的根因。给每个结果区加了虚线描边的占位块，表格渲染出来后自动让位（纯 CSS，
+  <code>:has()</code> 相邻兄弟选择器，不引 JS）。
+</p>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · PID Fallout（空态）</figcaption>
+    <img src="round2/before/v2-pid-tab-1280.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · PID Fallout（空态）</figcaption>
+    <img src="round2/after/v2-pid-tab-1280.png" alt="改后">
+  </figure>
+</div>
+
+<div class="note ok" style="margin-top:14px">
+  <b>真实取数流程下验过：</b>占位 <code>display:flex</code> → 表格出现后 <code>none</code> → 收起后回到 <code>flex</code>，双向联动正常，控制台零错误。
+  实现上有个坑：<code>table_utils.js</code> 原来只写内联 <code>style.display</code>，<code>:has()</code> 判不出来，
+  所以补了 <code>showContainer()/hideContainer()</code> 同时切 <code>u-hidden</code> 类。
+</div>
+
+<h2>4 · 头部图标：21 个页面全是近黑色</h2>
+
+<p>
+  这一条是量出来的，不是看出来的——所有页面头部图标坐在彩色底章上，但字形本身是
+  <code>rgba(0,0,0,0.85)</code>。根因：<code>common/icons.js</code> 用
+  <code>el.outerHTML = &lt;svg class="svg-icon"&gt;</code> 整体替换 <code>&lt;i&gt;</code>，
+  <b><code>&lt;i&gt;</code> 上的 class 一个都不保留</b>，所以 <code>u-text-brand</code> 连同
+  <code>u-fs-3xl</code> 之类的尺寸类一起消失，颜色退回继承值。
+</p>
+<p>把颜色与底色收到容器上（子 svg 靠 <code>fill="currentColor"</code> 继承）：</p>
+<pre><code>.section-icon {
+  background: var(--theme-bg, var(--primary-bg));
+  color: var(--theme-color, var(--primary-color));
+}</code></pre>
+
+<table>
+  <thead><tr><th>页面</th><th>模块</th><th>图标 fill（改后实测）</th></tr></thead>
+  <tbody>
+    <tr><td>连接设置（无模块）</td><td>—</td><td class="num">rgb(24,144,255) 蓝 ← 兜底生效</td></tr>
+    <tr><td>获取报表数据</td><td>LTS / PCD</td><td class="num">rgb(24,144,255)</td></tr>
+    <tr><td>VVIP</td><td>VVIP</td><td class="num">rgb(250,173,20) 琥珀</td></tr>
+    <tr><td>中午食乜</td><td>Lunch</td><td class="num">rgb(235,47,150) 粉</td></tr>
+    <tr><td>Bulk / SOQL / Metadata</td><td>Tools</td><td class="num">rgb(47,84,235) 靛</td></tr>
+    <tr><td>Schedule Jobs</td><td>Schedule</td><td class="num">rgb(82,196,26) 绿</td></tr>
+  </tbody>
+</table>
+
+<h2>5 · 同一个功能，两个名字</h2>
+
+<p>
+  29 个功能页里有 <b>12 个</b>的卡片标题和用户点的磁贴标签对不上。这类不一致不会报错，
+  所以一直没人发现，但用户点「A」进去看到「B」，第一反应是「我是不是点错了」。
+</p>
+
+<table>
+  <thead><tr><th>step</th><th>磁贴标签（用户先看到的）</th><th>原卡片标题</th></tr></thead>
+  <tbody>
+    <tr><td class="num">4</td><td>获取文件数据</td><td class="old">根据上传文件获取数据</td></tr>
+    <tr><td class="num">5</td><td>LTS 概览</td><td class="old">LTS 模块</td></tr>
+    <tr><td class="num">7</td><td>OTT</td><td class="old">OTT 模块</td></tr>
+    <tr><td class="num">8</td><td>PCD</td><td class="old">PCD 模块</td></tr>
+    <tr><td class="num">11</td><td>CVP7</td><td class="old">CVP7 模块</td></tr>
+    <tr><td class="num">12</td><td>T-4 Outstanding</td><td class="old">Outstanding T-4 connectivity</td></tr>
+    <tr><td class="num">13</td><td>T-4 分析</td><td class="old">T-4 Outstanding分析 ← 中英拼在一起，连空格都没有</td></tr>
+    <tr><td class="num">16</td><td>PID Fallout</td><td class="old">Data issue - PID fallout</td></tr>
+    <tr><td class="num">17</td><td>QC Issue</td><td class="old">Data issue - QC issue</td></tr>
+    <tr><td class="num">23</td><td>SOQL 导出</td><td class="old">SOQL 数据导出</td></tr>
+    <tr><td class="num">24</td><td>批量导入</td><td class="old">批量数据导入</td></tr>
+    <tr><td class="num">29</td><td>PCD 过期</td><td class="old">获取 PCD 过期数据</td></tr>
+  </tbody>
+</table>
+
+<p>
+  一律<b>以磁贴标签为准</b>改卡片标题——那是用户已经先看到、先记住的名字，
+  而且窄侧边栏里短标签更好排。另外「PCD 过期」「获取 PCD 过期数据」这类长名在
+  日志 / 注释里还有 15 处引用（那些是诊断文案，没动）。
+</p>
+
+<div class="note">
+  <span class="tag todo">待确认</span>
+  <b>「食乜」还是「吃乜」。</b>
+  磁贴、README、manifest 都写「中午<b>食</b>乜」（4 处），只有 <code>index.html</code> 的卡片标题写「中午<b>吃</b>乜」。
+  我按多数派把卡片标题统一成「中午食乜」。如果「吃乜」才是你要的，说一声，我反向统一那 4 处。
+</div>
+
+<h3>加了回归守卫</h3>
+<p>
+  <code>tools/check-ui.mjs</code> 新增 <b>P 组</b>：磁贴标签与卡片标题必须同名。
+  实测注入一处错名会立刻报出所在行和两种改法，改回后归零。
+</p>
+<pre><code>! [P. 磁贴标签↔卡片标题] 点「SOQL 导出」进去，页面标题写的是「故意写错的名字」
+    src/index.html:1661  &lt;div class="ant-card-head-title"&gt; 改成「SOQL 导出」
+    （或反过来把 src/rules/ui_layout.json 里磁贴的 label 改成「故意写错的名字」——两处必须同名）</code></pre>
+
+<h2>6 · 顺手修掉的零碎</h2>
+
+<table>
+  <thead><tr><th>问题</th><th>处理</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Org Dashboard「上次刷新」显示 <code>10/13/2026, 12:21:56 PM</code>（月/日/年倒序 + 英文 AP/PM）</td>
+      <td>新增 <code>utils.formatDateTime()</code>（dayjs 优先，退回显式 <code>zh-CN</code> + 24 小时制），
+          <code>org_limits.js</code> ×2、<code>inspector_tools.js</code>、<code>session_info.js</code> 统一走它</td>
+    </tr>
+    <tr>
+      <td><code>main.css</code> 里两份按钮定义并存（旧的 <code>.ant-btn-lg { height:40px; border-radius:2px }</code> 已被完全覆盖）</td>
+      <td>删掉旧块 + 那段写着「兜底」实则会把内容静默隐藏的
+          <code>.section-header .section-title { display: none }</code></td>
+    </tr>
+    <tr>
+      <td>图标底章的 <code>u-bg-theme</code> 在无模块页面上解析成透明</td>
+      <td>收进 <code>.section-icon</code>，21 处 HTML 工具类去掉</td>
+    </tr>
+    <tr>
+      <td>登录页 / 弹窗按钮 <code>50px + translateY(-2px)</code> 与主应用手感不一致</td>
+      <td>统一到 44px、<code>--radius-md</code>、只变色不上浮</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>7 · 补充：窄栏排版</h2>
+
+<p>
+  上面几节都是「29 页横向对比」量出来的。这一节是换个方向——同一页在
+  <b>400 / 560 / 1280</b> 三档宽度下量，专抓那些「只有某个宽度才露头」的问题。
+  三处都有具体数字，其中两处是同一类根因：<b>0 宽度的元素和没用的预留，照样吃布局</b>。
+</p>
+
+<h3>7.1 告警条里的按钮被压成两行</h3>
+<p>
+  首页 Org 状态卡的告警文案（「1 项已超出配额（>100%），1 项超过 85%，3 项超过 60%」）
+  是个匿名文本节点，跟「查看详情」按钮同处一个 flex 行。文案一长，按钮先被压扁：
+</p>
+<pre><code>400px：48 × 40px  ← 两行，「查看详情」竖排
+1280px：66 × 23px ← 一行</code></pre>
+<pre><code>.org-dash-alert-link {
+  flex-shrink: 0;      /* ← 补 */
+  white-space: nowrap; /* ← 补 */
+}</code></pre>
+<p>改后 400px 也是 66 × 23 单行（文案自己换行，按钮不再变形）。</p>
+
+<h3>7.2 磁贴标签被省略号吃掉</h3>
+<p>这个更有意思：量出来「标签可用 73px，而 6 个汉字需要 78px」——就差 5px，于是「获取当日数据」这类全被截断。顺藤摸瓜找到两个根因。</p>
+
+<p><b>根因一：空的锁图标容器白吃一个 gap。</b>
+<code>.tile-lock-wrap</code> 始终在 DOM 里（未锁定时只把里面的 svg 藏起来），
+但它是 <code>.tile</code> 的第三个 flex 子项——宽度 0，<b>照样占掉一个 8px 的 gap</b>：</p>
+<pre><code>.tile-lock-wrap {
+  position: absolute;  /* ← 移出常规流，宽度还给 .tile-text */
+  top: 0; right: 0; width: 0; height: 0;
+}</code></pre>
+
+<p><b>根因二：星标预留有三套值。</b>
+星标是绝对定位的圆形按钮（<code>right: 9px; width: 22px</code>），
+得靠父级 <code>padding-right</code> 让位。而同一个零件写了三个数：
+基础 <code>36px</code>、<code>≤560px</code> 覆盖成 <code>28px</code>、
+常用功能区又单独 <code>14px</code>。三个数都不是按「星标实际多大」算的。</p>
+<p>查 DOM 才发现关键事实：<b>常用功能区那 4 张磁贴根本没有星标</b>（编辑态换成底部的 ← → ×），
+所以 14px 那条不是随手写的，但它用的是「猜网格」而不是「看有没有星标」。改用 <code>:has()</code>：</p>
+<pre><code>.tile-cell > .tile { padding-right: 14px; }            /* 默认：没有星标 */
+.tile-cell:has(> .tile-fav-btn) > .tile {              /* 有星标才预留 */
+  padding-right: 30px;                                 /* 6px 偏移 + 22px 按钮 + 2px */
+}</code></pre>
+
+<table>
+  <thead><tr><th>宽度</th><th>标签被截断的磁贴</th><th>标签可用宽</th></tr></thead>
+  <tbody>
+    <tr><td class="num">400px（2 列）</td><td><span class="old">13 / 28</span> → <b>5 / 28</b></td><td class="num">73px → <b>79px</b>（常用功能区 87 → <b>95px</b>）</td></tr>
+    <tr><td class="num">560px（3 列）</td><td>5 / 28</td><td class="num">→ <b>78px</b></td></tr>
+    <tr><td class="num">1280px（6 列）</td><td><span class="old">4 / 28</span> → <b>2 / 28</b></td><td class="num">84px → <b>100px</b></td></tr>
+  </tbody>
+</table>
+
+<p>剩下 5 个是 <code>T-4 Outstanding</code>（102px）、<code>Execute Anonymous</code>（126px）这类
+本身就更长的名字，2 列 157px 的磁贴确实放不下——再挤就要动图标尺寸和星标热区了，不划算。</p>
+
+<div class="ba">
+  <figure>
+    <figcaption>改前 · 首页 400px（告警按钮两行 + 标签 <code>获取当日数…</code>）</figcaption>
+    <img src="round2/before/home-panel-400.png" alt="改前">
+  </figure>
+  <figure>
+    <figcaption>改后 · 首页 400px</figcaption>
+    <img src="round2/after/home-panel-400.png" alt="改后">
+  </figure>
+</div>
+
+<div class="note ok">
+  <b>列数没动。</b> 全程没碰 <code>.tile-grid</code> 的 <code>minmax()</code> 与 <code>gap</code>，
+  所以 <code>panel-shot.mjs</code> 里 <code>data-tile-cols</code> 的三处期望值（560→3 / 400→2 / 1280→6）不需要同步。
+  改完实测仍是 2 / 3 / 6。
+</div>
+
+<h2>8 · 还没动的（有意留着）</h2>
+
+<p>这 6 个页面没有加信息带，因为它们本来就不是「功能页」：</p>
+<ul>
+  <li><b>项目说明</b>（README 渲染页）、<b>Ott</b>（未开发占位）——加带只是噪音</li>
+  <li><b>设置</b>（导航列表，本身就是入口）、<b>插件偏好</b>（<code>.pref-group</code> 自成一套结构）</li>
+  <li><b>布局配置</b>（已有 <code>.layout-panel-tip</code> 说明块）、<b>Session 链接</b>（已有安全警告条，再加一条会变成三层堆叠）</li>
+</ul>
+
+<h2>9 · 验证记录</h2>
+
+<table>
+  <thead><tr><th>检查</th><th>结果</th></tr></thead>
+  <tbody>
+    <tr><td><code>npm run check:ui</code>（A–P 组）</td><td><span class="tag verify">ERROR 0 · WARN 0</span></td></tr>
+    <tr><td><code>npx jest</code></td><td><span class="tag verify">157 passed / 5 suites</span>（与基线一致）</td></tr>
+    <tr><td>截图套件 10 场景（panel / tab × 400 / 1280）</td><td><span class="tag verify">横向溢出 0 · 画布未跟随 0 · 停错 section 0 · 期望不符 0</span></td></tr>
+    <tr><td>空状态双向联动（真实取数流程）</td><td><span class="tag verify">flex → none → flex</span>，控制台零错误</td></tr>
+    <tr><td>29 个页面全量量测（按钮档位 / 头部 / 图标色）</td><td><span class="tag verify">见上文各表</span></td></tr>
+    <tr><td>三档宽度排版量测 400 / 560 / 1280（磁贴截断 / 告警按钮 / 列数）</td><td><span class="tag verify">截断 13→5、8→8、4→2；按钮恒为单行；列数 2/3/6 未变</span></td></tr>
+    <tr><td><code>npm run build</code> → dist</td><td><span class="tag verify">构建成功，dist 与 src 同步</span></td></tr>
+  </tbody>
+</table>
+
+<p style="color:var(--text-3); font-size:13px; margin-top:28px">
+  截图：<code>round2/before/</code> 与 <code>round2/after/</code>（各 8 张，同 case 同尺寸）。
+  量测脚本：<code>/tmp/nforce-verify/audit-ui.mjs</code>（全量）、<code>probe-icon.mjs</code>（图标色）。
+</p>
+
+</div>
+</body>
+</html>
