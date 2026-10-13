@@ -339,7 +339,11 @@ function tileHtml(tile, group, opts = {}) {
                           data-action="remove" data-tile-id="${escapeHtml(tile.id)}" title="移出常用功能">×</span>
                 </span>`;
   } else if (mode === "group") {
+    // aria-pressed 是 role="button" 表达"可切换"的标准方式，sighted 用户看 ★ / ☆，
+    // 读屏用户只能靠它。aria-label 同理 —— 不加的话读屏会念出 "★" 这个字符本身。
     overlay = `<span class="tile-fav-btn${favorited ? " is-on" : ""}" role="button" tabindex="0"
+                    aria-pressed="${favorited ? "true" : "false"}"
+                    aria-label="${favorited ? "从常用功能移除" : "加入常用功能"}"
                     data-action="toggle-fav" data-tile-id="${escapeHtml(tile.id)}"
                     title="${favorited ? "从常用功能移除" : "加入常用功能"}">${favorited ? "★" : "☆"}</span>`;
   }
@@ -366,7 +370,10 @@ function groupHtml(group, favoriteSet) {
   const tiles = group.tiles
     .map((t) => tileHtml(t, group, { mode: "group", favorited: favoriteSet.has(t.id) }))
     .join("\n");
-  return `<section class="launcher-group" style="--group-accent: ${accent}; --group-tint: ${tint};">
+  // --tile-count 给 CSS 的 --span 用（棋盘上占几格）：1 项的分组只占 1 格，
+  // 两个 1 项的分组就能并排站一行，不再各自霸占一整行。
+  return `<section class="launcher-group" data-tile-count="${group.tiles.length}"
+                style="--group-accent: ${accent}; --group-tint: ${tint}; --tile-count: ${group.tiles.length};">
                 <div class="launcher-group-head">
                     <span class="launcher-group-chip">
                         <i class="fas ${escapeHtml(group.icon)}"></i>
@@ -588,6 +595,20 @@ export async function initUiLayout() {
     const step = parseInt(link.getAttribute("data-step"), 10);
     if (!step) return;
     showSection(step);
+  });
+
+  /* 星标（☆ / ★）与编辑态按钮（← → ×）是 <span role="button" tabindex="0">。
+     role + tabindex 只承诺了"能被 Tab 聚焦、被读屏念成按钮"，**不附带任何键盘行为**
+     —— 浏览器只对真正的 <button> 自动把 Enter/Space 转成 click。原来这里只有 click
+     委托，于是键盘用户 Tab 到星标、按回车，什么都不会发生（实测 className 不变）。
+     统一在这里把两个键翻译成 click，走同一条委托逻辑，不复制一份动作代码。
+     Space 必须 preventDefault，否则会顺带把页面往下滚。 */
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+    const target = e.target instanceof Element ? e.target.closest(".tile-fav-btn, .tile-edit-btn") : null;
+    if (!target) return;
+    e.preventDefault();
+    target.click();
   });
 
   // 配置面板（现在是「设置 → 布局配置」里的一个功能页 section-20）

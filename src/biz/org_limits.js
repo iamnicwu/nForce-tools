@@ -166,9 +166,10 @@ const ZONE_COLORS = {
   danger: "#ffccc7"  // = --error-border
 };
 
-// 文字/指针色用 rgba（canvas 支持，取值对应 --text-primary / --text-light 令牌）
-const GAUGE_TEXT = "rgba(0, 0, 0, 0.85)";
-const GAUGE_TICK = "rgba(0, 0, 0, 0.25)";
+// 文字/指针色用 rgba（canvas 支持，取值对应 --text-primary / --text-light / --text-secondary 令牌）
+const GAUGE_TEXT = "rgba(0, 0, 0, 0.85)";   // = --text-primary
+const GAUGE_TICK = "rgba(0, 0, 0, 0.25)";   // = --text-light
+const GAUGE_LABEL = "rgba(0, 0, 0, 0.45)";  // = --text-secondary
 
 // 图表实例管理：innerHTML 重建前必须 dispose，否则实例泄漏。
 // 实例表全局共享（首页面板 + 详情页各一份），dispose 时必须限定 scope host ——
@@ -233,8 +234,16 @@ function gaugeOption(pct) {
         endAngle: -30,
         min: 0,
         max: gaugeMax,
-        splitNumber: 5,
-        radius: "100%",
+        // 刻度分 2 段 → 分度线与数字落在 0 / 中点 / 上限三个锚点上。原来的 5
+        // 画出来是 0/20/40/60/80/100 六道线，有两个毛病：
+        //   1. 首页面板的画布只有 132×104（宽由高度决定），6 个数字必然糊成一团；
+        //   2. 分区色带的界线在 60% 与 85%，而分度线在 20% 的整数倍上 —— 85 那条
+        //      界线两边没有任何刻度，等于刻度尺和色带在说两件事。
+        // 三个锚点在任何宽度都读得清；"过没过线"交给色带表达。
+        splitNumber: 2,
+        // 半径从 100% 收到 78%，给刻度数字让出位置 —— 100% 时 0 与上限两个
+        // 数字会被顶到画布外（实测直接裁掉）。
+        radius: "78%",
         center: ["50%", "62%"],
         // 转速表式分区底带：绿区 / 黄区 / 红区（含超额区）
         axisLine: {
@@ -270,7 +279,17 @@ function gaugeOption(pct) {
           distance: 2,
           lineStyle: { color: GAUGE_TICK, width: 1.5 }
         },
-        axisLabel: { show: false },
+        // 刻度数字：canvas 不认 var()，颜色走上面登记过的 GAUGE_LABEL。
+        // 9px + distance 10 是在首页面板那张 132×104 的画布上量出来的下限：
+        // distance 4 时"0"正好落在分区带里，被进度弧的圆头盖掉一半；
+        // 9px 是三个数字能同时容下的最大字号（再大就会和指针打架）。
+        axisLabel: {
+          show: true,
+          distance: 10,
+          fontSize: 9,
+          color: GAUGE_LABEL,
+          formatter: (v) => `${Math.round(v)}`
+        },
         title: { show: false },
         detail: { show: false },
         data: [{ value: Number(pct.toFixed(1)) }],
