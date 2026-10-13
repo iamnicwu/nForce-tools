@@ -1727,6 +1727,20 @@ optgroup {
     padding: 0;
 }
 
+/* 限宽包裹层必须显式给 width，否则它会在宽屏下退化成一条窄条。
+   原因：本容器是 align-items:stretch 的纵向 flex，而包裹层带 u-mx-auto ——
+   **cross 轴上的 auto 外边距会让 stretch 失效**（Flexbox 规范：auto 外边距优先于
+   align-self），于是它变成 shrink-to-fit，宽度由内容撑出来。
+   实测 1280px：卡片内容区 1166px，SOQL 表单只有 313px（textarea 的自然宽度）、
+   Bulk 只有 298px —— 就是「表单挤成窄条居中」那个现象的根因。
+   补 width:100% 之后是「占满可用宽度、到 max-width 为止、再居中」。
+   只加 width，不动 max-width（两者不是同一个属性，不存在覆盖关系），
+   且限定为 .section-content 的直接子元素 —— 输入框、下拉框这些带 u-maxw-* 的
+   控件不在这一层，不会被误伤。 */
+.section-content > [class*="u-maxw-"] {
+    width: 100%;
+}
+
 /* ---------- 按钮：统一形状（2026-10-13） ----------
    动手前全站有 22 种 class 组合，同一个「主操作」按钮有四种高度
    （fetch-btn 48 / ant-btn-lg 40 / 默认 32 / ant-btn-sm 24），
@@ -2138,9 +2152,68 @@ optgroup {
 }
 
 /* ---------- 首页：配色与布局 ---------- */
+/* 磁贴列数 --cols：首页唯一的列数来源。
+   ------------------------------------------------------------------
+   原来列数是三条互相打架的规则叠出来的：基础 minmax(176px)、≤768 硬写 1fr 1fr、
+   ≤560 又改成 minmax(138px)。实测下来列数**非单调**：
+
+     viewport  300 340 360 400 480 520 560 640 720 768 800 1000 1280
+     列数        1   1   2   2   2   3   3   2   2   2   3    4    5
+     磁贴宽     224 264 139 157 197 143 156 272 312 336 227  218  227
+
+   560→640 这一档从 3 列掉回 2 列、磁贴从 156px 直接涨到 336px（.launcher-view 的
+   max-width:1200px 撞上 ≤768 那条硬写的 1fr 1fr），800px 又跳回 3 列。
+   现在收敛成一条单调的阶梯，带宽上下界按「磁贴 132~271px」定：
+
+     ≤359px → 1   ·  360~599 → 2   ·  600~899 → 3   ·  900~1099 → 4   ·  ≥1100 → 5
+
+   下限要保证两件事：① 磁贴 ≥132px，标签「T-4 Outstanding」才不会被截断；
+   ② ≥769px 时描述文字会显示（≤768px 是 display:none），磁贴 ≥196px 才能让
+   「T-4 connectivity 清单」（需 122px）完整放下。5 列是上限 —— .launcher-view
+   的 max-width 1200px 决定了 6 列时磁贴只有 193px，描述又开始截断。
+   极窄档的 359px 是从旧行为对齐来的：340px 时 1 列（磁贴 264px）、360px 才切 2 列。 */
 .launcher-view {
+    --cols: 2;
     max-width: 1200px;
     margin: 0 auto;
+}
+
+@media (max-width: 359px) {
+    .launcher-view { --cols: 1; }
+}
+
+@media (min-width: 600px) {
+    .launcher-view { --cols: 3; }
+}
+
+@media (min-width: 900px) {
+    .launcher-view { --cols: 4; }
+}
+
+@media (min-width: 1100px) {
+    .launcher-view { --cols: 5; }
+}
+
+/* 功能分组容器 = 一张「棋盘」。
+   ------------------------------------------------------------------
+   原来每个 .launcher-group 都是 width:100% 的块、纵向排列，于是**一个只装 1 项
+   的分组也霸占一整行**：分组头 26px + 一行磁贴，右侧 4/5 全空。实测首页 8 个分组
+   里有 5 个是 1~2 项（数据分析 / OTT / CVP7 / 杂项 / 连接与环境），
+   400px 侧边栏里白扔约 300px 高度。
+
+   改成棋盘后，每个分组按「自己的磁贴数」占 1..--cols 格（--tile-count 由
+   biz/ui_layout.js 写在行内），1 项的分组只占 1 格，两个 1 项分组就并排站一行。
+   用 1/-1 之外的整数 span 是关键 —— 它能跟着 --cols 在各档自动收敛。
+
+   grid-column 里的 min() 是实测可用的（Chrome 会把 span 的数学函数解成整数）：
+   注入 --n:2/--c:3 时计算值是 `span 2`，宽度 200/300，与写死的 span 2 完全一致。
+   没有它就得为每一档、每个条目数写一条规则。 */
+#launcher-groups {
+    display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+    gap: 12px 8px;
+    /* 短分组不要被同行的高分组拉高 */
+    align-items: start;
 }
 
 /* 设置类卡片里的说明文字。
@@ -2214,9 +2287,15 @@ optgroup {
 .settings-row {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
     width: 100%;
-    padding: 14px 16px;
+    /* 高度改为「由图标盒决定」，不再随描述文案长短漂移：
+       原来 icon 42px + 上下 14px 内边距 = 72px，但「插件偏好」那行的描述换到了
+       第二行 → 那一行变成 86px，四行三个高度。现在 icon 收到 34px（与
+       .section-icon / .tile-icon 同尺寸），min-height 给 60px 兜底，
+       描述强制一行省略 —— 四行永远等高。 */
+    min-height: 60px;
+    padding: 12px 14px;
     text-align: left;
     font-family: inherit;
     background: var(--bg-primary);
@@ -2237,10 +2316,13 @@ optgroup {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
-    font-size: var(--fs-xl);
-    border-radius: 11px;
+    /* 34px / 9px 圆角，与 .section-icon、.tile-icon 对齐 —— 全站三个「图标盒」
+       原来是 34 / 34 / 42 两种尺寸，42 那个只此一处。字号沿用原来的 18px，
+       只是把令牌名从 --fs-xl 换成语义正确的 --icon-md（两者等值）。 */
+    width: 34px;
+    height: 34px;
+    font-size: var(--icon-md);
+    border-radius: 9px;
     background: var(--row-tint, var(--accent-blue-tint));
     color: var(--row-accent, var(--accent-blue));
 }
@@ -2262,6 +2344,11 @@ optgroup {
 .settings-row-desc {
     font-size: var(--fs-xs);
     color: var(--text-secondary);
+    /* 强制定一行：描述是补充信息，标签已经说明了这一行是干什么的。
+       允许换行的话，四行的行高会跟着文案长短各走各的（实测 72/72/86/72）。 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .settings-row-arrow {
@@ -2646,12 +2733,40 @@ optgroup {
 
 /* 功能分组（紧凑版） */
 .launcher-group {
-    padding: 10px 14px;
-    margin-bottom: 12px;
+    /* 占多少格：自己的磁贴数与 --cols 取小。
+       --tile-count 缺失时（结构变化、旧缓存）回退成整行，不会算出非法值。 */
+    --span: min(var(--tile-count, var(--cols)), var(--cols));
+    grid-column: span var(--span);
+    /* 左右内边距随格数收缩：5 格 14px（与原来一致）→ 1 格 6px。
+       为什么必须收缩：棋盘列间距与磁贴间距都是 8px，于是 k 格分组里单张磁贴的宽度
+       可以化简成「列宽 B - (4px 边框 + 2×内边距)/k」—— 内边距固定时，1 格分组的磁贴
+       要独自摊掉整个 32px，而 5 格分组由 5 张均摊。实测 1280px（B = 233.6px）：
+         内边距固定 14px   → 1 格 202px vs 5 格 227px（差 25px）
+         内边距 4+2k       → 1 格 218px vs 5 格 227px（差 9px）
+       差值降了一个量级，并排放着不再像两种规格的卡片。
+       剩下的 9px 来自 k 格分组内部那 (k-1) 个 8px 磁贴间距 —— 它只摊给 k 张，
+       1 格分组没有这个摊销项。要彻底抹平得让内边距随格数二次增长（k=5 时要 38px），
+       反而把分组撑得虚胖，不划算。
+
+   注意乘法必须写成 `var(--span) * 2px`：--span 的值是一个 min() 表达式，
+   `2 * var(--span)` 这种「数字 × 数学函数」的写法 Chrome 会整条丢弃
+   （实测 padding-left 计算值回落成 0px，而 grid-column: span var(--span) 照常生效 —— 
+   只在一个属性上失败，很难看出是语法问题）。 */
+    padding: 10px calc(4px + var(--span) * 2px);
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
     border-left: 3px solid var(--group-accent, var(--primary-color));
     border-radius: 12px;
+    /* 纵向间距交给棋盘的行间距（gap: 12px），分组自己不再带 margin —— 
+       带 margin 的话它会计入 span 宽度，同一行的分组右边会多出 12px 的空档。 */
+    margin-bottom: 0;
+}
+
+/* 把上面收缩掉的内边距补给分组头，让所有分组的标题芯片仍落在同一条竖线上：
+   内容左边缘 = 3px(左边框) + (4+2k)px(内边距) + margin，取 k=5 时的 17px 为准，
+   故 margin-left = 17 - 3 - (4+2k) = 10 - 2k。k=5 时为 0，不改变现状。 */
+.launcher-group > .launcher-group-head {
+    margin-left: calc(10px - var(--span) * 2px);
 }
 
 .launcher-group-head {
@@ -2678,9 +2793,17 @@ optgroup {
     color: var(--text-light);
 }
 
+/* 最小轨道宽 196px（原 176px）。176 在 1280px 下算出 6 列、每格只有 ~188px，
+   扣掉图标 34 + 间距 10 + 让给星标的 30 + 左右内边距，标签/描述只剩 ~100px ——
+   实测 12 个功能的描述被省略号吃掉（最长的「T-4 connectivity 清单」要 120px）。
+   抬到 196 后 1280px 排 5 列（每格 ~227px），描述全部完整。
+
+   列数现在由父级的 --span 决定（= 所在分组的格数），不再由 auto-fill 自己算 ——
+   这样「1 项的分组」里的那张磁贴，宽度与整行分组里的磁贴完全一致。
+   「常用功能区」不在任何 .launcher-group 里，--span 落到回退值 --cols，即整行。 */
 .tile-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+    grid-template-columns: repeat(var(--span, var(--cols, 1)), minmax(0, 1fr));
     gap: 8px;
 }
 
@@ -2823,6 +2946,26 @@ optgroup {
     color: var(--warning-color);
 }
 
+/* 键盘焦点的可见性 —— 这里原来是个死角。
+   .tile-fav-btn 默认 opacity: 0（只在 .tile-cell:hover 时才浮出来），
+   可它同时带着 tabindex="0"：键盘用户 Tab 过来时焦点落在**一个看不见的元素**上，
+   屏幕上没有任何反馈，只能盲按回车。:focus-visible 必须把它显出来，
+   并给一个和 hover 不同的描边（hover 是变色 + 阴影，键盘走 outline），
+   这样"鼠标正悬停"和"键盘已聚焦"两种情况不会互相冒充。
+   同理适用于常用功能区编辑态的 ← → ×。 */
+.tile-fav-btn:focus-visible,
+.tile-edit-btn:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+}
+
+/* 磁贴本身是 <a href="#">，同样需要可见的键盘焦点 */
+.tile:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
 /* 常用功能区「编辑态」：← → 调序、× 移出 */
 .tile-edit-actions {
     position: absolute;
@@ -2932,12 +3075,28 @@ optgroup {
 }
 
 @media (max-width: 768px) {
-    .tile-grid {
-        grid-template-columns: 1fr 1fr;
-    }
+    /* 这里原本写死 `grid-template-columns: 1fr 1fr`。它和基础规则的
+       minmax(176px)、≤560 的 minmax(138px) 三方叠加，是列数非单调的直接原因
+       （560px→3 列，640px 掉回 2 列且磁贴涨到 336px）。现在列数统一由
+       .launcher-view 的 --cols 决定，这里不再插手。 */
 
     .tile-desc {
         display: none;
+    }
+
+    /* 描述一隐藏，磁贴右半边就空出来了 —— 标签没必要再用省略号收尾。
+       基础规则是 nowrap + ellipsis，而 ≤768px 的磁贴只有 139~237px 宽，
+       「T-4 Outstanding」这类 126px 的名字在窄档必被截（实测 400px 5 个、
+       640px 3 列时 2 个，截成「T-4 Outstandi…」）。
+       改成最多折两行后，这些名字都能完整显示（「T-4」/「Outstanding」）：
+       「Outstanding」「Anonymous」这种最长的单词约 77px，2 列 157px 的磁贴放得下。
+       限两行是防更长的名字把磁贴撑成三行高。 */
+    .tile-label {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow-wrap: break-word;
     }
 
     .favorites-hint {
@@ -3651,11 +3810,9 @@ optgroup {
         gap: 8px;
     }
 
-    /* 磁贴：默认 minmax(176px) 在 560px 以下要么只排 1 列、要么挤爆，
-       放宽到 138px 让 340px 以上稳定排两列（列数由 auto-fill 自己算，
-       再窄会自动退回单列，不必为每一档写死列数）。 */
+    /* 磁贴列数不再在这里算（原 minmax(138px)）：列数由 .launcher-view 的
+       --cols 统一决定，窄栏只是把行/列间距收紧。 */
     .tile-grid {
-        grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
         gap: 6px;
     }
 
@@ -3741,12 +3898,8 @@ optgroup {
     }
 }
 
-/* 极窄档（≤300px）：一列只能到 ~278px 内容宽，两列会把标签压到读不出 */
-@media (max-width: 300px) {
-    .tile-grid {
-        grid-template-columns: 1fr;
-    }
-}
+/* 极窄档（≤300px）原本在这里把磁贴写成单列。现在由 .launcher-view 的
+   --cols（≤359px 时为 1）统一负责，这里不再重复。 */
 
 /* 极窄档（≤280px）：Chrome 的侧边栏头部本来就显示扩展名与图标，
    而品牌 logo 是固定宽高比的图形没法再压小，留着只会把顶栏顶成两行。 */
