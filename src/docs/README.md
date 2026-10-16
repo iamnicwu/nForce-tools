@@ -11,7 +11,8 @@
 ### 核心功能
 - **LTS Fallout 案例总结**：新增 LTS 订单 Fallout 案例总结功能，提供详细的业务流程图和案例汇总表，帮助用户快速理解和处理 LTS 订单异常场景。
 - **Schedule Jobs 管理**：支持查看、创建、暂停、恢复和清除定时任务，方便自动化工作流程。
-- **Debug Log 查看器**：内置 Apex Debug Log 查看器，方便开发者调试和诊断 Salesforce 代码问题。
+- **Execute Anonymous + 自动日志**：临时跑一段匿名 Apex —— **输入框带代码提示**（关键字 / 内置类与成员 / 当前 org 的 sObject 与字段，打字即弹，`Ctrl+Space` 手动唤出）；**执行完自动取回本次执行的那条日志** —— Log ID、摘要（操作 · 体积 · 时间 · 状态）与完整正文，支持复制日志 / 复制 Log ID / 下载 `.log`；org 没开日志跟踪时会自动开一条（见更新日志 v4.8.0）。点结果里的 Log ID 可直接跳到 View Log 看详细分析。
+- **View Log（日志分析）**：把任何一份 Apex 调试日志拆开看 —— 概览数字（总耗时 · SOQL / DML 次数与行数 · 异常 · 堆峰值）、**最慢的几步（按自身耗时）**、可折叠的调用树、SOQL / DML 明细、异常与未识别的行。两个入口：填 **Log ID**（从 org 取正文）或**直接粘贴日志正文**（这条不需要连接）。跑完 Execute Anonymous 后，**点结果里那个 Log ID 就会跳到这里并自动分析**。
 
 ### Salesforce连接管理
   - 支持手动输入Session ID连接
@@ -30,6 +31,7 @@
   - **T-4 Outstanding**：获取 LTS T-4 报表数据，筛选符合条件的记录。
   - **数据分析**：上传Excel文件，根据预定义或自定义规则自动分析数据并更新状态。
   - **Bulk 操作**：支持输入 SOQL 语句，通过 Salesforce Bulk API 2.0 创建批量查询任务，实时查看进度并下载海量数据结果。
+  - **SOQL 查询 / 导出（含代码提示）**：写一段 SOQL 直接查，结果可导出 Excel / CSV；**输入框带代码提示** —— 对象名、字段（写完 `FROM 对象` 后会换成那张表的字段）、聚合函数与日期字面量（见更新日志 v4.11.0）。
 - **Order 历史**：给一个 Order 的 **Name / Id / Order Number**，列出它的字段变更历史（时间 · 字段 · 旧值 → 新值 · 操作人），可导出 Excel。**也能直接写在全局搜索里**：在搜索框敲入单号，结果第一条就是「查询 Order 历史：<值>」，回车即查。查不到时会区分「没这个单」「这个单没有历史（org 没开字段历史追踪）」「org 根本没有 OrderHistory 对象」三种情况。
 - **中午食乜**：午餐抽签工具，上传餐厅列表 Excel 文件，随机抽取今日午餐地点。
 
@@ -183,6 +185,10 @@ nForce-tools/
 │   │   ├── ui_config.js         # 连接与布局配置项的读写
 │   │   ├── command_palette.js   # 全局搜索面板（⌘/Ctrl+K、`/`、网页浮层共用同一套结果）
 │   │   ├── order_history.js     # Order 历史查询页（字段历史 + 全部字段 + 查询日志）
+│   │   ├── view_log.js          # View Log：日志分析页（解析 → 概览 / 调用树 / SOQL·DML 表）
+│   │   ├── apex_complete.js     # Execute Anonymous 的代码提示浮层（位置 / 键盘 / 插入 + org 数据补齐）
+│   │   ├── soql_complete.js     # SOQL 查询框的代码提示（同一套浮层，候选换成 SOQL 语义）
+│   │   ├── code_hint.js         # 通用代码提示浮层（防抖触发 / 光标定位 / 键盘 / 插入），Apex 与 SOQL 共用
 │   │   ├── prefs_panel.js       # 「插件偏好」设置卡片（API 版本 / 侧边栏位置 / 搜索快捷键）
 │   │   ├── session_recovery.js  # 会话恢复：Cookie 换新会话、401 自动续期、断连看门狗
 │   │   ├── org_limits.js        # Org 状态面板 + Org Limits 详情页（ECharts gauge）
@@ -203,6 +209,11 @@ nForce-tools/
 │   │   ├── cmdk_view.js   # 搜索结果的唯一渲染实现（面板与网页浮层共用）
 │   │   ├── fuzzy.js       # 模糊匹配（含拼音 / 缩写别名）
 │   │   ├── order_query.js # Order 值识别 + SOQL 拼装（零依赖，SW 也用）
+│   │   ├── apex_log.js    # Execute Anonymous 取日志的纯逻辑（SOQL 拼装 + 判定「哪条才是本次的」）
+│   │   ├── apex_log_view.js # Apex 日志解析结果的**视图模型**（概览/最慢几步/明细/树 HTML，纯逻辑可单测）
+│   │   ├── apex_completions.js # Apex 代码提示的纯逻辑（上下文解析 / 候选组装 / 排序 / 应用，可单测）
+│   │   ├── apex_symbols.js # 代码提示的词表（关键字 / 内置类与成员 / 标准对象与常用字段 / 片段）
+│   │   ├── soql_completions.js # SOQL 代码提示的纯逻辑（**扫整条语句**找 FROM 对象 + 按子句给候选）
 │   │   ├── shortcut.js    # 快捷键的平台化显示与校验
 │   │   ├── ui_events.js   # 页面 ⇄ SW 的消息与 storage 键名（唯一来源）
 │   │   ├── graph_token.js # Microsoft Graph 令牌存取（从 chrome.storage.local 读，不含硬编码凭据）
@@ -210,7 +221,7 @@ nForce-tools/
 │   │   └── t2rules.js     # T2 / 到期订单规则引擎
 │   ├── lib/               # 第三方库
 │   │   ├── css/           # antd.full.css（vendored 源头）+ antd.min.css（裁剪产物，构建时生成）+ cmdk.css（搜索面板材质）
-│   │   └── js/            # SheetJS / Day.js / ECharts / JSZip / Marked / CometD
+│   │   └── js/            # SheetJS / Day.js / ECharts / JSZip / Marked / CometD / apex-log-parser（Apex 日志解析，BSD-3）
 │   ├── icons/             # 图标资源
 │   ├── rules/             # 规则配置（含首页布局 ui_layout.json）
 │   └── docs/              # 文档（本文件）
@@ -289,6 +300,53 @@ npm test               # 单元测试（jest，直接跑 src/ 的原生 ESM）
 3. 批量查询时，建议单次处理的数据量不要过大，以免触发Salesforce API限制。
 
 ## 更新日志
+
+### v4.11.0 (2026-10-17)
+
+**SOQL 查询框也支持代码提示（并把提示浮层抽成通用模块）**
+
+- 「SOQL 导出」页的查询框与「Bulk 操作」里的 SOQL 框都会提示：**对象名 / 字段 / 聚合函数（COUNT · SUM · CALCULATE…）/ 日期字面量（TODAY · LAST_N_DAYS:n…）/ 关键字**。
+- **提示依赖整条语句**：写完 `FROM Account` 之后，光标回到 `SELECT ` 里挑字段时，给的仍然是 Account 的字段 —— 只看光标前面的文本是拿不到对象名的，那是最常见的写法。别名也认（`FROM Account a` → 打 `a.` 给 Account 的字段）。
+- 顺手清掉一处死代码：`#soql-field-list` 那份字段 datalist **从没接到任何输入框**（`list=` 一直没写），可每次改对象名都会因此白发一次 describe 请求。字段提示现在由浮层提供，用户也不用"先在另一个框里选一次对象"了。
+- 实现上把提示浮层抽成了通用模块（`biz/code_hint.js`）：防抖触发、光标定位（"镜子 div"）、键盘、插入都在那里，Apex 与 SOQL **各写各的候选逻辑**（`common/apex_completions.js` / `common/soql_completions.js`，都带单测）。org 结构（对象名 / 字段）的缓存收进 `sf_service`，两处共用 —— 一次 `describeGlobal` 同时服务两个输入框。
+
+### v4.10.0 (2026-10-17)
+
+**Execute Anonymous 的输入框支持代码提示**
+
+- 打字时自动弹候选（`Ctrl+Space` 手动唤出；`↑` `↓` 选择、`Enter` / `Tab` 采用、`Esc` 关闭）。方法候选会补成 `debug()` 并**把光标放进括号里**。
+- 候选分两层，互补：
+  - **静态词表**（`common/apex_symbols.js`）：Apex 关键字、平台内置类与常用成员（`System` / `Database` / `Schema` / `Limits` / `Test` / `Trigger` / `UserInfo`…）、常见标准对象与常用字段、常用代码片段。
+  - **当前 org**：对象名走一次 `describeGlobal`，输入 `Account.` 时按需 `describe` 拿**真实字段**（都带进程内缓存）。
+  - 前者是**兜底**（未连接 / describe 失败 / 粘贴代码进来时照常可用），后者是**后台补齐** —— 先弹静态候选，数据回来再刷新一次，用户不用干等。
+- 字符串与注释里**不提示**（跨行块注释、字符串里的 `//`、转义引号都处理过）。
+- 实现上给原生 `<textarea>` 挂了一个绝对定位的候选浮层（位置用"镜子 div"量光标坐标算出来），**没有引入 Monaco / CodeMirror**：需求要的是提示，而候选词表本来就得自己写（Apex 没有可用的 JS 语言服务），换编辑器只会多背几百 KB 与一套要适配的皮肤。逻辑与渲染分层：`common/apex_completions.js` 是纯逻辑（25 条单测），`biz/apex_complete.js` 只管显示与键盘。
+
+### v4.9.0 (2026-10-16)
+
+**新增功能页「View Log」：把 Apex 日志拆开看**
+
+- 独立功能页（工具组，磁贴 `view-log`）：**Log ID** 或**粘贴正文**两个入口 → 概览 → 最慢的几步 → 调用树 → SOQL → DML → 异常与问题 → **原始日志（默认展开，完整正文，可复制 / 下载 `.log`）**。
+  - 「最慢的几步」按**自身耗时**排，不是总耗时：容器节点（CODE_UNIT / EXECUTION_STARTED）的总耗时永远最大，按它排只能得出"整个事务花了 3 秒"，回答不了"慢在哪一步"。
+  - 调用树用原生 `<details>` 嵌套（可折叠、零 JS），默认展开前几层；节点上万时只画前 600 个并提示去下载原始日志。
+  - 「粘贴正文」这条**不需要连接 Salesforce**（所以这个页面**没进连接门禁**，未连接时也能用）。
+- **Execute Anonymous 跑完，点结果里的 Log ID 就跳到这里并自动分析** —— Log ID 本身就是入口，不用复制粘贴。
+- 解析用 `@apexdevtools/apex-log-parser`（BSD-3-Clause，Certinia 出品 —— 就是 Apex Log Analyzer 那个 VS Code 扩展背后的解析器）：171 种事件类型、事件树带每节点耗时、SOQL / DML 行数。它约 115KB，**vendor 进 `lib/js/` 并按需动态 import**（同 marked 的做法，不进首屏）；因为 `src/` 不打包也要能跑，所以**不能用裸模块名 import**，只能走包内相对路径。
+- 顺带修掉三处（都由截图/断言发现，见 MODULES M 节）：`truncation` 字段永远是个对象，真值判断会让**每一份正常日志**都被标成"被截断"；调用树"默认展开前 3 个"因为计数在递归后被推大而整棵折叠；**结果区重置时误清了 `<details>` 容器的 `textContent`，把里面的 summary / 按钮 / 日志正文容器一起删掉 —— 原始日志永远显示不出来，而且一个报错都没有**（改成只清内容元素，并加了 `viewLogRawOk` 断言守住它）。
+
+### v4.8.0 (2026-10-16)
+
+**Execute Anonymous：执行完自动带上「本次」那条日志**
+
+- 以前执行完只显示「编译成功 / 执行成功」，日志得自己去 Setup → Debug Logs 里翻 —— 而 org 默认**不给任何用户记日志**，多数人翻到的是一条都没有。现在执行完直接把**本次执行**那条取回来：Log ID、摘要（操作 · 体积 · 时间 · 状态）与完整正文，可「复制日志 / 复制 Log ID / 下载 .log」（文件名就是 Log ID，和 Setup 里对得上）。
+- 链路四步：① 确保当前用户有一条有效的 `TraceFlag`（没有就建、过期就续期，30 分钟有效）→ ② 记下执行前最新一条 `ApexLog` 的 Id → ③ 执行后轮询，直到出现一条 **Id 与执行前不同**的日志 → ④ 取它的 Body。
+  - 「认准本次那条」靠 **Id 变化**，不靠时间比较：`StartTime` 由服务端时钟决定，与本机时钟有时差，按时间比会偶发拿错或漏掉。
+  - 日志落库有延迟（常见几百毫秒），所以是**轮询等待**而不是查一次就算。
+- ①②③④ 任何一步失败都**不影响代码执行**：结果照常显示，下面另起一行说明原因与下一步（跟踪开不起来 → 去 Setup → Debug Logs 加一条；跟踪正常但没日志 → 多半是代码里没写 `System.debug()`，或日志已被 org 清理）。
+- 顺手修掉两处既有问题：
+  - Body 端点原先写成标准 REST 的 `/sobjects/ApexLog/{id}/Body`（漏了 `tooling/`）→ 真机 404。改成 Tooling 路径。
+  - 「执行代码」按钮执行结束后图标变成**空白方块**：按钮文案是动态重写的，新插入的 `<i class="fas …">` 不会被启动时那次 `replaceIcons()` 处理（这次由渲染验证的 unfixed 计数抓到）。
+- 执行请求由 GET 改为 **POST + 表单体**（`anonymousBody` 放 query string 会撞 URL 长度上限，稍长的脚本直接 414），失败自动回退 GET。
 
 ### v4.7.0 (2026-10-16)
 
