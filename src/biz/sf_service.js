@@ -202,6 +202,13 @@ export let sfConn = {
       // 放在验证之后，验证路径永远只是「照实回答 true/false」，
       // 而 app 里所有功能走的 `sfConn.connection` 才具备无缝续期能力。
       conn.onAuthFailure = authFailureHandler;
+      // 换了 org（或换了实例）才清结构缓存：describe 结果只对当前 org 有效，
+      // 留着会让代码提示给出上一个 org 的字段；而同一个 org 的**重连不清** ——
+      // 否则后台每次重试都会让缓存失效，下一次提示又要重发 describeGlobal（白烧限额）。
+      if (this._schemaCachedForInstance !== conn.instanceUrl) {
+        this.clearSchemaCache();
+        this._schemaCachedForInstance = conn.instanceUrl;
+      }
       this.connection = conn;
       globalConn = conn;
       this.lastError = null;
@@ -1509,53 +1516,79 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
 
   // ---------- org 结构（给输入框里的代码提示用）----------
   //
-  // Apex 编辑器与 SOQL 查询框都要"当前 org 里有哪些对象 / 某个对象有哪些字段"。
-  // 两处共用这两个方法，缓存也放在这一层（进程内）：
-  //   · describeGlobal 在几千对象的 org 上也就是一次请求 —— 但没必要每敲一个字都发；
-  //   · 字段按对象缓存。
-  // **失败一律落空值（不重试、不抛）**：提示功能不该因为取不到 org 结构就用不了，
-  // 调用方拿不到东西时继续用静态词表兜底。
+  // ⚠️ **describe 是有日调用限额的**，而且每次返回该对象的全部字段、开销不小。
+  // 所以插件里**只允许从这里发 describe 请求**，并且一律按对象缓存：
+  //   · 代码提示要字段名 → `listObjectFields()`
+  //   · 批量导入要字段类型 / 选项值 → `describeSObject()`
+  // 两者取的是**同一份缓存**（同一个对象不会 describe 两次）。
+  // 另外 `describeGlobal`（对象名清单）在几千对象的 org 上也是一次请求，同样只发一次。
+  // 失败一律落空值（不重试、不抛）：提示不该因为取不到结构就用不了，也不能因重试打爆限额。
 
   /** sObject 名清单 → `{ names: string[], fromOrg: boolean }` */
   async listSObjectNames() {
     if (this._sobjectNames) return this._sobjectNames;
     if (!this.connection) return { names: [], fromOrg: false };
-    try {
-      const res = await this.describeGlobal();
-      const names = ((res && res.sobjects) || []).map((s) => s && s.name).filter(Boolean);
-      this._sobjectNames = { names, fromOrg: true };
-      log.info(`代码提示：已从 org 取到 ${names.length} 个 sObject 名`);
-    } catch (e) {
-      this._sobjectNames = { names: [], fromOrg: false };
-      log.warn("代码提示：取 sObject 名清单失败（继续用静态词表）:", e && e.message);
-    }
-    return this._sobjectNames;
+    // 缓存 **Promise**（见 describeSObject 的说明）：两处提示 + SOQL 页的 datalist 会同时首次
+    // 调用它，缓存结果的话这几个调用会各自发一次 describeGlobal。
+    const pending = (async () => {
+      try {
+        // ⚠️ 是 `this.connection.describeGlobal()`，不是 `this.describeGlobal()` ——
+        // 后者在 sfConn 上不存在（describeGlobal 属于 Connection 对象），写错的后果是
+        // **每次抛 TypeError 被下面的 catch 吃掉**：界面照常（静态词表兜底），
+        // 但"当前 org 的对象名"永远进不了候选。2026-10-17 由 `api-describe-global-shared-400`
+        // 抓到（在那之前没有任何断言看过 describeGlobal 到底有没有发出去）。
+        const res = await this.connection.describeGlobal();
+        const names = ((res && res.sobjects) || []).map((s) => s && s.name).filter(Boolean);
+        log.info(`已从 org 取到 ${names.length} 个 sObject 名（一次，之后走缓存）`);
+        return { names, fromOrg: true };
+      } catch (e) {
+        log.warn("取 sObject 名清单失败（继续用静态词表）:", e && e.message);
+        return { names: [], fromOrg: false };
+      }
+    })();
+    this._sobjectNames = pending;
+    return pending;
   },
 
-  /** 某个对象的字段名清单（拿不到给空数组，也会被缓存下来免得反复重试） */
+  /**
+   * 某个对象的**完整** describe 结果（按对象缓存）。
+   *
+   * ⚠️ 缓存的是 **Promise 而不是结果** —— 并发调用去重。代码提示的 `enrich` 会在每次输入后跑，
+   * 而它和"上一次还没回来的那次请求"很容易重叠（防抖窗口内连打几个字符就够）：
+   * 缓存结果的话，第二次调用发现"缓存里没有"就又发一次；缓存 Promise 则拿到同一个 in-flight
+   * 请求。describe 有日限额，这个差别是实打实的。
+   *
+   * @returns {Promise<object|null>} 拿不到给 null（失败也缓存，避免反复重试烧限额）
+   */
+  async describeSObject(objectName) {
+    if (!objectName) return null;
+    if (!this._describeCache) this._describeCache = new Map();
+    if (this._describeCache.has(objectName)) return this._describeCache.get(objectName);
+    if (!this.connection) return null;
+    const pending = (async () => {
+      try {
+        const res = await this.connection.sobject(objectName).describe();
+        log.info(`已取到 ${objectName} 的描述（字段 ${((res && res.fields) || []).length} 个，之后走缓存）`);
+        return res || null;
+      } catch (e) {
+        log.warn(`取 ${objectName} 的描述失败:`, e && e.message);
+        return null;
+      }
+    })();
+    this._describeCache.set(objectName, pending);
+    return pending;
+  },
+
+  /** 某个对象的字段名清单（代码提示用；内部走 `describeSObject` 的缓存） */
   async listObjectFields(objectName) {
-    if (!objectName) return [];
-    if (!this._objectFields) this._objectFields = new Map();
-    if (this._objectFields.has(objectName)) return this._objectFields.get(objectName);
-    if (!this.connection) return [];
-    try {
-      const res = await this.connection.sobject(objectName).describe();
-      const names = ((res && res.fields) || []).map((f) => f && f.name).filter(Boolean);
-      this._objectFields.set(objectName, names);
-      log.info(`代码提示：已取到 ${objectName} 的 ${names.length} 个字段`);
-      return names;
-    } catch (e) {
-      log.warn(`代码提示：取 ${objectName} 的字段失败:`, e && e.message);
-      // 缓存空数组：同一个对象不再反复请求（提示继续用静态兜底）
-      this._objectFields.set(objectName, []);
-      return [];
-    }
+    const res = await this.describeSObject(objectName);
+    return ((res && res.fields) || []).map((f) => f && f.name).filter(Boolean);
   },
 
-  /** 换 org / 断开时清掉结构缓存（否则提示会给出上一个 org 的字段） */
+  /** 换 org / 断开时清掉结构缓存（describe 结果只对当前 org 有效） */
   clearSchemaCache() {
     this._sobjectNames = null;
-    this._objectFields = null;
+    this._describeCache = null;
   },
 
   // ---------- Execute Anonymous + 自动取本次执行的日志 ----------

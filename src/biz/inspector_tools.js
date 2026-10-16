@@ -74,11 +74,11 @@ export async function loadSoqlObjects() {
   const datalist = document.getElementById("soql-object-list");
   if (!datalist || datalist.childElementCount > 0) return;
   try {
-    const conn = getConn();
-    const global = await conn.describeGlobal();
-    datalist.innerHTML = global.sobjects
-      .map(s => `<option value="${escapeHtml(s.name)}"></option>`)
-      .join("");
+    // 走 `sfConn.listSObjectNames()` 而不是自己 `describeGlobal()` —— 后者会让这个 datalist
+    // 与两个输入框的代码提示**各发一次**同样的请求（同一个 org、同一份数据）。
+    // 现在一次 describeGlobal 同时服务三处，而且按 org 缓存。
+    const { names } = await sfConn.listSObjectNames();
+    datalist.innerHTML = names.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
   } catch (e) {
     logSoql.warn("加载对象列表失败:", e);
   }
@@ -270,8 +270,15 @@ export async function handleImportObjectChange() {
   importState.describe = null;
   if (!objName) { renderImportMapping(); return; }
   try {
-    const conn = getConn();
-    importState.describe = await conn.sobject(objName).describe();
+    // 走 sfConn 的 describe 缓存（与代码提示共用同一份）—— 反复试同一个对象时只发一次请求，
+    // describe 是有日限额的，这里没必要每次都去要一遍
+    const describe = await sfConn.describeSObject(objName);
+    if (!describe) {
+      showNotification(`对象描述获取失败：${objName}（不存在或没有权限）`, "error");
+      renderImportMapping();
+      return;
+    }
+    importState.describe = describe;
     renderImportMapping();
   } catch (e) {
     showNotification("对象描述获取失败：" + (e.message || e), "error");
