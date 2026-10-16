@@ -2,35 +2,34 @@ import { createLogger } from "./logger.js";
 
 const log = createLogger("EXCEL");
 import { showNotification, loadingLog } from "./utils.js";
-import { ensureXLSX } from "./lib_loader.js";
+import { requireXLSX } from "./lib_loader.js";
 
 /**
- * 按需加载 SheetJS（xlsx.full.min.js，0.85MB）
- *
- * index.html 不再同步引入该库（侧边栏每打开一次就要多解析 0.85MB），
- * 因此所有用到 XLSX 的入口都必须先 await 本函数。
- *
- * @returns {Promise<boolean>} 是否可用
- */
-async function requireXLSX() {
-  try {
-    await ensureXLSX();
-    return true;
-  } catch (error) {
-    log.error("加载 XLSX 库失败:", error);
-    showNotification("加载 Excel 处理库失败：" + (error.message || error), "error");
-    return false;
-  }
-}
-
-/**
- * 导出数据到 Excel
+ * 导出数据到 Excel（单工作表）
  * @param {Array} data - 要导出的数据
  * @param {string} fileNamePrefix - 文件名前缀
  * @param {string} sheetName - 工作表名称
  */
 export async function exportToExcel(data, fileNamePrefix, sheetName) {
-  if (!data || data.length === 0) {
+  // 单 sheet 只是多 sheet 的特例 —— 实现只有一份（见 exportSheetsToExcel）
+  return exportSheetsToExcel([{ name: sheetName, data }], fileNamePrefix);
+}
+
+/**
+ * 导出**一个文件、多个工作表**（2026-10-16 加：Order 历史要同时给「历史记录」与「Order 字段」）。
+ *
+ * 为什么不把 workbook 交给调用方自己拼：文件名的时间戳、空数据提示、失败提示、
+ * 以及「XLSX 没加载上就不导出」这几件事必须一致 —— 散出去就会各写一份（这个项目里
+ * 已经有过「同一件事两处实现」的教训，见 MODULES 的同名函数表）。
+ *
+ * @param {Array<{name: string, data: Array<Object>}>} sheets
+ * @param {string} fileNamePrefix
+ */
+export async function exportSheetsToExcel(sheets, fileNamePrefix) {
+  const usable = (Array.isArray(sheets) ? sheets : []).filter(
+    (s) => s && Array.isArray(s.data) && s.data.length > 0
+  );
+  if (!usable.length) {
     showNotification("没有可导出的数据", "info");
     return;
   }
@@ -39,9 +38,14 @@ export async function exportToExcel(data, fileNamePrefix, sheetName) {
 
   try {
     // 使用SheetJS将数据转换为Excel文件
-    const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    usable.forEach((sheet, i) => {
+      // 工作表名不能含 : \ / ? * [ ]，且上限 31 字符（超了 Excel 直接拒开这个文件）
+      const safeName = String(sheet.name || `Sheet${i + 1}`)
+        .replace(/[:\\/?*\[\]]/g, "_")
+        .slice(0, 31);
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(sheet.data), safeName);
+    });
 
     // 生成文件名，包含当前日期和时间
     const today = new Date();

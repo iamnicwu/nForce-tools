@@ -2,12 +2,22 @@
 // Service Worker for nForce Tools
 // 使用 Chrome Alarm API 管理定时任务
 import { createLogger } from "./common/logger.js";
-// 贴边浮窗（内容脚本）的配置来源。内容脚本是经典脚本、不能 import，
-// 所以它通过 runtime.sendMessage 向这里要配置 —— 偏好的键名只在 prefs.js 里写一份。
+// 偏好层：SW 也要初始化它（跨宿主同步 + 供搜索浮层读常用/布局）。
 // ⚠️ 本文件是**逐字复制**进 dist 的 ESM service worker，它的 import 必须真的存在：
-// tools/build-plan.mjs 的 COPY_RULES 里已为 common/prefs.js 与 common/api_version.js
-// 各列了一条复制规则（check-ui 的 J 组会盯这件事）。
-import { loadPrefs, watchPrefsStorage, onPrefsChanged, getPref, PREF_KEYS } from "./common/prefs.js";
+// tools/build-plan.mjs 的 COPY_RULES 里为 prefs.js 与它依赖的
+// api_version.js / shortcut.js / logger.js 各列了一条复制规则（check-ui 的 J 组会盯这件事）。
+import { loadPrefs, watchPrefsStorage } from "./common/prefs.js";
+// 全局搜索（Alt+Shift+S）的消息名与 storage 键。两端（这里 / biz/command_palette.js
+// / src/search_overlay.js）共用同一份常量，理由见 ui_events.js 头部；
+// 同样在 COPY_RULES 里登记过。
+import { UI_MESSAGE, UI_STORAGE } from "./common/ui_events.js";
+// 注入到网页的搜索浮层由这里提供数据与渲染：条目构建与结果 HTML 都复用
+// 插件面板那一套（common/command_index.js / common/cmdk_view.js）——
+// 浮层是"复制型的经典脚本"，连 import 都不能有，所以只能由我们把现成的结果发过去。
+// ⚠️ 这两个模块（含它们依赖的 fuzzy / icons / utils）都必须有对应的 COPY_RULES：
+// 本文件是**逐字复制**的 ESM service worker，import 的目标在 dist 里必须真实存在。
+import { buildSearchEntries, defaultFavoriteIds } from "./common/command_index.js";
+import { renderList, shellHtml } from "./common/cmdk_view.js";
 
 const log = createLogger("BG");
 
@@ -157,13 +167,15 @@ function isValidSender(sender) {
 
 // 监听来自前端的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // ⚠️ 必须最先放行 `dock:*`（贴边浮窗那条链路，监听器在文件末尾）。
+  // ⚠️ 必须最先放行 `search:*`（那条链路的监听器在文件末尾）。
   // Chrome 对同一条消息会依次调用**所有**监听器，但只认**第一个** sendResponse：
-  // 这里下面的白名单校验对 `dock:get-config` 是"未知类型"，会立刻回一个
+  // 这里下面的白名单校验对 `search:open` 是"未知类型"，会立刻回一个
   // `{success:false, error:'Invalid message type'}`，于是后面那个监听器的
-  // 异步回话永远送不出去（内容脚本只拿到 ok=false）→ 浮窗静默地永不启用。
-  // 静态检查与截图都抓不到这个：它只在真实的 Salesforce 页面上才暴露。
-  if (typeof message?.type === "string" && message.type.startsWith("dock:")) {
+  // 异步回话永远送不出去（浮层只拿到 ok=false）→ 浮层静默地永远打不开。
+  // 静态检查与截图都抓不到这个：它只在真实网页上才暴露。
+  const earlyPass =
+    typeof message?.type === "string" && message.type.startsWith("search:");
+  if (earlyPass) {
     return undefined;
   }
 
@@ -502,8 +514,239 @@ try {
   log.debug("绑定侧边栏开关事件失败:", e);
 }
 
+// ===== 快捷键：唤起全局搜索（Alt+Shift+S，Spotlight 式） =====
+// 首选路径是**把浮层注入到当前网页**（用户明确要求的"浮在当前网页上"），
+// 只有注入不了时才回退到"让插件自己的页面弹面板 / 打开侧边栏"。
+//
+// ⚠️ 用到 `chrome.scripting.executeScript`，而它需要 `scripting` 权限 +
+// **对当前标签页的访问权**。后者来自 `activeTab`：Chrome 规定
+// 「用户按下 commands 快捷键」也是一种授予 activeTab 的用户手势，
+// 所以这条路径**不需要** `<all_urls>` 主机权限（也就不会在安装时多出
+// 「读取和更改您在所有网站上的数据」那条提示）。
+// 权限没给上 / 页面受限（chrome:// 、扩展页、文件页）时会抛错 → 走回退路径。
+
+/** 注入用的文件名。与 tools/build-plan.mjs 的 COPY_RULES 逐字一致（check-ui 的 J 组会核对它在 dist 里存在） */
+const SEARCH_OVERLAY_FILE = "search_overlay.js";
+
+/** 索引缓存：SW 随时可能被回收，丢了重建即可；TTL 只是避免每次按键都读一遍 storage + JSON */
+let searchIndexCache = { at: 0, entries: null };
+const SEARCH_INDEX_TTL_MS = 30000;
+
+async function loadSearchEntries() {
+  if (searchIndexCache.entries && Date.now() - searchIndexCache.at < SEARCH_INDEX_TTL_MS) {
+    return searchIndexCache.entries;
+  }
+  let stored = {};
+  try {
+    stored = await chrome.storage.local.get(["ui_layout", "ui_favorites", "is_connected"]);
+  } catch (e) {
+    log.debug("读取搜索索引所需的 storage 失败:", e);
+  }
+  let shipped = null;
+  try {
+    const res = await fetch(chrome.runtime.getURL("rules/ui_layout.json"));
+    if (res.ok) shipped = await res.text();
+  } catch (e) {
+    log.debug("读取出厂布局失败（只用内置页面条目）:", e);
+  }
+
+  const candidates = [stored.ui_layout, shipped];
+  const favoriteIds = Array.isArray(stored.ui_favorites)
+    ? stored.ui_favorites
+    : defaultFavoriteIds(candidates);
+  const entries = buildSearchEntries({
+    candidates,
+    favoriteIds,
+    isConnected: stored.is_connected === true
+  });
+  searchIndexCache = { at: Date.now(), entries };
+  return entries;
+}
+
+/** 渲染一次结果（浮层要的就是"现成的 HTML + 行数 + 计数文案"） */
+async function renderSearchForOverlay(query) {
+  const entries = await loadSearchEntries();
+  const view = renderList({ query, entries, activeIndex: 0 });
+  return {
+    listHtml: view.html,
+    rows: view.count,
+    countText:
+      view.scope === "favorites"
+        ? `常用 ${view.count} / 全部 ${view.total}`
+        : `${view.count} / ${view.total}`,
+    firstLabel: view.firstLabel,
+    scope: view.scope
+  };
+}
+
+/**
+ * 把「请进入某个功能」落到某个宿主上（`step` 为空表示"只把插件打开"）。
+ *
+ * 顺序与 open-search 同源：**先问已打开的插件页面**（那里有完整的"未连接就先自动连接"
+ * 逻辑，见 app.js 的 gotoSection），没人接单才打开侧边栏并留一枚待办。
+ */
+async function routeGoto(step, extra = null) {
+  const target = Number(step) || 0;
+  // `extra` 是要带给目标功能的参数（目前只有 `orderValue`：搜索里输入的 Order 值）。
+  // 两条落地路径都得带上它 —— 消息直达那条、以及"没人接单 → 写待办 → 新页面读"那条。
+  const orderValue = extra && extra.orderValue ? String(extra.orderValue) : undefined;
+
+  try {
+    const res = await chrome.runtime.sendMessage({
+      type: UI_MESSAGE.GOTO_SECTION,
+      step: target || undefined,
+      orderValue
+    });
+    if (res && res.ok) {
+      log.info(`网页浮层跳转${target ? ` section-${target}` : ""}，交给已打开的插件页面处理`);
+      return true;
+    }
+  } catch (e) {
+    log.debug("没有插件页面响应跳转请求:", e && e.message ? e.message : e);
+  }
+
+  // ⚠️ 待办必须在 open() **之前**写：面板页面一开始加载就跑 initApp，
+  // 那时的读取早于 open() 之后的任何 await —— 顺序反了就是一个纯竞态。
+  if (target) {
+    try {
+      await chrome.storage.session.set({
+        [UI_STORAGE.PENDING_SECTION]: { step: target, orderValue, at: Date.now() }
+      });
+    } catch (e) {
+      log.warn("写入待办功能失败（面板会打开但不自动跳转）:", e);
+    }
+  }
+
+  if (sidePanelApi && typeof sidePanelApi.open === "function") {
+    try {
+      const win = await chrome.windows.getLastFocused();
+      if (win && win.id !== undefined) {
+        await sidePanelApi.open({ windowId: win.id });
+        const openSet = await readOpenWindows();
+        openSet.add(win.id);
+        await writeOpenWindows(openSet);
+        log.info(`网页浮层跳转${target ? ` section-${target}` : ""}，已打开侧边栏`);
+        return true;
+      }
+    } catch (e) {
+      // 侧边栏打不开（不支持 / 非用户手势）→ 下面退化成开一个标签页，
+      // 同一枚待办会被那个页面兑现，所以不必回滚
+      log.warn("打开侧边栏失败，改用标签页承载跳转:", e);
+    }
+  }
+
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
+    log.info(`网页浮层跳转${target ? ` section-${target}` : ""}，已用标签页打开`);
+    return true;
+  } catch (e) {
+    log.error("跳转失败：侧边栏与标签页都打不开:", e);
+    return false;
+  }
+}
+
+/** 把浮层注入当前标签页；返回是否注入成功 */
+async function injectSearchOverlay() {
+  if (!chrome.scripting || typeof chrome.scripting.executeScript !== "function") {
+    log.debug("chrome.scripting 不可用，跳过浮层注入");
+    return false;
+  }
+  let tab = null;
+  try {
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    tab = tabs && tabs[0];
+  } catch (e) {
+    log.debug("查询当前标签页失败:", e);
+    return false;
+  }
+  if (!tab || tab.id === undefined || !tab.url) return false;
+  // 只有普通网页能注入：chrome:// / about: / 文件页 / 扩展页 一律不行
+  if (!/^https?:/i.test(tab.url)) return false;
+  // 插件自己的页面不需要浮层（页面内已有 Ctrl/Cmd+K 与首页入口）→ 交给回退路径
+  if (tab.url.startsWith(chrome.runtime.getURL(""))) return false;
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: [SEARCH_OVERLAY_FILE]
+    });
+    log.info("快捷键：已把搜索浮层注入当前网页");
+    return true;
+  } catch (e) {
+    log.warn("注入搜索浮层失败，回退到插件自身路径:", e);
+    return false;
+  }
+}
+
+/** 叫已打开的扩展页面自己弹搜索框；返回是否有页面接单 */
+async function askOpenPagesForSearch() {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: UI_MESSAGE.OPEN_SEARCH });
+    return !!(res && res.ok);
+  } catch (e) {
+    log.debug("没有扩展页面响应全局搜索请求:", e && e.message ? e.message : e);
+    return false;
+  }
+}
+
+async function openSearchFromCommand() {
+  // ① 首选：把浮层注入到当前网页（用户选的就是"浮在当前网页上"）
+  if (await injectSearchOverlay()) return;
+
+  // ② 当前页面注入不了（受限页 / 插件自己的页面）→ 让已打开的插件页面弹面板
+  if (await askOpenPagesForSearch()) {
+    log.info("快捷键：已唤起全局搜索（当前插件页面）");
+    return;
+  }
+
+  if (!sidePanelApi || typeof sidePanelApi.open !== "function") {
+    log.warn("快捷键：当前浏览器不支持侧边栏，也无法唤起全局搜索");
+    return;
+  }
+
+  // ③ 谁都没接单 → 打开侧边栏，并留一枚带时间戳的 token 让新页面自己展开面板。
+  //    ⚠️ token 必须在 open() **之前**写：面板页面一开始加载就会跑 initApp，
+  //    而那时的读取早于 open() 之后的任何 await —— 顺序反了就是一个纯竞态，
+  //    表现是"快捷键时灵时不灵"。
+  try {
+    await chrome.storage.session.set({ [UI_STORAGE.OPEN_SEARCH_TOKEN]: Date.now() });
+  } catch (e) {
+    log.warn("快捷键：写入搜索请求标记失败（侧边栏会打开但不自动弹出搜索框）:", e);
+  }
+
+  try {
+    const win = await chrome.windows.getLastFocused();
+    if (!win || win.id === undefined) {
+      await clearSearchToken();
+      return;
+    }
+    // 快捷键处理器里调用 open() 属于合法的用户手势上下文
+    await sidePanelApi.open({ windowId: win.id });
+    const openSet = await readOpenWindows();
+    openSet.add(win.id);
+    await writeOpenWindows(openSet);
+    log.info("快捷键：已打开侧边栏并唤起全局搜索");
+  } catch (e) {
+    // 面板没开成 → 必须把 token 撤掉，否则它会在保鲜期内被下一个碰巧加载的页面消费
+    log.error("快捷键：打开侧边栏失败，已放弃本次全局搜索:", e);
+    await clearSearchToken();
+  }
+}
+
+async function clearSearchToken() {
+  try {
+    await chrome.storage.session.remove([UI_STORAGE.OPEN_SEARCH_TOKEN]);
+  } catch (e) {
+    /* 撤不掉也只能算了：token 自带保鲜期，最多让下一个页面多弹一次 */
+  }
+}
+
 try {
   chrome.commands?.onCommand?.addListener(async (command) => {
+    if (command === "open-search") {
+      await openSearchFromCommand();
+      return;
+    }
     if (command !== "toggle-side-panel") return;
     try {
       const win = await chrome.windows.getLastFocused();
@@ -530,74 +773,92 @@ try {
   log.debug("注册快捷键监听失败（commands 不可用）:", e);
 }
 
-// ===== 贴边浮窗：配置下发 + 日志转发 =====
-// 内容脚本（dist/dock.js）是经典脚本，既不能 import 偏好层、也不能用 logger，
-// 所以这两件事都由这里代劳。
-const dockLog = createLogger("DOCK");
-
-/** 浮窗需要的最小配置。键名一律取自 PREF_KEYS，别在这里写字符串字面量。 */
-function dockConfig() {
-  return {
-    enabled: !!getPref(PREF_KEYS.dockEnabled),
-    side: getPref(PREF_KEYS.dockSide),
-    hideDelay: Number(getPref(PREF_KEYS.dockHideDelay))
-  };
-}
-
-const prefsReady = loadPrefs();
+// 偏好层在 SW 里也要初始化：跨宿主同步（`watchPrefsStorage`）。
+// 不 await —— 搜索浮层那边是各自去读 prefs 的缓存，没有必须先完成的事。
+loadPrefs();
 watchPrefsStorage();
 
-// 上一次广播出去的配置。作用：偏好里任何一项变化都会触发 onPrefsChanged，
-// 但我们只该在**浮窗相关**的项变化时才打扰所有标签页。
-let lastDockConfigJson = null;
-
-async function broadcastDockConfig(force = false) {
-  const config = dockConfig();
-  const json = JSON.stringify(config);
-  if (!force && json === lastDockConfigJson) return;
-  lastDockConfigJson = json;
-
-  let tabs = [];
-  try {
-    tabs = await chrome.tabs.query({});
-  } catch (e) {
-    return;
-  }
-  await Promise.all(
-    tabs.map(async (tab) => {
-      if (tab.id === undefined) return;
-      try {
-        await chrome.tabs.sendMessage(tab.id, { type: "dock:config", config });
-      } catch (e) {
-        // 该标签页没有注入内容脚本（非 Salesforce 域 / chrome:// 页面），属正常
-      }
-    })
-  );
-  log.debug(`已向 ${tabs.length} 个标签页广播浮窗配置：${json}`);
-}
-
-onPrefsChanged(() => {
-  broadcastDockConfig();
-});
-
-/** `dock:log` 的级别白名单 —— 内容脚本给什么都不能让 logger 崩掉 */
-const DOCK_LEVELS = { debug: "debug", info: "info", warn: "warn", error: "error" };
+// ===== 网页内搜索浮层（src/search_overlay.js）的后端 =====
+// 浮层是"复制型的经典脚本"：不能 import、也没有 storage/CDOM 之外的 API。
+// 所以条目构建、模糊匹配、结果 HTML 全在这里做完发过去（与插件面板共用同一批模块）。
+// 请求分四种：open / query / select / log。
+const overlayLog = createLogger("SEARCH");
+/** `search:log` 的级别白名单 —— 浮层给什么都不能让 logger 崩掉 */
+const OVERLAY_LEVELS = { debug: "debug", info: "info", warn: "warn", error: "error" };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg.type !== "string") return undefined;
+  const tabId = sender && sender.tab ? sender.tab.id : "-";
 
-  if (msg.type === "dock:get-config") {
-    // 必须 return true 保持消息通道开着：loadPrefs() 是异步的
-    prefsReady
-      .catch(() => {})
-      .then(() => sendResponse({ ok: true, config: dockConfig() }));
-    return true;
+  if (msg.type === UI_MESSAGE.SEARCH_OPEN) {
+    Promise.resolve()
+      .then(async () => ({
+        ok: true,
+        // 样式随首次打开一起下发：浮层跑在 shadow DOM 里，拿不到宿主页面上的任何令牌，
+        // 而它自己又不能 import —— 只能把 lib/css/cmdk.css 的文本递过去。
+        css: await (await fetch(chrome.runtime.getURL("lib/css/cmdk.css"))).text(),
+        html: shellHtml(),
+        // ⚠️ 首帧必须**带上结果**：浮层拿到 open 的回执就立刻渲染，
+        // 若这里只给骨架，用户会看到"面板开了但是空的"，一直要等他敲第一个字才有东西
+        // （2026-10-15 的真机验证抓到过：`rows=0` 而后续查询正常）。
+        ...(await renderSearchForOverlay(""))
+      }))
+      .catch((e) => {
+        overlayLog.error(`[tab ${tabId}] 读取浮层资源失败:`, e);
+        return { ok: false, error: String((e && e.message) || e) };
+      })
+      .then(sendResponse);
+    return true; // 异步响应
   }
 
-  if (msg.type === "dock:log") {
-    const level = DOCK_LEVELS[msg.level] || "debug";
-    const tabId = sender && sender.tab ? sender.tab.id : "-";
-    dockLog[level](`[tab ${tabId}] ${msg.message}`);
+  if (msg.type === UI_MESSAGE.SEARCH_QUERY) {
+    renderSearchForOverlay(typeof msg.q === "string" ? msg.q : "")
+      .then((payload) => sendResponse(Object.assign({ ok: true, seq: msg.seq }, payload)))
+      .catch((e) => {
+        overlayLog.error(`[tab ${tabId}] 渲染搜索结果失败:`, e);
+        sendResponse({ ok: false, seq: msg.seq, listHtml: "", rows: 0, countText: "" });
+      });
+    return true; // 异步响应
+  }
+
+  if (msg.type === UI_MESSAGE.SEARCH_SELECT) {
+    // 浮层已经先把自己关掉了，这里不需要等结果，但仍然回执，便于排查
+    sendResponse({ ok: true });
+    Promise.resolve()
+      .then(async () => {
+        const entries = await loadSearchEntries();
+        const view = renderList({
+          query: typeof msg.q === "string" ? msg.q : "",
+          entries,
+          activeIndex: 0
+        });
+        const hit = view.rows[Number(msg.index)];
+        if (!hit) {
+          overlayLog.warn(`[tab ${tabId}] 选中的下标 ${msg.index} 没有对应条目`);
+          return;
+        }
+        if (hit.item.action === "home") {
+          // 「返回首页」在网页浮层里没有意义（那里没有插件首页）→ 只把插件打开（落在首页）
+          await routeGoto(0);
+          return;
+        }
+        if (hit.item.step) {
+          // `orderValue`：搜索里输入的是 Order 的 Name/Id/OrderNumber 时，
+          // 合成条目（见 cmdk_view.orderLookupRow）要连值一起带到 section-30。
+          overlayLog.info(
+            `[tab ${tabId}] 选中「${hit.item.label}」→ section-${hit.item.step}` +
+              (hit.item.orderValue ? `（带值 ${hit.item.orderValue}）` : "")
+          );
+          await routeGoto(hit.item.step, { orderValue: hit.item.orderValue });
+        }
+      })
+      .catch((e) => overlayLog.error(`[tab ${tabId}] 处理选中项失败:`, e));
+    return undefined;
+  }
+
+  if (msg.type === UI_MESSAGE.SEARCH_LOG) {
+    const level = OVERLAY_LEVELS[msg.level] || "debug";
+    overlayLog[level](`[tab ${tabId}] ${msg.message}`);
     return undefined;
   }
 

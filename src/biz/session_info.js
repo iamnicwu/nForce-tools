@@ -12,7 +12,7 @@ import { createLogger } from "../common/logger.js";
 
 const log = createLogger("SESSION");
 import { appState } from "./state.js";
-import { showNotification, escapeHtml, formatDateTime } from "../common/utils.js";
+import { showNotification, escapeHtml, formatDateTime, copyText } from "../common/utils.js";
 // 本模块是「点了才渲染」的懒加载页，注入的 <i class="fas fa-*"> 需要手动替换成
 // SVG（项目没有 FontAwesome 字体，漏替换就是 3 个空白方块）。
 import { replaceIcons } from "../common/icons.js";
@@ -35,37 +35,9 @@ function frontdoorUrl() {
 }
 
 // ---------- 复制 ----------
+// 实现已提到 `common/utils.js` 的 `copyText()`（2026-10-16）：剪贴板的两个坑
+//（API 可能不可用 + 失败要给人话）不该在每个功能里各踩一次。
 
-async function copyText(text) {
-  if (!text) {
-    showNotification("没有可复制的内容", "warning");
-    return false;
-  }
-  try {
-    await navigator.clipboard.writeText(text);
-    showNotification("已复制到剪贴板", "success");
-    return true;
-  } catch (e) {
-    // 兜底：clipboard API 不可用时用临时 textarea + execCommand
-    try {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.setAttribute("readonly", "");
-      ta.style.position = "fixed";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand("copy");
-      document.body.removeChild(ta);
-      showNotification(ok ? "已复制到剪贴板" : "复制失败，请手动选中复制", ok ? "success" : "error");
-      return ok;
-    } catch (err) {
-      log.error("复制失败:", err);
-      showNotification("复制失败，请手动选中复制", "error");
-      return false;
-    }
-  }
-}
 
 // ---------- 渲染 ----------
 

@@ -42,6 +42,8 @@
  *   N 仓库卫生 ★           .DS_Store / Thumbs.db 等系统垃圾文件
  *   O 内联脚本有效性 ★     带 src 的 <script> 不得再有内联内容（会被整段忽略）
  *   P 磁贴标签↔卡片标题     同一个功能在首页和详情页必须同名
+ *   R 设置类入口 ★          「设置类」section（项目说明/布局配置/设置总览/插件偏好）
+ *                            不得作为出厂布局里的磁贴 —— 入口只在顶栏齿轮里
  */
 
 import fs from "node:fs";
@@ -265,21 +267,123 @@ function parseLayoutDefault() {
   return { data, file: rel(file) };
 }
 
-/** 4) biz/ui_layout.js：CONNECTION_REQUIRED_STEPS */
+/**
+ * 4) CONNECTION_REQUIRED_STEPS —— 「需要连接才能用」的功能集合
+ *
+ * 这个集合的**唯一来源是 `common/command_index.js`**（2026-10-15 从 biz/ui_layout.js
+ * 搬过去的）：service worker 也要用它算网页搜索浮层的锁定态，而 SW 不可能 import
+ * biz/ui_layout.js（那会拖来 ui.js / org_limits.js 一整棵树）。
+ *
+ * ⚠️ 两个文件都找不到时返回 null —— 调用方必须按 **ERROR** 报，不能降级成 WARN：
+ * 这个常量一旦被改名或搬走而守卫只是"默默地查不到"，D 组的三方对齐检查会整段失效，
+ * 变成"什么都没检查但全绿"。搬迁当时就是这么被这套守卫当场抓住的。
+ */
 function parseConnectionRequiredSteps() {
-  const text = read(path.join(SRC, "biz", "ui_layout.js"));
-  const m = text.match(/CONNECTION_REQUIRED_STEPS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
-  if (!m) return null;
-  return new Set(
-    m[1]
-      .split(",")
-      .map((s) => Number(s.trim()))
-      .filter((n) => Number.isFinite(n) && n > 0)
-  );
+  const candidates = [
+    path.join(SRC, "common", "command_index.js"),
+    path.join(SRC, "biz", "ui_layout.js") // 兼容旧位置（常量搬走后这里就没有了）
+  ];
+  for (const file of candidates) {
+    if (!exists(file)) continue;
+    const m = read(file).match(/CONNECTION_REQUIRED_STEPS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
+    if (!m) continue;
+    const steps = new Set(
+      // 先剥掉行注释：这个集合是"要给人看"的清单，条目后面常常跟一句说明
+      // （`30 // Order 历史`）；不剥的话 Number("30 // …") = NaN，条目被静默丢掉，
+      // 于是 D 组会反过来误报"登记了 needs-connection 却不在集合里"。
+      m[1]
+        .split("\n")
+        .map((line) => line.replace(/\/\/.*$/, ""))
+        .join("\n")
+        .split(",")
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0)
+    );
+    if (steps.size) return { steps, file: rel(file) };
+  }
+  return null;
 }
 
-/** 5) biz/ui.js：未连接可访问的白名单 */
-function parseUnconnectedAllowlist() {
+/**
+ * Q. 网页搜索浮层协议（`src/search_overlay.js` ⇄ `background.js`）。
+ *
+ * 四点对齐，缺任何一点都是**静默失败**：浮层是复制型的经典脚本，不能 import，
+ * 所以消息名只能两边各写一份 —— 改名不同步时，SW 里那个"未知消息类型立刻应答
+ * {success:false}"的老监听器会先接单，浮层拿到的是一句合法的失败回执而不是异常。
+ * 详见 run() 里 Q 组的说明。返回 `{ issues: string[] }`。
+ */
+function parseOverlayProtocol() {
+  const issues = [];
+
+  // ① 注册表（唯一来源）
+  const registry = new Map();
+  for (const m of read(path.join(SRC, "common", "ui_events.js")).matchAll(
+    /^\s*(SEARCH_[A-Z_]+)\s*:\s*"([^"]+)"/gm
+  )) {
+    registry.set(m[1], m[2]);
+  }
+  if (!registry.size) {
+    return { issues: ["common/ui_events.js 里解析不到 UI_MESSAGE.SEARCH_* 注册项"] };
+  }
+  for (const [key, value] of registry) {
+    if (!value.startsWith("search:")) {
+      issues.push(`${key} 的值 "${value}" 不以 "search:" 开头 —— background.js 的提前放行按这个前缀判`);
+    }
+  }
+
+  // ② 浮层里的字面量必须与注册表逐字一致，且不能出现 ESM 语法
+  const overlayPath = path.join(SRC, "search_overlay.js");
+  if (!exists(overlayPath)) {
+    issues.push("缺少 src/search_overlay.js（网页搜索浮层）");
+  } else {
+    const overlayText = read(overlayPath);
+    const msgBlock = overlayText.match(/var\s+MSG\s*=\s*\{([\s\S]*?)\n\s*\};/);
+    const overlayValues = new Set(
+      msgBlock ? [...msgBlock[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : []
+    );
+    if (!overlayValues.size) {
+      issues.push("search_overlay.js 里解析不到 MSG 表（本守卫靠它做逐字比对）");
+    }
+    const known = new Set(registry.values());
+    for (const value of overlayValues) {
+      if (!known.has(value)) issues.push(`search_overlay.js 用了注册表里没有的消息 "${value}"`);
+    }
+    for (const [key, value] of registry) {
+      if (!overlayValues.has(value)) {
+        issues.push(`search_overlay.js 缺少消息 "${value}"（注册表里的 ${key}）`);
+      }
+    }
+    if (/^\s*(import|export)\s/m.test(overlayText)) {
+      issues.push(
+        "search_overlay.js 里出现了顶层 import/export —— 它按**经典脚本**注入，会直接 SyntaxError"
+      );
+    }
+  }
+
+  // ③ SW 必须通过注册表读取（而不是又抄一份字面量）
+  const bgPath = path.join(SRC, "background.js");
+  if (!exists(bgPath)) return { issues: issues.concat("缺少 src/background.js") };
+  const bgText = read(bgPath);
+  for (const key of registry.keys()) {
+    if (!bgText.includes(`UI_MESSAGE.${key}`)) {
+      issues.push(`background.js 没有通过 UI_MESSAGE.${key} 读取消息名（是不是又抄了一份字面量？）`);
+    }
+  }
+
+  // ④ 注入的文件名必须真的落在 dist 里
+  const fileMatch = bgText.match(/SEARCH_OVERLAY_FILE\s*=\s*"([^"]+)"/);
+  if (!fileMatch) {
+    issues.push("background.js 里找不到 SEARCH_OVERLAY_FILE 常量");
+  } else if (exists(path.join(ROOT, "dist")) && !exists(path.join(ROOT, "dist", fileMatch[1]))) {
+    issues.push(
+      `dist/${fileMatch[1]} 不存在 —— 注入时会"找不到文件"，而页面上毫无痕迹（检查 tools/build-plan.mjs 的 COPY_RULES）`
+    );
+  }
+
+  return { issues };
+}
+
+/** 5) biz/ui.js：未连接可访问的白名单 */function parseUnconnectedAllowlist() {
   const text = read(path.join(SRC, "biz", "ui.js"));
   const m = text.match(/!appState\.is_connected\s*&&\s*!\[([0-9,\s]+)\]\.includes/);
   if (!m) return null;
@@ -345,9 +449,54 @@ function maskComments(text) {
     .replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, " "));
 }
 
-/** 剥离 :root { … } 块：令牌的定义处本来就必须写死具体颜色值 */
+/**
+ * 判断一个 CSS 块体是不是「纯令牌定义」（只由 `--var: value;` 组成）。
+ *
+ * 按**顶层分号**切声明，而不是按行 —— 令牌的值可以跨行，也可能带括号
+ * （`linear-gradient(...)` / 多行 font-family），按行判断会把 `:root` 整块判成
+ * 组件样式，于是一整份 main.css 的 :root 都变成"新增硬编码颜色"（踩过）。
+ */
+function isTokenOnlyBlock(body) {
+  const noComments = body.replace(/\/\*[\s\S]*?\*\//g, "");
+  const declarations = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of noComments) {
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    if (ch === ";" && depth === 0) {
+      declarations.push(current);
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) declarations.push(current);
+
+  const meaningful = declarations.map((d) => d.trim()).filter(Boolean);
+  return meaningful.length > 0 && meaningful.every((d) => /^--[A-Za-z0-9-]+\s*:/.test(d));
+}
+
+/**
+ * 剥离「令牌定义块」：`:root { … }` 与 `:host { … }`。
+ *
+ * 令牌的定义处本来就必须写死具体颜色值 —— 那正是它存在的意义，
+ * 组件样式里引用 `var(--x)` 才是被要求的写法。
+ *
+ * 为什么也要剥 `:host`：注入到**别人网页**里的搜索浮层跑在 shadow DOM 里，
+ * 那里继承不到 main.css 的 `:root`，只能自带一份令牌（`src/lib/css/cmdk.css`）。
+ * 那份 `:host` 块里的 `#ffffff` 与 `:root` 里的 `#ffffff` 是同一种东西，
+ * 不该被当成"新增硬编码颜色"。两边的一致性由 `test/cmdk_css.test.js` 逐项核对。
+ *
+ * ⚠️ 只剥**纯 `--var: value;` 组成的块**：一旦块里出现真实属性声明
+ * （如 `:host { color: #fff }`），它就不是令牌定义而是组件样式，照样要接受检查 ——
+ * 否则 `:host { … }` 会变成绕过守卫的后门。
+ */
 function stripRootBlock(text) {
-  return text.replace(/:root\s*\{[\s\S]*?\n\}/g, "");
+  return text.replace(
+    /(^|\n)([ \t]*)(:root|:host)\s*\{([\s\S]*?)\n\2\}/g,
+    (whole, lead, _indent, _selector, body) => (isTokenOnlyBlock(body) ? lead : whole)
+  );
 }
 
 /** 收集项目自有的样式载体：css 文件 + html/js 里的内联 style="" */
@@ -692,7 +841,32 @@ function parseLazyLibs() {
     if (fn) ensureFn.set(m[2], fn);
     else missingExports.push({ libKey, global: m[2], guess });
   }
-  return { globals, ensureFn, missingExports, file: rel(file) };
+
+  // 除了 `ensureXxx()` 本身，**lib_loader 里包了它的导出包装**也算合格调用 ——
+  // 例：`requireXLSX()` 的内部就是 `await ensureXLSX()` + 一句给用户看的话。
+  // 判定方式：把 `export function` 的函数体抠出来，看谁调用过某个 ensureXxx。
+  // （只认函数声明：lib_loader 里的 ensure* 本身都是箭头 const，不需要参与。）
+  const wrappers = new Map(); // ensureName -> Set<wrapperName>
+  for (const m of text.matchAll(/export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/g)) {
+    const name = m[1];
+    let depth = 1;
+    let i = m.index + m[0].length;
+    while (i < text.length && depth > 0) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") depth--;
+      i++;
+    }
+    const body = text.slice(m.index + m[0].length, i);
+    for (const e of exportedEnsure) {
+      if (e === name) continue;
+      if (new RegExp(`\\b${e}\\s*\\(`).test(body)) {
+        if (!wrappers.has(e)) wrappers.set(e, new Set());
+        wrappers.get(e).add(name);
+      }
+    }
+  }
+
+  return { globals, ensureFn, wrappers, missingExports, file: rel(file) };
 }
 
 /**
@@ -771,8 +945,10 @@ function parseGlobalDependencyGuard() {
       const used = new RegExp(`(?:^|[^\\w.$])${globalName}\\s*[.(]`).test(code);
       if (!used) continue;
       if (globalName === "jsforce" && r === rel(lazy.file)) continue; // lib_loader 自己就是加载器
-      if (!new RegExp(`\\b${ensureName}\\b`).test(code)) {
-        missingEnsure.push({ file: r, global: globalName, ensure: ensureName });
+      // 合格的调用有两种：直接 `ensureXxx()`，或调用 lib_loader 里包着它的包装（如 requireXLSX）
+      const okNames = [ensureName, ...((lazy.wrappers && lazy.wrappers.get(ensureName)) || [])];
+      if (!okNames.some((n) => new RegExp(`\\b${n}\\b`).test(code))) {
+        missingEnsure.push({ file: r, global: globalName, ensure: ensureName, okNames });
       }
     }
   }
@@ -889,7 +1065,8 @@ function run() {
   const html = parseIndexHtml();
   const layoutJson = parseLayoutJson();
   const layoutDefault = parseLayoutDefault();
-  const connSteps = parseConnectionRequiredSteps();
+  const connStepsInfo = parseConnectionRequiredSteps();
+  const connSteps = connStepsInfo ? connStepsInfo.steps : null;
   const allowlist = parseUnconnectedAllowlist();
   const lazySteps = parseLazyLoadSteps();
   const mappedIcons = parseMappedIcons();
@@ -1025,7 +1202,14 @@ function run() {
       }
     }
   } else {
-    add("WARN", "D. 连接门禁", "未能从 biz/ui_layout.js 解析出 CONNECTION_REQUIRED_STEPS", "请检查该常量是否被重命名");
+    // ERROR 而非 WARN：查不到这个常量就意味着 D 组的三方对齐**整段失效**，
+    // 而"什么都没查但全绿"比报红危险得多（常量被搬走/改名时踩过）。
+    add(
+      "ERROR",
+      "D. 连接门禁",
+      "未能从 common/command_index.js 解析出 CONNECTION_REQUIRED_STEPS",
+      "请检查该常量是否被重命名或搬到了别的地方（它是 D 组三方对齐的唯一来源）"
+    );
   }
 
   /* --- E. 免连接功能必须出现在 showSection 的未连接白名单里 --- */
@@ -1420,10 +1604,15 @@ function run() {
       "L. 全局依赖",
       `有 ${globalDeps.missingEnsure.length} 处使用了按需加载的库全局，但文件里没有调用对应的 ensureXxx()`,
       globalDeps.missingEnsure
-        .map((x) => `  ${x.file}  用了 ${x.global}，但没调用 ${x.ensure}()`)
+        .map(
+          (x) =>
+            `  ${x.file}  用了 ${x.global}，但既没调用 ${x.ensure}()，也没调用它的包装` +
+            `${(x.okNames || []).slice(1).join(" / ") ? `（${x.okNames.slice(1).join(" / ")}）` : ""}`
+        )
         .join("\n") +
         `\n背景：这些库已从 index.html 的同步 <script> 里移除，改为 lib_loader.js 按需注入。` +
-        `\n用法必须是 \`await ensureXxx();\` 之后再访问该全局，否则会拿到 undefined。`
+        `\n用法必须是 \`await ensureXxx();\`（或在 lib_loader 里包它的包装，如 requireXLSX()）之后再访问该全局，` +
+        `否则会拿到 undefined。`
     );
   }
 
@@ -1521,6 +1710,79 @@ function run() {
       `  ${sec.file}:${sec.line}  <div class="ant-card-head-title"> 改成「${t.label}」\n` +
         `  （或反过来把 ${t.source} 里磁贴的 label 改成「${sec.title}」——两处必须同名）`
     );
+  }
+
+  /* --- Q. 网页搜索浮层协议（2026-10-15 起）---
+
+     浮层 `src/search_overlay.js` 是**复制型的经典脚本**：由 SW 用
+     chrome.scripting.executeScript 注入，里面连 import 都不能有，所以消息名只能写字面量。
+     两边改名不一致时的表现非常隐蔽：SW 里那个"未知消息类型就立刻应答
+     {success:false}"的老监听器会先接单，浮层拿到的是一句**合法的失败回执**而不是异常
+     —— 页面上没有任何报错，只是"搜索框打开后永远没有结果"。
+
+     这里同时对三件事：
+       ① 注册表里的名字必须都是 `search:` 前缀（SW 的提前放行就是按这个前缀判的）；
+       ② 浮层里的字面量与注册表**逐字一致**；
+       ③ SW 必须通过 `UI_MESSAGE.SEARCH_*` 读取，而不是又抄一份字面量；
+       ④ SW 注入的那个文件名必须真的落在 dist 里、且**不含顶层 import/export**
+          （经典脚本里出现 ESM 语法 = 注入即 SyntaxError，只在 SW 日志里可见）。 */
+  const overlayProto = parseOverlayProtocol();
+  if (overlayProto.issues.length) {
+    add(
+      "ERROR",
+      "Q. 搜索浮层协议",
+      `网页搜索浮层的消息协议对不上（${overlayProto.issues.length} 处）`,
+      overlayProto.issues.map((s) => `  ${s}`).join("\n") +
+        `\n协议的唯一来源是 src/common/ui_events.js 的 UI_MESSAGE.SEARCH_*；` +
+        `\n修法：以注册表为准改 src/search_overlay.js 的 MSG（它是经典脚本，只能写死字面量）。`
+    );
+  }
+
+  /* --- R. 「设置类」section 不进功能区 --- */
+  // 唯一来源同 CONNECTION_REQUIRED_STEPS：common/command_index.js 的 SETTINGS_ONLY_STEPS
+  // （那里写了完整来龙去脉：用户在早期版本保存过一份本地布局，里面有个「设置」分组，
+  // 光从出厂配置里删掉是没用的 —— 用户那份配置会把它原样带回来）。
+  //
+  // 这一组守的是**出厂配置这一侧**：别再往 rules/ui_layout.json 里加回去。
+  // 用户本地那份的过滤在 `entriesFromLayout`（搜索）与 mergeWithDefault（首页磁贴）里，
+  // 那两条要靠渲染验证（`?staleLayout=1`）才看得到，静态查不出来。
+  const settingsSteps = (() => {
+    const file = path.join(SRC, "common", "command_index.js");
+    if (!exists(file)) return null;
+    const m = read(file).match(/SETTINGS_ONLY_STEPS\s*=\s*new Set\(\[([\s\S]*?)\]\)/);
+    if (!m) return null;
+    const steps = new Set(
+      // 与 D 组同样的处理：先剥行注释，否则 `6, // 项目说明` 会解析成 NaN 被静默丢掉
+      m[1]
+        .split("\n")
+        .map((line) => line.replace(/\/\/.*$/, ""))
+        .join("\n")
+        .split(",")
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0)
+    );
+    return steps.size ? steps : null;
+  })();
+
+  if (!settingsSteps) {
+    add(
+      "ERROR",
+      "R. 设置类入口",
+      "未能从 common/command_index.js 解析出 SETTINGS_ONLY_STEPS",
+      "它是「设置类 section 不进功能区」这条规则的唯一来源（首页渲染与搜索索引都按它过滤）；" +
+        "\n查不到就等于这一组整段失效 —— 请检查常量是否被改名或搬到了别处"
+    );
+  } else {
+    const offenders = tiles.filter((t) => settingsSteps.has(t.step));
+    if (offenders.length) {
+      add(
+        "ERROR",
+        "R. 设置类入口",
+        `出厂布局里有 ${offenders.length} 个「设置类」磁贴：${offenders.map((t) => `${t.id}(step ${t.step})`).join("、")}`,
+        `设置类 section（${[...settingsSteps].sort((a, b) => a - b).join(" / ")}）的入口只在顶栏齿轮（设置页的 data-goto 行）里，` +
+          "\n不作为首页功能磁贴 —— 2026-10-16 用户反馈的「右上角已经有设置了，功能区里不该再有」即此。"
+      );
+    }
   }
 
   return {

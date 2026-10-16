@@ -15,6 +15,14 @@ import { appState } from "./state.js";
 import { showSection } from "./ui.js";
 import { showNotification, escapeHtml } from "../common/utils.js";
 import { replaceIcons } from "../common/icons.js";
+// 配色表 / 连接门禁集合 / 条目构建的唯一来源（service worker 也要用同一份，
+// 所以它们住在零依赖的 common/command_index.js 里，见该文件头部说明）
+import {
+  PALETTE,
+  SETTINGS_ONLY_STEPS,
+  buildSearchEntries,
+  isEntryLocked as isEntryLockedBase
+} from "../common/command_index.js";
 // 首页「Org 状态」面板：与首页一起渲染（连接成功后 renderLauncher 会被再次调用，面板随之刷新）
 import { refreshHomeDashboard } from "./org_limits.js";
 // 注意：不能用 `import DEFAULT_LAYOUT from "../rules/ui_layout.json"`，
@@ -31,25 +39,19 @@ const LAYOUT_FILE = "rules/ui_layout.json";
 // 「布局配置」功能页所属的 section 编号（在 index.html 中是 #section-20）
 const LAYOUT_SECTION = 20;
 
-// 需要连接 Salesforce 才能使用的功能
-const CONNECTION_REQUIRED_STEPS = new Set([
-  2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26, 27, 29
-]);
-
-// 配色表：tint 用于图标底色，accent 用于强调色，soft 用于磁贴悬浮底色。
-// 色值统一指向 main.css :root 里的 --accent-* 令牌（自定义属性可以链式代入，
-// 所以这里写 var(--accent-blue) 会解析成 :root 里的实际色值）。
-// 以前这是独立于 main.css .theme-* 与 index.html --row-accent 的第三份重复色板。
-const PALETTE = {
-  blue:   { tint: "var(--accent-blue-tint)", accent: "var(--accent-blue)", soft: "var(--accent-blue-soft)" },
-  purple: { tint: "var(--accent-purple-tint)", accent: "var(--accent-purple)", soft: "var(--accent-purple-soft)" },
-  orange: { tint: "var(--accent-volcano-tint)", accent: "var(--accent-volcano)", soft: "var(--accent-volcano-soft)" },
-  pink:   { tint: "var(--accent-pink-tint)", accent: "var(--accent-pink)", soft: "var(--accent-pink-soft)" },
-  amber:  { tint: "var(--accent-amber-tint)", accent: "var(--accent-amber)", soft: "var(--accent-amber-soft)" },
-  green:  { tint: "var(--accent-green-tint)", accent: "var(--accent-green)", soft: "var(--accent-green-soft)" },
-  teal:   { tint: "var(--accent-teal-tint)", accent: "var(--accent-teal)", soft: "var(--accent-teal-soft)" },
-  gray:   { tint: "var(--accent-gray-tint)", accent: "var(--accent-gray)", soft: "var(--accent-gray-soft)" }
-};
+/**
+ * 某个功能此刻是否处于「未连接 → 锁定」状态。
+ *
+ * 实现在 `common/command_index.js`（零依赖，SW 侧也要用同一份判定）；
+ * 这里只是把 `appState.is_connected` 补进去的薄包装 —— 调用方（首页磁贴、搜索面板）
+ * 因此不必各自去读 appState。
+ *
+ * @param {number} step section 编号
+ * @param {boolean} [requiresConnection] 磁贴自己的声明（默认视为需要连接）
+ */
+export function isEntryLocked(step, requiresConnection = true) {
+  return isEntryLockedBase(step, requiresConnection, appState.is_connected);
+}
 
 let currentLayout = null;
 let tileIndex = new Map();       // tileId -> { tile, group }
@@ -102,6 +104,12 @@ function normalizeLayout(raw) {
             label: t.label || t.id || `功能 ${t.step}`,
             icon: t.icon || "fa-cubes",
             desc: t.desc || "",
+            // 搜索别名：全局搜索额外匹配的词（拼音、缩写、英文名…）。
+            // 中文标签没法用子序列匹配（"wucan" 找不到"中午食乜"），别名是唯一解；
+            // 顺带让用户能在布局配置里自定义自己的叫法。
+            keywords: Array.isArray(t.keywords)
+              ? t.keywords.filter((k) => typeof k === "string" && k.trim())
+              : [],
             requiresConnection: t.requiresConnection !== false
           }))
       })),
@@ -145,7 +153,9 @@ function writeStored(obj) {
  * 为什么需要：用户的配置一旦保存到 chrome.storage，就会永久覆盖默认配置，
  * 之后版本里新增的功能入口就再也看不到（曾出现「设置里找不到布局配置」）。
  * 这里的语义是：**用户配置决定顺序 / 文案 / 配色，默认配置决定功能是否存在**。
- * 想真正隐藏某个磁贴，请把它写进 hidden 数组。
+ * 想真正隐藏某个磁贴，请把它写进 hidden 数组；**整个 section 都不该再作为首页入口**
+ * （比如设置类）时，把编号加进 `common/command_index.js` 的 SETTINGS_ONLY_STEPS ——
+ * 那条路对"已经保存过旧配置"的用户同样生效，hidden 只存在于配置里、帮不上他们。
  *
  * favorites 同样遵循这个语义：标题 / 上限沿用用户配置，**默认常用列表始终取自
  * 默认布局**（否则新版调整的默认常用项会被旧配置吃掉）；用户自己挑的常用功能
@@ -179,8 +189,19 @@ function mergeWithDefault(storedLayout, baseLayout) {
     merged.groups.forEach((g) => {
       g.tiles = g.tiles.filter((t) => !hidden.has(t.id));
     });
-    merged.groups = merged.groups.filter((g) => g.tiles.length > 0);
   }
+
+  // 「设置类」section 一律不进功能区 —— 它们的入口只在顶栏齿轮里（见
+  // `common/command_index.js` 的 SETTINGS_ONLY_STEPS，那里写了完整的来龙去脉）。
+  // 这一步专治"出厂配置里删了、用户配置里还留着"：用户那份配置会把删掉的磁贴原样带回来，
+  // 只有在这里过滤才能真的从首页消失。用户那个分组的标题叫「设置」、里面只有一个
+  // 「项目说明」磁贴，剔除后整组会被下面的空组过滤一并删掉。
+  merged.groups.forEach((g) => {
+    g.tiles = g.tiles.filter((t) => !SETTINGS_ONLY_STEPS.has(t.step));
+  });
+  // 磁贴被剔空的分组就此消失（顺序：先补新增磁贴、再按 hidden / 退役集合剔除、最后删空组）
+  merged.groups = merged.groups.filter((g) => g.tiles.length > 0);
+
   merged.hidden = [...hidden];
 
   merged.favorites = {
@@ -251,6 +272,26 @@ function effectiveFavoriteIds() {
   return sanitizeFavoriteIds(userFavoriteIds || (currentLayout ? currentLayout.favorites.ids : []));
 }
 
+/**
+ * 供**全局搜索**使用的条目列表（磁贴 + 内置页面条目）。
+ *
+ * 实现全部在 `common/command_index.js` 的 `buildSearchEntries()` ——
+ * 注入到网页里的搜索浮层由 service worker 用**同一个函数**构建条目
+ * （数据从布局 JSON 与 storage 来），所以两边不会出现"面板里搜得到、浮层里搜不到"。
+ * 这里只负责把「当前布局 + 生效的常用列表 + 连接状态」喂给它。
+ *
+ * 布局还没加载出来（首屏失败 / 配置全坏）时磁贴那部分为空；调用方（搜索面板）
+ * 仍能靠内置页面条目工作，不至于整个搜索框是空的。
+ */
+export function getSearchEntries() {
+  return buildSearchEntries({
+    // 页面侧只有一份权威布局：已经过 mergeWithDefault 处理（注入了新版新增的磁贴）
+    candidates: [currentLayout],
+    favoriteIds: effectiveFavoriteIds(),
+    isConnected: appState.is_connected
+  });
+}
+
 async function loadUserFavoriteIds() {
   const stored = await readStored(STORAGE_KEY_FAVORITES);
   const list = Array.isArray(stored)
@@ -315,7 +356,7 @@ async function resetFavorites() {
 function tileHtml(tile, group, opts = {}) {
   const { mode = "group", favorited = false, editing = false, index = 0, total = 0 } = opts;
   const { tint, accent, soft } = palette(group.color);
-  const locked = tile.requiresConnection && CONNECTION_REQUIRED_STEPS.has(tile.step) && !appState.is_connected;
+  const locked = isEntryLocked(tile.step, tile.requiresConnection);
 
   // 常用功能处于编辑态时，磁贴不响应跳转（避免手滑点走）
   const navigable = !(mode === "favorite" && editing);
@@ -468,7 +509,7 @@ export async function renderLauncher() {
 
 function layoutToJsonText(layout) {
   const clean = {
-    _readme: layout._readme || "调整 groups[].tiles 顺序即可改变图标排列；想永久隐藏某个磁贴请把它的 id 写进 hidden 数组；favorites.ids 是「常用功能」的默认列表 —— 界面上的改动（卡片右下角 ☆ / 常用功能区「编辑」）会自动保存在本地，改这里只会影响恢复默认后的结果。",
+    _readme: layout._readme || "调整 groups[].tiles 顺序即可改变图标排列；想永久隐藏某个磁贴请把它的 id 写进 hidden 数组；tile.keywords 是「全局搜索」额外匹配的别名（拼音 / 缩写 / 英文名），中文标签不写别名就只能用汉字搜到；favorites.ids 是「常用功能」的默认列表 —— 界面上的改动（卡片右下角 ☆ / 常用功能区「编辑」）会自动保存在本地，改这里只会影响恢复默认后的结果。",
     version: layout.version,
     favorites: {
       title: layout.favorites.title,

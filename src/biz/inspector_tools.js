@@ -22,26 +22,11 @@ const logMeta = createLogger("META");
 const logEvent = createLogger("EVENT");
 import { sfConn, defaultApiVersion } from "./sf_service.js";
 import { showNotification, escapeHtml, formatDateTime } from "../common/utils.js";
-import { ensureXLSX, ensureJSZip } from "../common/lib_loader.js";
+import { requireXLSX, ensureJSZip } from "../common/lib_loader.js";
 
 const SOQL_MAX_RECORDS = 50000; // Data Export 单次查询的记录数上限（安全阀）
 const IMPORT_MAX_BATCH = 10000; // Data Import 单次导入的总行数上限
 const EVENT_LOG_MAX = 200;      // Event Monitor 界面最多保留的事件条数
-
-/**
- * 按需加载 SheetJS（index.html 不再同步引入 0.85MB）
- * @returns {Promise<boolean>} 是否可用
- */
-async function requireXLSX() {
-  try {
-    await ensureXLSX();
-    return true;
-  } catch (error) {
-    logSoql.error("加载 XLSX 库失败:", error);
-    showNotification("加载 Excel 处理库失败：" + (error.message || error), "error");
-    return false;
-  }
-}
 
 /**
  * 按需加载 CometD（模块级 Promise 记忆化，多次调用只加载一次）
@@ -269,7 +254,10 @@ export async function handleImportFileChange(input) {
   }
   try {
     const buf = await file.arrayBuffer();
-    await ensureXLSX();
+    // 必须是 requireXLSX()（= 内部 await ensureXLSX + 失败给提示），不能直接写 ensureXLSX()：
+    // 本文件 import 的是前者（2026-10-15 把两份重复的实现合并进 lib_loader 时，
+    // 这里漏改了 —— 直接写 ensureXLSX 会 ReferenceError，而构建、自检、渲染都看不出来）。
+    if (!(await requireXLSX())) return;
     const wb = XLSX.read(buf, { type: "array", raw: false });
     const sheetName = wb.SheetNames[0];
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: "" });

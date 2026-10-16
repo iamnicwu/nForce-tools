@@ -18,6 +18,17 @@ import { escapeHtml } from "./utils.js";
 /** 默认最多渲染的行数（防止一次插入十几万行把页面卡死） */
 const DEFAULT_MAX_ROWS = 1000;
 
+/** 单元格文本短于这个长度就不加 `title` 属性（短值不可能被截断，省属性 = 省解析时间） */
+const TITLE_ATTR_MIN = 20;
+
+/**
+ * 「显示更多」一次追加多少行。取值是权衡：太小 → 点很多次；太大 → 每次追加都卡一下。
+ * 200 行在实测里约 7ms（同一批数据 1000 行 ≈ 37ms），点下去没有可感知的停顿。
+ */
+const DEFAULT_PAGE_SIZE = 200;
+
+export { DEFAULT_PAGE_SIZE };
+
 /**
  * 把单元格原始值转成用于显示的字符串
  * @param {*} value
@@ -55,6 +66,16 @@ function formatHeader(col) {
  * @param {string[]|null} [options.columns] - 只渲染指定列（默认取首行的全部键）
  * @param {number} [options.maxRows] - 最多渲染行数
  * @param {boolean} [options.rawHeader] - 为 true 时表头不过滤 __c / Order_ / 下划线
+ * @param {boolean|string} [options.layout] - `"fixed"` 时用 `table-layout: fixed`（等价 Tailwind 的
+ *        `table-fixed`）+ `<colgroup>` 列宽。**大数据量下这是主要的性能开关**：
+ *        auto 布局要求浏览器为了定列宽去量每个单元格的内容，几千行时那一步是百毫秒级；
+ *        fixed 布局只看 colgroup 的宽度，与行数无关。
+ * @param {Object<string,string>} [options.columnWidths] - 列名 → CSS 宽度（如 `"9.5rem"`）。
+ *        没给的列平分剩余宽度。只在 layout=fixed 时有意义。
+ * @param {number} [options.pageSize] - **分页渲染**：先只画这么多行，表尾给一个
+ *        「显示更多（还有 N 行）」按钮，点一次追加一页。0 = 一次性全画（老行为）。
+ *        这是「多数据」下唯一真正有效的优化（见文件头/常量处的实测）：布局成本随**行数**增长，
+ *        首屏只画 200 行就与总行数无关。
  * @returns {number} 实际渲染的行数（0 表示未渲染）
  */
 export /**
@@ -88,7 +109,12 @@ function renderDataTable(container, table, data, options = {}) {
     columns = null,
     maxRows = DEFAULT_MAX_ROWS,
     rawHeader = false,
+    layout = "auto",
+    columnWidths = null,
+    pageSize = 0,
   } = options;
+  const fixedLayout = layout === "fixed";
+  const pageRows = Number(pageSize) > 0 ? Math.floor(Number(pageSize)) : 0;
 
   // 空数据：清空并隐藏容器
   if (!Array.isArray(data) || data.length === 0) {
@@ -114,31 +140,104 @@ function renderDataTable(container, table, data, options = {}) {
     .map((col) => `<th class="ut-th">${escapeHtml(rawHeader ? col : formatHeader(col))}</th>`)
     .join("");
 
-  // ── 表体（一次性拼接，走单次 innerHTML）──
-  const rows = new Array(displayData.length);
-  for (let r = 0; r < displayData.length; r++) {
-    const row = displayData[r];
-    let cells = "";
-    for (let c = 0; c < cols.length; c++) {
-      const value = row[cols[c]];
-      // 空值不加 title，避免为空格子生成无意义的属性
-      if (value === null || value === undefined || value === "") {
-        cells += `<td class="ut-td"></td>`;
-      } else {
-        const text = escapeHtml(cellText(value));
-        cells += `<td class="ut-td" title="${text}">${text}</td>`;
+  // ── 表体：拼装抽成函数，「首屏」与「显示更多」用同一段（两个实现迟早会不一致）──
+  // 单次 innerHTML / 单次 insertAdjacentHTML，避免逐行 append 触发多次重排。
+  const buildRowsHtml = (slice) => {
+    const out = new Array(slice.length);
+    for (let r = 0; r < slice.length; r++) {
+      const row = slice[r];
+      let cells = "";
+      for (let c = 0; c < cols.length; c++) {
+        const value = row[cols[c]];
+        // 空值不加 title，避免为空格子生成无意义的属性
+        if (value === null || value === undefined || value === "") {
+          cells += `<td class="ut-td"></td>`;
+        } else {
+          const text = escapeHtml(cellText(value));
+          // title 只在**可能被截断**时才加：它是给「悬停看全文」用的，而短值永远不会被截。
+          // 一行 5 列、1000 行就是 5000 个属性，省掉一大半对建 DOM 是实打实的
+          // （实测 3000 行 15000 格：建 DOM ~16ms）。
+          const titleAttr = text.length > TITLE_ATTR_MIN ? ` title="${text}"` : "";
+          cells += `<td class="ut-td"${titleAttr}>${text}</td>`;
+        }
       }
+      out[r] = `<tr class="ut-tr">${cells}</tr>`;
     }
-    rows[r] = `<tr class="ut-tr">${cells}</tr>`;
+    return out.join("");
+  };
+
+  const firstPage = pageRows > 0 ? displayData.slice(0, pageRows) : displayData;
+  const bodyHtml = buildRowsHtml(firstPage);
+
+  // ⚠️ 必须保证真正承载表格的是一个 **<table>** 元素（2026-10-16 修）。
+  //
+  // 各功能页的标记都写成 `<div id="xxx-table" class="data-table">`，而
+  // `<thead>/<tbody>/<tr>/<td>` 塞进 <div> 会被 HTML 解析器**整段丢掉**（这些标签在 div
+  // 里非法，解析规则是"忽略标签、保留文字"）→ 表格渲染成**一长串没有分行分列的文本**，
+  // 且 `querySelectorAll("tbody tr")` 恒为 0（任何基于 DOM 的断言都抓不到问题）。
+  // 实测：`renderTable(..., [{时间:'a'}])` 之后 `innerHTML` 是 `"时间a"` 而不是 `<tr><td>`。
+  //
+  // 所以这里对"容器不是 table"的调用方补一层：在容器里放一个真 <table>，
+  // 后续所有渲染都写在它身上。传真 <table> 的调用点行为完全不变（向后兼容）。
+  // ⚠️ 变量名别叫 `table`：那个名字是**形参**（`renderDataTable(container, table, ...)`），
+  // 再 `let table` 就是"同一作用域重复声明" → 整个模块 SyntaxError（页面白屏）。
+  let tableNode = tableEl;
+  if (tableNode.tagName !== "TABLE") {
+    const existing = tableEl.querySelector(":scope > table");
+    if (existing) {
+      tableNode = existing;
+    } else {
+      tableNode = document.createElement("table");
+      tableEl.innerHTML = "";
+      tableEl.appendChild(tableNode);
+    }
   }
 
-  tableEl.className = "ant-table ant-table-bordered ant-table-default";
-  tableEl.innerHTML =
-    `<thead class="ant-table-thead"><tr>${headCells}</tr></thead>` +
-    `<tbody class="ant-table-tbody ut-tbody">${rows.join("")}</tbody>`;
+  // 固定布局要显式列宽（没给的列平分剩余）—— 这就是 Tailwind `table-fixed` + `w-*` 的那套做法，
+  // 只是写在本项目的 `ut-` 类 + 内联宽度上（项目没有 Tailwind，见 MODULES L.4 的说明）。
+  const colgroup = fixedLayout
+    ? `<colgroup>${cols
+        .map((col) => {
+          const w = columnWidths && columnWidths[col];
+          return `<col${w ? ` style="width:${escapeHtml(String(w))}"` : ""}>`;
+        })
+        .join("")}</colgroup>`
+    : "";
 
-  // 容器滚动设置
+  tableNode.className =
+    "ant-table ant-table-bordered ant-table-default" + (fixedLayout ? " ut-tbl-fixed" : "");
+  tableNode.innerHTML =
+    colgroup +
+    `<thead class="ant-table-thead"><tr>${headCells}</tr></thead>` +
+    `<tbody class="ant-table-tbody ut-tbody">${bodyHtml}</tbody>`;
+
+  // 「显示更多」：首屏之外的行按需追加。
+  // 监听器挂在**按钮元素**上，而按钮随每次渲染被重建 —— 所以不需要手动解绑，
+  // 也不会因为多次 renderTable 叠上同一个回调。
   if (containerEl) {
+    const oldMore = containerEl.querySelector(":scope > .ut-more");
+    if (oldMore) oldMore.remove();
+    if (pageRows > 0 && displayData.length > firstPage.length) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "ant-btn ant-btn-default ut-more";
+      let shown = firstPage.length;
+      const paint = () => {
+        const remain = displayData.length - shown;
+        more.textContent = `显示更多（还有 ${remain} 行 / 共 ${displayData.length} 行）`;
+      };
+      more.addEventListener("click", () => {
+        const next = displayData.slice(shown, shown + pageRows);
+        const tbody = tableNode.querySelector("tbody");
+        if (tbody) tbody.insertAdjacentHTML("beforeend", buildRowsHtml(next));
+        shown += next.length;
+        if (shown >= displayData.length) more.remove();
+        else paint();
+      });
+      paint();
+      containerEl.appendChild(more);
+    }
+
     showContainer(containerEl);
     containerEl.style.overflowX = "auto";
     containerEl.style.overflowY = "auto";

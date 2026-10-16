@@ -49,15 +49,11 @@ export const COPY_RULES = [
   // ESM service worker（manifest 里 `type: "module"`）。它 import ./common/logger.js
   // 与 ./common/prefs.js，所以下面这三条复制规则是配套的，不是冗余。
   { from: "src/background.js", to: "background.js" },
-  // 贴边浮窗的**内容脚本**：必须是「经典脚本」—— content_scripts 不是 module，
-  // 里面不能出现 import/export。所以它零依赖，配置全部通过 runtime.sendMessage
-  // 向 service worker 要。既不打包也不改写成 ESM，只逐字复制。
-  { from: "src/dock.js", to: "dock.js" },
   // popup 的页面外壳脚本（图标替换 / 版本号 / 绑定按钮）。
   // 不能写成 popup.html 的内联 <script>：CSP `script-src 'self'` 会把内联脚本
   // 整段拒绝执行，且不产生任何页面可见异常。
   { from: "src/popup_app.js", to: "popup_app.js" },
-  // login.html / popup.html / dock 页面外壳的 <script type="module"> 直接
+  // login.html / popup.html 页面外壳的 <script type="module"> 直接
   // `import ... from "./common/icons.js"` —— 不复制就是 404 → replaceIcons()
   // 从不执行 → 页面上的 <i class="fa-*"> 全退化成空白方块。
   // icons.js 自身零 import，可作原生 ESM 直接使用。
@@ -68,8 +64,51 @@ export const COPY_RULES = [
   // api_version.js ← 零依赖，纯常量与解析器
   { from: "src/common/prefs.js", to: "common/prefs.js" },
   { from: "src/common/api_version.js", to: "common/api_version.js" },
-  { from: "src/icons", to: "icons" },
-  { from: "src/rules", to: "rules" },
+  // ui_events.js ← 零依赖。**必须复制**：它是 background.js（逐字复制的 ESM
+  // service worker）与 app.js（打包入口）之间共享的消息名 / storage 键。
+  // 少这一条 → dist/background.js 的 import 404 → SW 整条模块图加载失败，
+  // 而表现只是"快捷键没反应"（check-ui 的 J 组会拦这条）。
+  { from: "src/common/ui_events.js", to: "common/ui_events.js" },
+  // shortcut.js ← 零依赖纯函数。prefs.js 引用它做快捷键校验，而 prefs.js 又被 SW
+  // 静态 import（loadPrefs）→ 必须复制，否则 SW 的模块图在求值前就整体失败。
+  { from: "src/common/shortcut.js", to: "common/shortcut.js" },
+  // 下面四个是**全局搜索**那条链路的共享模块（2026-10-15 起）：
+  //   fuzzy.js         模糊匹配（纯函数，配 test/fuzzy.test.js）
+  //   command_index.js 条目构建 + 配色表 + 连接门禁集合（SW 与页面共用的唯一来源）
+  //   cmdk_view.js     结果 HTML / 面板骨架渲染（同上）
+  //   utils.js         cmdk_view 只要它里面的 escapeHtml
+  // background.js 是逐字复制的 ESM service worker，它 import 的上游在 dist 里
+  // 必须真实存在 —— 少一条就是"网页里搜不出来"，而页面上不会有任何报错。
+  { from: "src/common/fuzzy.js", to: "common/fuzzy.js" },
+  { from: "src/common/command_index.js", to: "common/command_index.js" },
+  { from: "src/common/cmdk_view.js", to: "common/cmdk_view.js" },
+  { from: "src/common/utils.js", to: "common/utils.js" },
+  // order_query.js：cmdk_view 用它判断"这段输入像不像 Order 标识"（合成搜索条目），
+  // 而 cmdk_view 又被打包进 app.js 且被 background.js 静态 import —— 少这一条，
+  // SW 加载整条模块图时就会 404（表现是"浮层打不开"，页面上毫无痕迹）。
+  // 它本身零依赖（纯字符串/SOQL 拼装），符合"被 SW import 就必须零依赖"的约定。
+  { from: "src/common/order_query.js", to: "common/order_query.js" },
+  // 网页内的搜索浮层：**经典脚本、零依赖**，由 service worker 用
+  // chrome.scripting.executeScript 注入到当前标签页（文件名在 background.js 里写死为
+  // SEARCH_OVERLAY_FILE）。既不打包也不改写成 ESM，只逐字复制 ——
+  // 里面一旦出现 import/export，注入时会直接 SyntaxError，且只在 SW 日志里能看到。
+  { from: "src/search_overlay.js", to: "search_overlay.js" },
+  {
+    from: "src/icons",
+    to: "icons",
+    // 开发期文件，不该随包发布（2026-10-15 清出）：
+    //   logo_generator.html —— 图标生成器（本地打开用，README 里写的就是它）；
+    //   README.md           —— 给维护者看的图标说明。
+    // 运行时只用到四个 icon-NN.png + nforce-tools.svg（后者被 index.html 引用）。
+    excludeBasenames: ["logo_generator.html", "README.md", "excel-16.png", ".DS_Store"],
+  },
+  {
+    from: "src/rules",
+    to: "rules",
+    // 运行时只 fetch ui_layout.json（磁贴布局）；两个 *_sample.json 是**示例数据**，
+    // 全仓没有任何代码读它们（2026-10-15 核对），打进包里只会让人以为"这是配置"。
+    excludeBasenames: ["lunch_places_sample.json", "rules_sample.json", ".DS_Store"],
+  },
   { from: "src/docs", to: "docs" },
   {
     from: "src/lib/css",

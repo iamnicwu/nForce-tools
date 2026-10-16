@@ -13,7 +13,8 @@
  *   3) 本文件（兜底，保证任何情况下首页都有图标可显示，不会白屏）
  *
  * 注意：rules/ui_layout.json 是主要维护入口；本文件仅作兜底，
- *       两者结构必须保持一致。
+ *       两者结构必须保持一致（check-ui 的 C 组会对磁贴 id 逐一比对）。
+ *       `keywords` 是全局搜索用的别名（拼音 / 缩写 / 英文名），两份也要一起改。
  */
 const DEFAULT_LAYOUT = {
   version: 1,
@@ -32,8 +33,8 @@ const DEFAULT_LAYOUT = {
       icon: "fa-key",
       color: "blue",
       tiles: [
-        { id: "connection", step: 1, label: "连接设置", icon: "fa-plug", desc: "Session ID · 连接测试", requiresConnection: false },
-        { id: "session-link", step: 22, label: "Session 链接", icon: "fa-link", desc: "查看 · 复制 · 直接登录" }
+        { id: "connection", step: 1, label: "连接设置", icon: "fa-plug", desc: "Session ID · 连接测试", requiresConnection: false, keywords: ["session", "connect", "lianjie", "登录"] },
+        { id: "session-link", step: 22, label: "Session 链接", icon: "fa-link", desc: "查看 · 复制 · 直接登录", keywords: ["cookie", "frontdoor", "shell", "shenfen"] }
       ]
     },
     {
@@ -42,13 +43,13 @@ const DEFAULT_LAYOUT = {
       icon: "fa-cubes",
       color: "blue",
       tiles: [
-        { id: "lts-overview", step: 5, label: "LTS 概览", icon: "fa-home", desc: "Fallout Summary 概览" },
-        { id: "lts-daily", step: 2, label: "获取当日数据", icon: "fa-calendar-day", desc: "当日订单数据" },
-        { id: "lts-report", step: 3, label: "获取报表数据", icon: "fa-chart-bar", desc: "历史遗留未完成订单" },
-        { id: "lts-file", step: 4, label: "获取文件数据", icon: "fa-file-upload", desc: "按文件批量查询" },
-        { id: "vvip", step: 9, label: "VVIP", icon: "fa-star", desc: "VVIP 客户订单查询" },
-        { id: "t4-list", step: 12, label: "T-4 Outstanding", icon: "fa-file-alt", desc: "T-4 connectivity 清单" },
-        { id: "t4-analysis", step: 13, label: "T-4 分析", icon: "fa-chart-line", desc: "Outstanding 数据分析" }
+        { id: "lts-overview", step: 5, label: "LTS 概览", icon: "fa-home", desc: "Fallout Summary 概览", keywords: ["overview", "gailan", "summary", "fallout"] },
+        { id: "lts-daily", step: 2, label: "获取当日数据", icon: "fa-calendar-day", desc: "当日订单数据", keywords: ["today", "dangri", "daily", "当日"] },
+        { id: "lts-report", step: 3, label: "获取报表数据", icon: "fa-chart-bar", desc: "历史遗留未完成订单", keywords: ["report", "baobiao", "报表"] },
+        { id: "lts-file", step: 4, label: "获取文件数据", icon: "fa-file-upload", desc: "按文件批量查询", keywords: ["file", "wenjian", "upload", "文件"] },
+        { id: "vvip", step: 9, label: "VVIP", icon: "fa-star", desc: "VVIP 客户订单查询", keywords: ["vip", "dakehu", "客户"] },
+        { id: "t4-list", step: 12, label: "T-4 Outstanding", icon: "fa-file-alt", desc: "T-4 connectivity 清单", keywords: ["t4", "outstanding", "connectivity"] },
+        { id: "t4-analysis", step: 13, label: "T-4 分析", icon: "fa-chart-line", desc: "Outstanding 数据分析", keywords: ["t4", "fenxi", "analysis"] }
       ]
     },
     {
@@ -57,7 +58,7 @@ const DEFAULT_LAYOUT = {
       icon: "fa-chart-pie",
       color: "purple",
       tiles: [
-        { id: "analysis", step: 10, label: "数据分析", icon: "fa-chart-pie", desc: "规则匹配 · 数据透视" }
+        { id: "analysis", step: 10, label: "数据分析", icon: "fa-chart-pie", desc: "规则匹配 · 数据透视", keywords: ["analysis", "fenxi", "pivot", "规则"] }
       ]
     },
     {
@@ -66,7 +67,7 @@ const DEFAULT_LAYOUT = {
       icon: "fa-tv",
       color: "orange",
       tiles: [
-        { id: "ott", step: 7, label: "OTT", icon: "fa-tv", desc: "OTT 数据获取" }
+        { id: "ott", step: 7, label: "OTT", icon: "fa-tv", desc: "OTT 数据获取", keywords: ["ott"] }
       ]
     },
     {
@@ -75,10 +76,10 @@ const DEFAULT_LAYOUT = {
       icon: "fa-laptop-code",
       color: "pink",
       tiles: [
-        { id: "pcd", step: 8, label: "PCD", icon: "fa-laptop-code", desc: "PCD 当日数据" },
-        { id: "pcd-expired", step: 29, label: "PCD 过期", icon: "fa-clock", desc: "PCD Expired 订单" },
-        { id: "pcd-pid-fallout", step: 16, label: "PID Fallout", icon: "fa-exclamation-triangle", desc: "Data issue 排查" },
-        { id: "pcd-qc-issue", step: 17, label: "QC Issue", icon: "fa-search", desc: "Data issue 排查" }
+        { id: "pcd", step: 8, label: "PCD", icon: "fa-laptop-code", desc: "PCD 当日数据", keywords: ["pcd"] },
+        { id: "pcd-expired", step: 29, label: "PCD 过期", icon: "fa-clock", desc: "PCD Expired 订单", keywords: ["expired", "guoqi", "过期"] },
+        { id: "pcd-pid-fallout", step: 16, label: "PID Fallout", icon: "fa-exclamation-triangle", desc: "Data issue 排查", keywords: ["pid", "fallout", "data issue", "排查"] },
+        { id: "pcd-qc-issue", step: 17, label: "QC Issue", icon: "fa-search", desc: "Data issue 排查", keywords: ["qc", "issue", "排查"] }
       ]
     },
     {
@@ -87,7 +88,7 @@ const DEFAULT_LAYOUT = {
       icon: "fa-plug",
       color: "amber",
       tiles: [
-        { id: "cvp7", step: 11, label: "CVP7", icon: "fa-plug", desc: "T-4 连通性检测" }
+        { id: "cvp7", step: 11, label: "CVP7", icon: "fa-plug", desc: "T-4 连通性检测", keywords: ["cvp7", "liantongxing", "连通性"] }
       ]
     },
     {
@@ -96,13 +97,14 @@ const DEFAULT_LAYOUT = {
       icon: "fa-check-circle",
       color: "green",
       tiles: [
-        { id: "bulk", step: 15, label: "Bulk 操作", icon: "fa-database", desc: "批量作业管理" },
-        { id: "anonymous", step: 18, label: "Execute Anonymous", icon: "fa-code", desc: "Apex 匿名执行" },
-        { id: "schedule-jobs", step: 19, label: "Schedule Jobs", icon: "fa-clock", desc: "定时任务管理" },
-        { id: "soql-export", step: 23, label: "SOQL 导出", icon: "fa-search", desc: "查询 · 导出 Excel/CSV" },
-        { id: "data-import", step: 24, label: "批量导入", icon: "fa-file-import", desc: "CSV/Excel 批量写入" },
-        { id: "metadata-tools", step: 25, label: "Metadata 工具", icon: "fa-box-open", desc: "检索 · 打包下载" },
-        { id: "event-monitor", step: 26, label: "事件监听", icon: "fa-satellite-dish", desc: "Platform Event · CDC" }
+        { id: "bulk", step: 15, label: "Bulk 操作", icon: "fa-database", desc: "批量作业管理", keywords: ["bulk", "job", "批量", "批处理"] },
+        { id: "anonymous", step: 18, label: "Execute Anonymous", icon: "fa-code", desc: "Apex 匿名执行", keywords: ["apex", "anonymous", "匿名"] },
+        { id: "schedule-jobs", step: 19, label: "Schedule Jobs", icon: "fa-clock", desc: "定时任务管理", keywords: ["cron", "scheduled", "定时", "任务"] },
+        { id: "soql-export", step: 23, label: "SOQL 导出", icon: "fa-search", desc: "查询 · 导出 Excel/CSV", keywords: ["sql", "query", "excel", "查询"] },
+        { id: "data-import", step: 24, label: "批量导入", icon: "fa-file-import", desc: "CSV/Excel 批量写入", keywords: ["import", "csv", "导入", "写入"] },
+        { id: "metadata-tools", step: 25, label: "Metadata 工具", icon: "fa-box-open", desc: "检索 · 打包下载", keywords: ["metadata", "package", "yuanshuju", "元数据"] },
+        { id: "event-monitor", step: 26, label: "事件监听", icon: "fa-satellite-dish", desc: "Platform Event · CDC", keywords: ["cdc", "streaming", "platform event", "shijian"] },
+        { id: "order-history", step: 30, label: "Order 历史", icon: "fa-clock", desc: "按 Name / Id / OrderNumber 查字段变更", requiresConnection: true, keywords: ["order", "history", "lishi", "历史", "order history", "ddls", "变更"] },
       ]
     },
     {
@@ -112,7 +114,7 @@ const DEFAULT_LAYOUT = {
       color: "teal",
       tiles: [
         // 「中午食乜」是纯本地功能（列表存在本地 + 随机挑选），不依赖 Salesforce
-        { id: "lunch", step: 14, label: "中午食乜", icon: "fa-utensils", desc: "随机挑选午餐", requiresConnection: false }
+        { id: "lunch", step: 14, label: "中午食乜", icon: "fa-utensils", desc: "随机挑选午餐", requiresConnection: false, keywords: ["lunch", "zhongwu", "wucan", "午餐", "食乜"] }
       ]
     }
   ]

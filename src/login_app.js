@@ -70,8 +70,8 @@ async function testConnectionWithUserInfo(session_id, instanceUrl) {
         const apiVersion = getApiVersion();
         log.debug('使用 API 版本:', apiVersion);
 
-        // 各 org 的升级窗口不同（Winter '27 / v68.0 的生产窗口是 2026-09-04 / 10-02 / 10-09，
-        // 全面 GA 是 10-12）：对还没升级的 org 请求 /services/data/v68.0/ 会拿到 404，
+        // 各 org 的升级窗口不同（同一家企业里的两个 org 完全可能差一版）：
+        // 对还没升上来的 org 请求 /services/data/v<默认>/ 会拿到 404，
         // 而下面 conn.identity() 正是建连接的第一步 —— 不协商就会表现为「一直连不上」。
         // 配置的版本可用则原样使用，不可用才退到实例支持的最高版本。
         const pickedVersion = pickUsableApiVersion(

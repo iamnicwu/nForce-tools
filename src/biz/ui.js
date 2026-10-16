@@ -5,7 +5,7 @@ import { appState } from "./state.js";
 import { Icons } from "../common/icons.js";
 import { renderTable } from "../common/table_utils.js";
 import { showNotification, parseMarkdown, escapeHtml } from "../common/utils.js";
-import { ensureECharts } from "../common/lib_loader.js";
+import { ensureECharts, ensureMarked } from "../common/lib_loader.js";
 
 // 更新午餐 UI 状态
 export function updateLunchUIState() {
@@ -110,18 +110,18 @@ export function showSection(sectionNumber) {
   // 懒加载：Bulk 操作（section-15）——首次进入拉一次"正在运行的 Job"列表，
   // 之后由列表右上角的「刷新」按钮驱动（loadBulkJobsOnce 内部有一次性门闩）
   if (sectionNumber === 15) {
-    import('./logic.js').then((logicModule) => {
-      if (logicModule.loadBulkJobsOnce) {
-        logicModule.loadBulkJobsOnce();
+    import('./bulk.js').then((bulkModule) => {
+      if (bulkModule.loadBulkJobsOnce) {
+        bulkModule.loadBulkJobsOnce();
       }
     });
   }
 
   // 懒加载：Schedule Jobs 列表
   if (sectionNumber === 19) {
-    import('./logic.js').then((logicModule) => {
-      if (logicModule.loadScheduleJobs) {
-        logicModule.loadScheduleJobs();
+    import('./schedule.js').then((scheduleModule) => {
+      if (scheduleModule.loadScheduleJobs) {
+        scheduleModule.loadScheduleJobs();
       }
     });
   }
@@ -1459,12 +1459,17 @@ export function moveT2Rule(index, direction) {
 }
 
 // 渲染 Markdown 内容并处理 Mermaid
-export function renderMarkdownContent(container, markdownText) {
+//
+// `marked` **按需加载**（2026-10-15 改）：它原本被 app.js 静态 import，
+// 40KB 无条件进首屏，而真正用到它的只有「版本信息（README）」与「LTS 概览」两处。
+// 现在改成 await ensureMarked() —— 拿不到就退回内置的简易解析器（`parseMarkdown`），
+// 所以这个函数**不会 reject**，调用方不 await 也不会产生未处理的拒绝。
+export async function renderMarkdownContent(container, markdownText) {
   if (!container) return;
 
   let html;
-  // 使用 marked 库解析 Markdown (如果可用)
-  if (window.marked) {
+  try {
+    const marked = await ensureMarked();
     // 配置 marked 选项 - 安全设置
     marked.setOptions({
       gfm: true, // 启用 GitHub Flavored Markdown
@@ -1473,16 +1478,23 @@ export function renderMarkdownContent(container, markdownText) {
       mangle: false // 禁用标题 ID 混淆
     });
     html = marked.parse(markdownText);
-  } else {
-    // 降级使用简单的解析器
+  } catch (e) {
+    log.warn("marked 不可用，退回内置简易解析器（文档区不会空着）:", e);
     html = parseMarkdown(markdownText);
   }
-  
-  // 使用 DOMPurify 或手动清理 HTML（如果可用）
-  if (window.DOMPurify) {
-    html = window.DOMPurify.sanitize(html);
-  }
-  
+
+  // ⚠️ 这里**不做 HTML 清理**（2026-10-15 删掉了原来的 `if (window.DOMPurify)` 分支）：
+  // 全仓没有任何地方加载 DOMPurify，那个分支从来没生效过 —— 留着比没有更糟，
+  // 因为它让读代码的人以为这条路径是安全的。
+  //
+  // 三个内容来源逐个看：
+  //   · docs/README.md、docs/LTS_Fallout_Summary.md —— 扩展包内的一手文件，受信；
+  //   · 用户在「LTS 概览」里自选的本地 .md（app.js 的 FileReader）—— 不受信，
+  //     但它只会经 innerHTML 注入，而 `innerHTML` **不会执行插入的 <script>**，
+  //     且扩展页 CSP 是 `script-src 'self'`（没有 unsafe-inline）→ `onerror=` 这类
+  //     内联事件处理器被整段拒绝。这两条已在 skill 路径 H 用真实扩展验过。
+  // 真要做清理就别自写白名单（naive sanitizer 比不做更危险）：引入 DOMPurify
+  // （约 20KB，照 `lib_loader.js` 里其他库那样按需加载）再在这里 `DOMPurify.sanitize(html)`。
   container.innerHTML = html;
 
   // 处理 Mermaid 图表
@@ -1911,7 +1923,7 @@ async function loadReadme() {
     const response = await fetch('docs/README.md');
     if (response.ok) {
       const text = await response.text();
-      renderMarkdownContent(readmeContainer, text);
+      await renderMarkdownContent(readmeContainer, text);
       appState.readme_loaded = true;
     } else {
       readmeContainer.innerHTML = '<p style="color: var(--error-color);">加载说明文档失败</p>';
@@ -1938,7 +1950,7 @@ async function loadLTSSummary() {
     if (response.ok) {
       const text = await response.text();
       // console.log('[DEBUG] Fetched text length:', text.length);
-      renderMarkdownContent(container, text);
+      await renderMarkdownContent(container, text);
       appState.lts_summary_loaded = true;
       log.debug('LTS Summary 加载成功');
     } else {

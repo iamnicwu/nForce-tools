@@ -24,9 +24,18 @@ import {
   PREF_KEYS
 } from "./common/prefs.js";
 import { initPrefsPanel } from "./biz/prefs_panel.js";
-// 侧边栏「鼠标移出自动隐藏」。只在**侧边栏宿主**下启用 ——
-// 贴边浮窗里调用它会把浏览器侧边栏关掉（模块头部的注释有详细说明）。
-import { initPanelAutoHide } from "./biz/panel_auto_hide.js";
+// 全局搜索（Spotlight 式命令面板）：条目取自刚渲染完的首页布局，所以必须在
+// initUiLayout() 之后初始化，否则第一次打开会是空的。
+import { initCommandPalette } from "./biz/command_palette.js";
+// Order 历史（section-30）：搜索里输入 Order 的 Name/Id/OrderNumber 时，
+// 由 `applyGotoPayload()` 把值带进来并自动查一次。
+import { initOrderHistory, openOrderHistoryWith, ORDER_HISTORY_STEP } from "./biz/order_history.js";
+// 与 service worker / 网页搜索浮层之间共享的消息名与 storage 键（唯一来源）
+import {
+  UI_MESSAGE,
+  UI_STORAGE,
+  PENDING_SECTION_TTL_MS
+} from "./common/ui_events.js";
 import {
   initInspectorTools,
   loadSoqlFields,
@@ -45,9 +54,6 @@ import {
   clearEventLog,
   exportEventLog
 } from "./biz/inspector_tools.js";
-// marked 以 ES Module 形式发布（不挂在 window 上），这里显式引入并暴露给
-// ui.js 的 renderMarkdownContent 使用，否则 README / LTS 概览会退化成简易解析器
-import { marked } from "./lib/js/marked.min.js";
 import {
   showSection,
   updateUIState,
@@ -56,17 +62,29 @@ import {
   initLauncher,
   goHome
 } from "./biz/ui.js";
-import { 
+import {
+  processLunchFile,
+  shakeLunch,
+  initLunch
+} from "./biz/lunch.js";
+import {
   fetchUserInfo,
-  fetchOrgInfo,
+  fetchOrgInfo
+} from "./biz/org_info.js";
+import {
   getReportData,
   getSalesforceData,
   getDailyData,
+  getT2Data,
+  getVVIPData
+} from "./biz/data_query.js";
+import {
   getPCDDailyData,
   getPCDPIDFalloutData,
   getPCDQCIssueData,
-  getPCDExpiredData,
-  getT2Data,
+  getPCDExpiredData
+} from "./biz/data_pcd.js";
+import {
   exportDailyData,
   exportPCDDailyData,
   exportPCDPIDFalloutData,
@@ -77,30 +95,34 @@ import {
   exportLatestData,
   exportVVIPData,
   exportAnalysisData,
+  exportT2AnalysisData
+} from "./biz/data_export.js";
+import {
   processExcelFile,
   processVVIPExcelFile,
   processAnalysisExcelFile,
-  getVVIPData,
   analyzeData,
   analyzeT2Data,
-  exportT2AnalysisData,
   processT2AnalysisExcelFile,
-  processT2RulesFile,
-  processLunchFile,
-  shakeLunch,
-  initLunch,
+  processT2RulesFile
+} from "./biz/excel_import.js";
+import {
   handleCreateBulkJob,
   handleCheckBulkJob,
   handleDownloadBulkResult,
-  fetchBulkJobs,
-  executeAnonymousCode,
+  fetchBulkJobs
+} from "./biz/bulk.js";
+import {
+  executeAnonymousCode
+} from "./biz/apex.js";
+import {
   loadScheduleJobs,
   createScheduleJob,
   deleteScheduleJob,
   pauseScheduleJob,
   resumeScheduleJob,
   clearAllScheduleJobs
-} from "./biz/logic.js";
+} from "./biz/schedule.js";
 
 // 验证保存的 session 是否仍然有效
 async function validateStoredSession() {
@@ -505,6 +527,104 @@ async function reconnectNow(trigger) {
   return attemptSessionRecovery(trigger, { force: true, knownBadSid: appState.session_id });
 }
 
+/**
+ * 「搜索跳转」的排队目标（section 编号）。
+ *
+ * 为什么需要它：搜索面板/网页浮层允许用户**在未连接时直接点某个功能**，
+ * 此时不能只丢一句「请先连接 Salesforce」—— 那等于让用户自己去连接设置里再找一遍。
+ * 这里的做法是：记下目标 → 尝试自动连（复用 `reconnectNow`，它会从浏览器 Cookie 里
+ * 换一份可用会话）→ 连上就直接落到目标页。若这一轮没连上，标记**留着**，
+ * 交给后台看门狗 —— 用户去 Salesforce 登录完，连接一恢复就自动落到他想去的那个页面。
+ * 只活在内存里，页面重载即丢（不会变成"过很久突然跳页"的幽灵）。
+ */
+let pendingSection = null;
+
+/**
+ * 连接已可用时，把排队中的跳转落下去。返回是否真的跳了。
+ * 三个调用点：会话恢复成功后、另一处宿主建立连接后、以及 `gotoSection` 的兜底。
+ */
+function flushPendingSection(reason) {
+  if (!pendingSection) return false;
+  if (!appState.is_connected) return false;
+  const { step, payload } = pendingSection;
+  pendingSection = null;
+  log.info(`连接已可用（${reason}），进入排队中的 section-${step}`);
+  showSection(step);
+  applyGotoPayload(payload);
+  return true;
+}
+
+/**
+ * 跳转的**附带参数**：目前只有一项 —— `orderValue`（搜索框里输入的 Order 值）。
+ * 由 `biz/order_history.js` 落地：填进输入框并自动查一次。
+ * 单独一个函数是因为它有三个调用点（已连接直达 / 排队后落地 / 网页浮层消息）。
+ */
+function applyGotoPayload(payload) {
+  if (!payload) return;
+  if (!payload.orderValue) return;
+
+  if (sfConn.connection) {
+    openOrderHistoryWith(payload.orderValue).catch((e) => log.warn("Order 历史自动查询失败:", e));
+    return;
+  }
+
+  // ⚠️ 启动期这一格很容易踩：面板在 `initApp()` 中段就初始化好了，而会话是在末尾才恢复的。
+  // 用户此时点搜索里的单号，`appState.is_connected` 可能已经是 true（storage 里存的），
+  // 但 `sfConn.connection` 还没建 —— 直接查只会得到一句「尚未连接」，
+  // 而且**不会自动重试**（2026-10-16 的 panel-shot 用例抓到的就是这个时序）。
+  // 处理：把参数排进 `pendingSection`，让 `onSessionRestored → flushPendingSection` 落地。
+  log.info("连接尚未就绪，Order 历史查询排队到会话恢复后执行");
+  pendingSection = { step: ORDER_HISTORY_STEP, payload };
+}
+
+/**
+ * 跳到某个功能 —— 搜索面板与网页搜索浮层的**唯一落地入口**。
+ *
+ * 与点首页磁贴的区别只有一条：未连接时不是"提示 + 弹回连接设置"，而是
+ * **先自动连一次**再跳（用户明确要求的行为）。已连接时与点磁贴完全等价
+ * （同样走 `showSection`，连接门禁/白名单判定都还是那里说了算）。
+ *
+ * @param {number|string} step section 编号
+ * @param {{orderValue?: string}|null} [payload] 跳转要带的参数（见 applyGotoPayload）
+ */
+async function gotoSection(step, payload = null) {
+  const target = Number(step);
+  if (!target) return;
+
+  if (appState.is_connected) {
+    showSection(target);
+    applyGotoPayload(payload);
+    return;
+  }
+
+  // 未连接：连上之后再落地（`payload` 跟着一起排队，否则"输入单号 → 自动连接"
+  // 这条路会把那个单号丢掉，用户还以为是插件没反应）
+  pendingSection = { step: target, payload };
+  log.info(`搜索跳转：当前未连接，先尝试自动连接（目标 section-${target}）`);
+  showNotification("正在自动连接 Salesforce…", "info");
+
+  let result = null;
+  try {
+    result = await reconnectNow(`搜索跳转到 section-${target}`);
+  } catch (e) {
+    log.warn("搜索跳转前的自动连接出现异常:", e);
+  }
+
+  // 成功：`onSessionRestored()` 里已经 flush 过一次，这里是兜底（那条路径可能被跳过）
+  if (flushPendingSection("搜索跳转前自动连接")) return;
+
+  if (result && result.skipped === "throttled") {
+    // 刚刚才试过（3s 内），不是失败只是被节流：留着标记等后台重试，别再骚扰用户
+    showNotification("正在后台重试连接，连上后会自动进入该功能", "warning");
+    return;
+  }
+
+  // 明确连不上（浏览器里没有登录态 / 请求被拦）：落到连接设置，那里有手动入口。
+  // **标记继续留着** —— 看门狗会在后台接着试，用户去登录完就自动落到目标页。
+  showSection(1);
+  showNotification("未能自动连接 Salesforce，请先完成连接设置", "warning");
+}
+
 /** 会话恢复 / 自动刷新成功后的统一收尾（补齐用户与组织信息并刷新 UI） */
 async function onSessionRestored(message) {
   // 会话刚被确认可用：刷新新鲜度、摘掉"疑似失效"、停掉看门狗。
@@ -534,53 +654,30 @@ async function onSessionRestored(message) {
     log.warn('刷新首页图标状态失败:', e);
   }
   if (message) showNotification(message, "success");
+  // 搜索跳转排队中 → 会话一恢复就落过去（"连上后自动进入该功能"那一半）
+  flushPendingSection("会话已恢复");
 }
 
 /* ============================================================
- * 显示宿主：浏览器侧边栏 ⇄ 普通标签页 ⇄ 贴边浮窗
+ * 显示宿主：浏览器侧边栏 ⇄ 普通标签页
  *
- * 侧边栏与标签页加载的是同一个 index.html（manifest 的
- * side_panel.default_path 指向它），所以必须在运行时区分宿主：
+ * 两者加载的是同一个 index.html（manifest 的 side_panel.default_path 指向它），
+ * 所以必须在运行时区分宿主：
  *   · 侧边栏 → 顶栏给「完整应用」（在新标签页打开，宽屏更适合看表格与图表）
  *   · 标签页 → 顶栏给「侧边栏」（chrome.sidePanel.open 停靠到窗口右侧）
- *   · 贴边浮窗 → 同「完整应用」，窄栏排版
  * 排版本身由 main.css 末尾的「浏览器侧边栏排版层」按宽度生效，与这里的判定
  * 无关 —— 判定失败最多是少一个顶栏按钮，不会退化成难用的界面。
  * ============================================================ */
 const HOST_PANEL = "panel";
 const HOST_TAB = "tab";
-/** 贴边浮窗（`src/dock.js` 注入到 Salesforce 页面里的 iframe，加载 index.html?dock=1） */
-const HOST_DOCK = "dock";
 let activeHost = HOST_TAB;
 let hostSwitchBound = false;
 
-/**
- * 贴边浮窗的自报家门。
- *
- * 为什么不能靠 API 判定：浮窗是个 iframe，`chrome.tabs.getCurrent()` 在子 frame 里
- * 会返回**宿主标签页**，于是它和普通标签页长得一模一样，必然被误判成 host-tab
- * （表现：顶栏按钮方向反了、窄栏排版不生效）。
- * 所以由 `dock.js` 在加载时带上 `?dock=1`，这里优先采信它 ——
- * 这个信号是自证的，不存在信号 1/2 之间「谁先谁后」的顺序问题。
- */
-function detectDockHost() {
-  try {
-    if (new URLSearchParams(location.search).get("dock") === "1") return HOST_DOCK;
-  } catch (e) {
-    log.debug("解析 ?dock= 参数失败:", e);
-  }
-  return null;
-}
-
 async function detectHost() {
-  // 信号 0（自证，优先级最高）：贴边浮窗带 ?dock=1 加载
-  const dock = detectDockHost();
-  if (dock) return dock;
-
   // 信号 1（决定性）：chrome.tabs.getCurrent() 只在「标签页」上下文里返回 tab 对象；
   // 侧边栏不属于任何标签页，返回 undefined。
   //
-  // 这里必须先用它、而不是先比对 documentUrl —— 侧边栏与标签页加载的是同一个
+  // 必须先用它、而不是先比对 documentUrl —— 侧边栏与标签页加载的是同一个
   // index.html，两者的 documentUrl 完全相同。若先按 URL 比对就会把「另一个宿主存在的
   // 事实」误读成「我就是那个宿主」：标签页与侧边栏同时打开时，标签页会误判自己是
   // 侧边栏，顶栏按钮方向反过来（实测复现过）。
@@ -611,14 +708,9 @@ async function detectHost() {
 /** 按宿主设置 body 标记 + 顶栏「完整应用 / 侧边栏」切换按钮 */
 function applyHostChrome(host) {
   const isPanel = host === HOST_PANEL;
-  const isDock = host === HOST_DOCK;
-  // 侧边栏与贴边浮窗都是「窄栏」：共用一套窄屏排版（main.css 的宽度媒体查询
-  // 本来就会命中，这里保持 class 语义一致，方便按宿主写例外样式）。
-  const isNarrow = isPanel || isDock;
   activeHost = host;
-  document.body.classList.toggle("host-panel", isNarrow);
-  document.body.classList.toggle("host-tab", !isNarrow);
-  document.body.classList.toggle("host-dock", isDock);
+  document.body.classList.toggle("host-panel", isPanel);
+  document.body.classList.toggle("host-tab", !isPanel);
 
   const btn = $("host-switch-btn");
   if (!btn) {
@@ -626,14 +718,12 @@ function applyHostChrome(host) {
     return;
   }
   // 直接注入 Icons 里的 SVG 字面量：顶栏是动态渲染的，replaceIcons() 已经跑过
-  btn.innerHTML = isNarrow
+  btn.innerHTML = isPanel
     ? `${Icons.externalLink}<span>完整应用</span>`
     : `${Icons.outdent}<span>侧边栏</span>`;
   btn.title = isPanel
     ? "在新标签页中打开完整应用（宽屏更适合看数据表格与图表）"
-    : isDock
-      ? "在新标签页中打开完整应用"
-      : "在浏览器侧边栏中打开（可固定在右侧，也可随时隐藏）";
+    : "在浏览器侧边栏中打开（可固定在右侧，也可随时隐藏）";
   btn.hidden = false;
 
   // initApp 可能被重复调用（点顶部标题会重新初始化），事件只绑一次
@@ -641,8 +731,8 @@ function applyHostChrome(host) {
   hostSwitchBound = true;
 
   on("host-switch-btn", "click", async () => {
-    if (activeHost !== HOST_TAB) {
-      // 侧边栏 / 贴边浮窗 → 标签页：同一个 index.html，只是换成宽屏宿主
+    if (activeHost === HOST_PANEL) {
+      // 侧边栏 → 标签页：同一个 index.html，只是换成宽屏宿主
       await chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
       return;
     }
@@ -731,6 +821,8 @@ function watchSessionStorage() {
 
       if (!wasConnected && appState.is_connected) {
         showNotification("已同步另一处建立的 Salesforce 连接", "success");
+        // 另一处（侧边栏/标签页）把连接接上了，本页若有排队中的搜索跳转就落下去
+        flushPendingSection("另一处建立了连接");
       } else if (wasConnected && !appState.is_connected) {
         showNotification("Salesforce 连接已在另一处断开", "warning");
       }
@@ -751,22 +843,7 @@ async function initApp() {
     log.warn("宿主判定异常，按普通标签页处理:", e);
   }
   applyHostChrome(host);
-  log.info(
-    `当前显示宿主：${
-      host === HOST_PANEL ? "浏览器侧边栏" : host === HOST_DOCK ? "贴边浮窗" : "标签页"
-    }`
-  );
-
-  // 侧边栏独有的行为：鼠标移出后自动隐藏。
-  // 必须卡在 host === HOST_PANEL 上：贴边浮窗的收起由 dock.js 自己管，
-  // 且浮窗里调 sidePanel.close 关掉的是**浏览器侧边栏**，与用户所见无关。
-  if (host === HOST_PANEL) {
-    try {
-      initPanelAutoHide();
-    } catch (e) {
-      log.warn("侧边栏自动隐藏初始化失败（不影响其他功能）:", e);
-    }
-  }
+  log.info(`当前显示宿主：${host === HOST_PANEL ? "浏览器侧边栏" : "标签页"}`);
 
   // 侧边栏与标签页可能同时开着，连接状态要双向同步
   watchSessionStorage();
@@ -853,6 +930,17 @@ async function initApp() {
     log.error("事件绑定过程中出现异常，部分功能可能不可用：", e);
     showNotification("部分界面事件绑定失败，请打开控制台查看详情", "error");
   }
+
+  // 全局搜索（Ctrl/Cmd+K 或首页「搜索功能…」入口，`Alt+Shift+S` 走 SW 那条）。
+  // 位置放在 initUiLayout() 之后：条目列表读的就是布局里的磁贴。
+  try {
+    initCommandPalette();
+  } catch (e) {
+    log.error("全局搜索初始化失败（不影响其他功能）:", e);
+  }
+
+  // 搜索跳转的落地（面板内的 nforce:goto + 网页浮层的 ui:goto-section）
+  initSearchBridge();
 
   // ===== 最后再尝试恢复 Salesforce 会话：只做「尽力而为」，绝不影响首页展示 =====
   // 重要：这里失败时不能把界面降级为「未连接」。
@@ -944,15 +1032,20 @@ async function initApp() {
   // 会话恢复 / 自动刷新都结束后，仍未连接才提示（避免先弹警告又马上连接成功的噪音）
   if (!appState.is_connected) {
     if (host !== HOST_TAB) {
-      // 侧边栏 / 贴边浮窗又窄又高，一个 toast 很容易被忽略，而且首页全是「需连接」的灰磁贴。
+      // 侧边栏又窄又高，一个 toast 很容易被忽略，而且首页全是「需连接」的灰磁贴。
       // 直接把用户送到「连接设置」卡片 —— 那里有「自动获取 Session 并重新连接」按钮
       // （现在它更多是"手动催一下"的用途，正常情况下后台会自动连上），
       // 侧边栏里没有地址栏可以重载，这个按钮仍是它的兜底自救入口。
-      log.info(`${host === HOST_DOCK ? "贴边浮窗" : "侧边栏"}内尚未连接，直接进入「连接设置」`);
+      log.info("侧边栏内尚未连接，直接进入「连接设置」");
       showSection(1);
     }
     showNotification("尚未连接 Salesforce：若浏览器里登录过该 org，面板会自动连上", "warning");
   }
+
+  // 最后才兑现「带目标功能打开」的一次性请求（在网页搜索浮层里选的功能）。
+  // 位置必须在会话恢复之后：这样是**直接**落到目标功能页，
+  // 而不是先闪一下「连接设置」再跳走。
+  await consumePendingSection();
 }
 
 // 首页渲染失败时的兜底提示，避免出现空白页面
@@ -976,9 +1069,76 @@ function renderLauncherErrorHint(error) {
   }
 }
 
+/* ============================================================
+ * 搜索跳转的落地：面板内（同页事件）+ 网页浮层（SW 转消息）
+ * ============================================================ */
+
+let searchBridgeBound = false;
+
+/** 注册两条入口 —— 都只是把请求转交给 `gotoSection()`，不在这里判连接与白名单 */
+function initSearchBridge() {
+  if (searchBridgeBound) return;
+  searchBridgeBound = true;
+
+  // ① 插件自己的搜索面板：同页，走自定义事件即可（command_palette.js → 这里）。
+  //    与 `nforce:home` / `nforce:section` 同一套解耦方式 —— app.js 是入口、
+  //    不是模块，别的模块 import 不到它的函数。
+  window.addEventListener("nforce:goto", (e) => {
+    const detail = (e && e.detail) || {};
+    if (detail.step) gotoSection(detail.step, { orderValue: detail.orderValue });
+  });
+
+  // ② 注入到**网页**里的搜索浮层：SW 把 `ui:goto-request` 转成这条消息广播过来。
+  //    只让"用户正看着的"页面接单（后台标签页不该跳页）——
+  //    下面的 `document.visibilityState` 就是这个过滤器。
+  try {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (!msg || msg.type !== UI_MESSAGE.GOTO_SECTION) return undefined;
+      if (document.visibilityState !== "visible") {
+        sendResponse({ ok: false, reason: "hidden" });
+        return undefined;
+      }
+      const step = Number(msg.step);
+      // 不带 step 表示"只把插件打开"（网页浮层里选的是「返回首页」）→ 落到首页
+      if (step) gotoSection(step, { orderValue: msg.orderValue });
+      else goHome();
+      sendResponse({ ok: true });
+      return undefined;
+    });
+  } catch (e) {
+    log.warn("注册搜索跳转消息监听失败（网页浮层选中后将落到侧边栏）:", e);
+  }
+}
+
+/**
+ * 处理「带目标功能打开」的一次性请求：在网页浮层里选了功能、而当时**没有任何扩展
+ * 页面在跑** → SW 打开侧边栏并写下这枚标记，这里把它兑现。
+ *
+ * 位置很关键：调用点放在 `initApp()` 的**最后**（会话恢复之后），
+ * 这样它是直接落到目标功能页，而不是先闪一下连接设置再跳走。
+ */
+async function consumePendingSection() {
+  if (!chrome.storage || !chrome.storage.session) return;
+  try {
+    const stored = await chrome.storage.session.get([UI_STORAGE.PENDING_SECTION]);
+    const raw = stored ? stored[UI_STORAGE.PENDING_SECTION] : null;
+    if (!raw) return;
+    // 先摘掉再处理：处理过程要发网络请求，期间不能让它被下一次启动重复消费
+    await chrome.storage.session.remove([UI_STORAGE.PENDING_SECTION]);
+
+    const at = Number(raw && raw.at);
+    if (!Number.isFinite(at) || Date.now() - at > PENDING_SECTION_TTL_MS) {
+      log.debug("进入功能的请求已过期，忽略");
+      return;
+    }
+    await gotoSection(raw.step, raw.orderValue ? { orderValue: raw.orderValue } : null);
+  } catch (e) {
+    log.debug("读取进入功能的请求失败:", e);
+  }
+}
+
 // 绑定事件
-function bindEvents() {
-  // Session ID表单提交
+function bindEvents() {  // Session ID表单提交
   on("session-id-form", "submit", function (e) {
       e.preventDefault();
       const sessionId = $("session_id").value.trim();
@@ -1338,6 +1498,9 @@ function bindEvents() {
 
   // 设置页内的「插件偏好」（section-28）：API 版本 + 侧边栏位置
   initPrefsPanel();
+
+  // Order 历史（section-30）：输入框 / 查询 / 清空 / 导出 四个按钮
+  initOrderHistory();
 
   // 导出当日数据按钮点击事件
   const exportDailyDataBtn = $("export-daily-data");
@@ -2019,11 +2182,6 @@ function bindEvents() {
       e.stopPropagation();
     });
   }
-}
-
-// 把 marked 暴露到 window，供 ui.js / 其他模块的 Markdown 渲染使用
-if (marked) {
-  window.marked = marked;
 }
 
 // 页面加载完成后初始化

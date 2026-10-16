@@ -9,9 +9,12 @@
  * 所以这笔成本是反复付出的固定成本。
  *
  * ── 做法 ──
- * 这三个库都是 UMD / 全局脚本（挂 window.X），不是 ESM，因此不能用 import()，
+ * 三个库都是 UMD / 全局脚本（挂 window.X），不是 ESM，因此不能用 import()，
  * 改为「首次需要时注入 <script> 并等待 onload」，用 Promise 记忆化保证只注入一次。
  * 扩展页面是同源的，注入自己包内的脚本不违反 MV3 的 script-src 'self'。
+ *
+ * ⚠️ **例外**：`marked` 是 ESM（不挂 window），走 `ensureMarked()` 里的动态 `import()` ——
+ * 见那个函数上方的说明（它原本被 app.js 静态 import，40KB 无条件进首屏）。
  *
  * ── Salesforce 客户端不在这里 ──
  * jsforce（1.37MB）已于 2026-09-28 被自研的 `common/sf_rest_client.js`（约 8KB）取代，
@@ -19,16 +22,18 @@
  *
  * ── 用法 ──
  *   await ensureECharts();          // 拿到之后即可直接用全局 echarts
+ *   await ensureMarked();           // 返回 marked 模块对象（不是全局）
  *   warmupLibs();                   // 空闲时预取（app.js 启动后调用）
  *
  * ── 注意 ──
  * 新增依赖库时：
- *   1. 这里加一个 ensureXxx()
+ *   1. 这里加一个 ensureXxx()（UMD 库进 GLOBAL_NAME / LIB_PATH 两张表；ESM 库照 ensureMarked 写）
  *   2. 从 index.html 移除对应的 <script>（否则等于没省）
  *   3. tools/check-ui.mjs 的 L 组会检查「用过但没加载」的全局库
  */
 
 import { createLogger } from "./logger.js";
+import { showNotification } from "./utils.js";
 
 const log = createLogger("LIB");
 
@@ -116,6 +121,54 @@ export const ensureXLSX = () => loadScript("xlsx");
 
 /** JSZip（Bulk 结果 / Metadata 打包） */
 export const ensureJSZip = () => loadScript("jszip");
+
+/**
+ * 「按需加载 SheetJS，并给用户一句人话」的统一包装。
+ *
+ * 迁移自 `common/excel_utils.js` 与 `biz/inspector_tools.js` —— 那两份**逐字相同**
+ * （只有 logger 的 TAG 不同），留着两份就会在改文案/改加载方式时漏改一处。
+ * 调用方只需 `if (!(await requireXLSX())) return;`。
+ *
+ * @returns {Promise<boolean>} 是否可用
+ */
+export async function requireXLSX() {
+  try {
+    await ensureXLSX();
+    return true;
+  } catch (error) {
+    log.error("加载 XLSX 库失败:", error);
+    showNotification("加载 Excel 处理库失败：" + (error.message || error), "error");
+    return false;
+  }
+}
+
+/**
+ * marked（Markdown 渲染：版本信息里的 README、LTS 概览）
+ *
+ * ⚠️ 它**不在上面那两张表里**，因为机制不同：marked 发布的是 **ESM**（`export { marked }`），
+ * 不挂 `window`，所以不能用「注入 <script> 等 onload」那一套 —— 用 `import()`。
+ *
+ * 为什么值得单独拿出来懒加载（2026-10-15）：它原本被 `app.js` **静态 import**，
+ * 于是 40KB 无条件进主包；而它只在两处用到（进「版本信息」看 README、进「LTS 概览」）。
+ * 改成动态 import 后，V8 会把它切成独立 chunk：不进首屏，只在真要渲染文档时才取。
+ * （这正是 `INEFFECTIVE_DYNAMIC_IMPORT` 警告的反面 —— 那个模块没被别处静态引用，所以切得开。）
+ *
+ * @returns {Promise<{parse: Function, setOptions: Function}>}
+ */
+let markedPending = null;
+export function ensureMarked() {
+  if (!markedPending) {
+    markedPending = import("../lib/js/marked.min.js")
+      .then((m) => m.marked)
+      .catch((error) => {
+        // 失败要清缓存，否则一次失败会永久卡住后续重试（同 loadScript 的约定）
+        markedPending = null;
+        log.error("加载 marked 失败:", error);
+        throw error;
+      });
+  }
+  return markedPending;
+}
 
 /**
  * 空闲时预取「紧接着就会用到」的库，避免用户点击时还要等解析

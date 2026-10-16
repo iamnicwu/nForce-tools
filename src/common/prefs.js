@@ -14,104 +14,60 @@
  * （与 `app.js` 的 `watchSessionStorage` 同模式）。
  *
  * ── 结构 ──
- * 表驱动：新增一个偏好 = 在 PREF_KEYS / PREF_DEFAULTS / PARSERS 各加一行。
- * 之所以不再像最初那样为每个键手写一个 getter/setter：贴边浮窗落地时一口气多了 5 个键，
+ * 表驱动：新增一个偏好 = 在 PREF_KEYS / PREF_DEFAULTS / SPECS 各加一行。
+ * 之所以不再像最初那样为每个键手写一个 getter/setter：一次性多了 5 个键时，
  * 手写会变成 5 份互相抄的样板，且"漏了一个写入点"这种 bug 静态检查抓不到。
  *
- * ⚠️ **本模块被内容脚本（`biz/dock.js`）引用** —— 它跑在客户页面上。
- * 所以这里只依赖 `logger.js` 与 `api_version.js` 这两个零依赖模块，
- * 千万不要 import `sf_rest_client.js` 之类会把整个客户端打进页面的东西。
+ * ⚠️ **本模块被 service worker（`background.js`）与内容脚本注入的浮层引用** ——
+ * 后者跑在客户页面上。所以这里只依赖 `logger.js` / `api_version.js` / `shortcut.js`
+ * 这三个零依赖模块，千万不要 import `sf_rest_client.js` 之类会把整个客户端打进页面的东西。
  */
 import { createLogger } from "./logger.js";
 import { DEFAULT_API_VERSION, parseApiVersion } from "./api_version.js";
+// 快捷键的规范化 / 校验（纯函数）。本模块被逐字复制的 SW 静态 import，
+// 所以 shortcut.js 也必须零依赖、且只在函数里读 navigator（见该文件头部）。
+import { normalizeAccelerator, SEARCH_PANEL_SHORTCUT_DEFAULT } from "./shortcut.js";
 
 const log = createLogger("PREFS");
 
 /** storage 里的键名。键名带 `sf_` 前缀，与 `sf_session_id` / `sf_instance_url` 保持一致。 */
 export const PREF_KEYS = Object.freeze({
   apiVersion: "sf_api_version",
-  /** 侧边栏：鼠标移出后自动关闭 */
-  panelAutoHide: "sf_panel_auto_hide",
-  /** 侧边栏：移出后多久关闭（毫秒） */
-  panelHideDelay: "sf_panel_hide_delay",
-  /** 贴边浮窗：是否在 Salesforce 页面启用 */
-  dockEnabled: "sf_dock_enabled",
-  /** 贴边浮窗：贴哪一边（"right" | "left"） */
-  dockSide: "sf_dock_side",
-  /** 贴边浮窗：指针移出后多久收回（毫秒） */
-  dockHideDelay: "sf_dock_hide_delay"
+  /**
+   * 全局搜索：**插件页面内**那条快捷键。
+   *
+   * 注意与"全局快捷键"（任意网页都能唤起的那条）的区别：那条由 Chrome 自己保存，
+   * 只能通过 `chrome://extensions/shortcuts` 改（MV3 没有 `commands.update()`，见
+   * `biz/prefs_panel.js` 的说明），**不在本模块里**。
+   * 这里存的是插件自己页面里的 DOM 监听用的那条。
+   */
+  searchShortcut: "sf_search_shortcut"
 });
-
-/** 移出后多久隐藏的候选档位（毫秒）。`0` = 立即。两边（侧边栏 / 浮窗）共用同一组档位。 */
-export const HIDE_DELAYS = Object.freeze([0, 300, 600, 1200, 2500]);
-
-/** 贴边浮窗的候选边。 */
-export const DOCK_SIDES = Object.freeze(["right", "left"]);
 
 /** 缺省值。**只在这里写一次**，供 `loadPrefs()` 填充缺失项与「恢复默认」使用。 */
 export const PREF_DEFAULTS = Object.freeze({
   [PREF_KEYS.apiVersion]: DEFAULT_API_VERSION,
-  // 下面这些新功能**一律默认关闭**：升级后行为不变，要用的自己去设置页打开。
-  // 自动隐藏尤其如此 —— 默认开着会让老用户觉得"面板怎么自己关了"。
-  [PREF_KEYS.panelAutoHide]: false,
-  [PREF_KEYS.panelHideDelay]: 600,
-  [PREF_KEYS.dockEnabled]: false,
-  [PREF_KEYS.dockSide]: "right",
-  [PREF_KEYS.dockHideDelay]: 600
+  // 搜索快捷键：跨平台别名 Mod = mac 上的 ⌘、其它平台的 Ctrl
+  [PREF_KEYS.searchShortcut]: SEARCH_PANEL_SHORTCUT_DEFAULT
 });
 
 /* ------------------------------------------------------------------ *
  * 各键的解析器：合法则返回规范化后的值，非法返回 null
  * ------------------------------------------------------------------ */
 
-function parseBool(raw) {
-  if (typeof raw === "boolean") return raw;
-  if (raw === 1 || raw === 0) return raw === 1;
-  if (typeof raw === "string") {
-    const s = raw.trim().toLowerCase();
-    if (s === "true" || s === "1") return true;
-    if (s === "false" || s === "0") return false;
-  }
-  return null;
-}
-
-function parseHideDelay(raw) {
-  const n = typeof raw === "number" ? raw : Number(String(raw ?? "").trim());
-  if (!Number.isFinite(n)) return null;
-  return HIDE_DELAYS.includes(n) ? n : null;
-}
-
-function parseDockSide(raw) {
-  const s = String(raw ?? "").trim().toLowerCase();
-  return DOCK_SIDES.includes(s) ? s : null;
-}
-
 /**
  * 每个键的解析器 + 出错时给用户看的话。
- * `hint` 里的取值范围直接由常量拼出来，避免改了档位忘了改提示文案。
  */
 const SPECS = Object.freeze({
   [PREF_KEYS.apiVersion]: {
     parse: parseApiVersion,
     where: "API 版本",
-    howto: "请填 20.0 ~ 70.9 之间的数字（如 68.0）"
+    howto: "请填 20.0 ~ 70.9 之间的数字（如 67.0）"
   },
-  [PREF_KEYS.panelAutoHide]: { parse: parseBool, where: "侧边栏自动隐藏", howto: "只能是开或关" },
-  [PREF_KEYS.panelHideDelay]: {
-    parse: parseHideDelay,
-    where: "侧边栏隐藏延迟",
-    howto: `只能是 ${HIDE_DELAYS.join(" / ")} 毫秒之一`
-  },
-  [PREF_KEYS.dockEnabled]: { parse: parseBool, where: "贴边浮窗", howto: "只能是开或关" },
-  [PREF_KEYS.dockSide]: {
-    parse: parseDockSide,
-    where: "浮窗位置",
-    howto: `只能是 ${DOCK_SIDES.join(" / ")}`
-  },
-  [PREF_KEYS.dockHideDelay]: {
-    parse: parseHideDelay,
-    where: "浮窗收回延迟",
-    howto: `只能是 ${HIDE_DELAYS.join(" / ")} 毫秒之一`
+  [PREF_KEYS.searchShortcut]: {
+    parse: normalizeAccelerator,
+    where: "搜索快捷键",
+    howto: "形如 Mod+K / Alt+Shift+S，且必须包含 Ctrl / ⌘ / Alt 之一（主键支持字母、数字、F1–F12）"
   }
 });
 

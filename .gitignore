@@ -13,6 +13,9 @@ dist_backup_before_inspector_tools/
 # 打包快照（每个约 1MB）
 # 用通配符而不是逐个列名字：曾因只列了旧版本，`src 4.2.1.zip` 漏网成为未跟踪文件。
 src*.zip
+# dist.zip 是「把 dist/ 打成一个包」的快照（发给别人试用时用的），同样不进仓库：
+# dist/ 本身已入库，再存一份 zip 只会让仓库多出 1MB 且每次构建都变。
+dist*.zip
 
 # ───────────────────────── 凭据（绝不入库） ─────────────────────────
 # 源码中禁止出现任何 token / secret；Graph Token 走 chrome.storage.local。

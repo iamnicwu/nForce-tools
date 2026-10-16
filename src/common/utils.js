@@ -241,6 +241,49 @@ export function formatDateTime(value) {
 }
 
 /**
+ * 复制文本到剪贴板（2026-10-16 从 `biz/session_info.js` 提上来的共享实现）。
+ *
+ * 为什么要提上来：剪贴板这件事有**两个坑**要一起处理，各写一份必然有一份漏掉 ——
+ *   ① `navigator.clipboard` 在扩展页 / 非安全上下文里可能不可用；
+ *   ② 失败时用户要能看懂发生了什么（"复制失败，请手动选中复制"）。
+ * 三处调用（Session 链接的逐项复制、Order 历史的「复制全部」…）用同一份，改一处全都受益。
+ *
+ * @param {string} text 要复制的内容
+ * @param {string} [successText] 成功提示，默认「已复制到剪贴板」
+ * @returns {Promise<boolean>} 是否真的复制成功
+ */
+export async function copyText(text, successText = "已复制到剪贴板") {
+  if (!text) {
+    showNotification("没有可复制的内容", "warning");
+    return false;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showNotification(successText, "success");
+    return true;
+  } catch (e) {
+    // 兜底：clipboard API 不可用时用临时 textarea + execCommand
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      showNotification(ok ? successText : "复制失败，请手动选中复制", ok ? "success" : "error");
+      return ok;
+    } catch (err) {
+      log.error("复制失败:", err);
+      showNotification("复制失败，请手动选中复制", "error");
+      return false;
+    }
+  }
+}
+
+/**
  * 把「被拒绝的理由 / 抛出的错误」转成一段安全可读的文案。
  *
  * 为什么需要它：全局错误处理器里曾经直接写 `event.reason.message`。
