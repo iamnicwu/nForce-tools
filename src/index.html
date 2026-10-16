@@ -1327,7 +1327,9 @@
 
                         <div class="u-maxw-800 u-mx-auto">
                             <div class="form-group u-mb-24">
-                                <label class="u-block u-mb-8 u-fw-500" for="bulk-soql-input">SOQL 查询语句</label>
+                                <label class="u-block u-mb-8 u-fw-500" for="bulk-soql-input">SOQL 查询语句
+                                    <span class="u-fs-xs u-text-secondary">（打字时自动提示对象名 / 字段 · Ctrl+Space 手动唤出）</span>
+                                </label>
                                 <textarea id="bulk-soql-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 10000"></textarea>
                             </div>
                             <div class="form-group u-text-right u-mb-32">
@@ -1529,7 +1531,9 @@
 
                         <div class="u-maxw-900 u-mx-auto">
                             <div class="form-group u-mb-24">
-                                <label class="u-block u-mb-8 u-fw-500" for="apex-code-input">Apex 代码</label>
+                                <label class="u-block u-mb-8 u-fw-500" for="apex-code-input">Apex 代码
+                                    <span class="u-fs-xs u-text-secondary">（打字时自动提示 · Ctrl+Space 手动唤出 · ↑↓ 选择 · Enter 采用）</span>
+                                </label>
                                 <textarea id="apex-code-input" class="ant-input" rows="12" placeholder="// 输入您的 Apex 代码
 System.debug('Hello World');"></textarea>
                             </div>
@@ -1544,6 +1548,37 @@ System.debug('Hello World');"></textarea>
                                     <span class="ant-divider-inner-text">执行结果</span>
                                 </div>
                                 <div class="u-bg-code u-text-code u-p-16 u-radius-sm u-font-code u-pre-wrap u-break-all u-maxh-400 u-ov-y-auto" id="anonymous-result-content"></div>
+
+                                <!-- 本次执行的日志：执行完自动取（先确保 TraceFlag → 认准本次那条 → 取正文）。
+                                     取不到时这块不显示，改由下面的 hint 给出原因与下一步。 -->
+                                <div class="u-hidden u-mt-16" id="apex-log-block">
+                                    <!-- 标题与按钮一行、摘要单独一行：400px 侧边栏里三样挤一行时，
+                                         标题会被 flex 压成一个字一行（2026-10-16 实测）。 -->
+                                    <div class="u-flex u-items-center u-justify-between u-gap-12 u-mb-8">
+                                        <span class="u-fw-600 u-nowrap">本次执行的日志</span>
+                                        <div class="u-flex u-gap-8">
+                                            <button type="button" class="ant-btn ant-btn-sm" id="apex-log-copy">
+                                                <i class="fas fa-copy"></i> 复制日志
+                                            </button>
+                                            <button type="button" class="ant-btn ant-btn-sm" id="apex-log-download">
+                                                <i class="fas fa-download"></i> 下载 .log
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="u-fs-xs u-text-secondary u-mb-8" id="apex-log-meta"></div>
+                                    <div class="u-flex u-items-center u-gap-8 u-mb-8 u-fs-sm">
+                                        <span class="u-text-secondary u-nowrap">Log ID</span>
+                                        <!-- 它不是一段静态 Id，而是「查看详细分析」的入口：
+                                             点一下跳到 section-31（View Log）并自动分析这条日志 -->
+                                        <button type="button" class="apex-log-id-link u-font-code" id="apex-log-id"
+                                                title="点击查看这份日志的详细分析（调用树 / 耗时 / SOQL / DML）"></button>
+                                        <button type="button" class="ant-btn ant-btn-sm u-nowrap" id="apex-log-id-copy">复制</button>
+                                        <span class="u-fs-xs u-text-secondary">← 点击 Log ID 看详细分析</span>
+                                    </div>
+                                    <div class="u-bg-code u-text-code u-p-16 u-radius-sm u-font-code u-pre-wrap u-break-all u-maxh-400 u-ov-y-auto" id="apex-log-body"></div>
+                                </div>
+
+                                <div class="u-hidden u-mt-8 u-fs-sm u-text-secondary" id="apex-log-hint"></div>
                             </div>
                         </div>
                     </div>
@@ -1685,7 +1720,6 @@ System.debug('Hello World');"></textarea>
                                     <label class="u-block u-mb-8 u-fw-500" for="soql-object-input">对象（用于字段自动补全，可留空）</label>
                                     <input type="text" id="soql-object-input" class="ant-input u-maxw-480" list="soql-object-list" placeholder="例如: Order / Account / Custom_Object__c">
                                     <datalist id="soql-object-list"></datalist>
-                                    <datalist id="soql-field-list"></datalist>
                                 </div>
                                 <div class="form-group u-mb-16">
                                     <div class="u-flex u-justify-between u-items-center u-mb-8">
@@ -1693,6 +1727,9 @@ System.debug('Hello World');"></textarea>
                                         <select id="soql-history-select" class="ant-input u-maxw-360"></select>
                                     </div>
                                     <textarea id="soql-query-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 100"></textarea>
+                                    <div class="u-fs-xs u-text-secondary u-mt-8">
+                                        打字时自动提示对象名 / 字段 / 聚合函数（写完 <code>FROM 对象</code> 后，字段提示会自动换成那张表的字段）· Ctrl+Space 手动唤出 · ↑↓ 选择 · Enter 采用
+                                    </div>
                                 </div>
                                 <div class="form-group u-flex u-gap-12 u-items-center u-text-right u-mb-16">
                                     <label class="u-flex u-items-center u-gap-6 u-fs-sm">
@@ -1987,6 +2024,110 @@ System.debug('Hello World');"></textarea>
                             <div id="order-history-log"></div>
                         </div>
                     </details>
+                </div>
+            </div>
+
+            <!-- ===== View Log：日志分析（section-31，2026-10-16） =====
+                 两个入口：① Log ID（去 org 取正文，需要连接）；
+                 ② 粘贴正文（纯本地解析，**不需要连接**）。
+                 所以这个 section 刻意**不进连接门禁**（见 biz/ui.js 的未连接白名单与
+                 tools/check-ui.mjs 白名单校验）。 -->
+            <div id="section-31" class="unified-card ant-card ant-card-bordered step-section theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">View Log</div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="fas fa-chart-line u-text-brand"></i>
+                            </div>
+                            <div class="section-desc">
+                                <p>把一份 Salesforce 调试日志拆开看：调用树、耗时、SOQL / DML 统计与异常。</p>
+                                <details class="fn-more">
+                                    <summary>日志从哪来</summary>
+                                    <ul>
+                                        <li>跑完 <b>Execute Anonymous</b> 后，结果里那个 <b>Log ID</b> 点一下就跳到这里并自动分析。</li>
+                                        <li>也可以把 Setup → Debug Logs 里的 Log ID（07L… 开头）粘进下面的输入框。</li>
+                                        <li>或者直接把日志正文粘到下面的框里 —— 这条不需要连接 Salesforce。</li>
+                                    </ul>
+                                </details>
+                            </div>
+                        </div>
+
+                        <div class="u-maxw-900 u-mx-auto">
+                            <div class="form-group u-mb-16">
+                                <label class="form-label" for="view-log-id">Log ID</label>
+                                <div class="u-flex u-items-center u-gap-8">
+                                    <input type="text" id="view-log-id" class="ant-input u-font-code"
+                                           placeholder="07L…（Setup → Debug Logs 里的 Id）">
+                                    <button type="button" class="ant-btn ant-btn-primary u-bg-brand u-border-brand u-nowrap" id="view-log-load">
+                                        <i class="fas fa-chart-line"></i> 加载并分析
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="ant-divider ant-divider-horizontal ant-divider-with-text">
+                                <span class="ant-divider-inner-text">或</span>
+                            </div>
+
+                            <div class="form-group u-mb-16">
+                                <label class="form-label" for="view-log-text">粘贴日志正文</label>
+                                <textarea id="view-log-text" class="ant-input u-font-code" rows="6"
+                                          placeholder="64.0 APEX_CODE,FINE;APEX_PROFILING,FINEST;…"></textarea>
+                                <div class="u-text-right u-mt-8">
+                                    <button type="button" class="ant-btn u-nowrap" id="view-log-analyze">分析这段日志</button>
+                                </div>
+                            </div>
+
+                            <div class="u-hidden u-fs-sm u-mb-16" id="view-log-status"></div>
+
+                            <div class="u-hidden" id="view-log-result">
+                                <div class="u-fs-xs u-text-secondary u-mb-8" id="view-log-source"></div>
+                                <div class="view-log-grid u-mb-24" id="view-log-summary"></div>
+
+                                <div class="u-fw-600 u-mb-8">最慢的几步（按自身耗时）</div>
+                                <div class="u-mb-24" id="view-log-slowest-wrap">
+                                    <div id="view-log-slowest-table" class="data-table"></div>
+                                </div>
+
+                                <div class="u-fw-600 u-mb-8">调用树</div>
+                                <!-- 浅底 + 边框（不是 u-bg-code 那种深底）：树里的文本自带
+                                     灰/黑两级，套在深色代码底上会看不清 —— 实测截图里几乎不可读 -->
+                                <div class="view-log-tree u-p-16 u-radius-sm u-maxh-400 u-ov-y-auto u-mb-24" id="view-log-tree"></div>
+
+                                <div class="u-fw-600 u-mb-8">SOQL</div>
+                                <div class="u-mb-24" id="view-log-soql-wrap">
+                                    <div id="view-log-soql-table" class="data-table"></div>
+                                </div>
+
+                                <div class="u-fw-600 u-mb-8">DML</div>
+                                <div class="u-mb-24" id="view-log-dml-wrap">
+                                    <div id="view-log-dml-table" class="data-table"></div>
+                                </div>
+
+                                <div class="u-fw-600 u-mb-8">异常与问题</div>
+                                <div class="u-mb-24" id="view-log-issues"></div>
+
+                                <!-- 默认展开：就是想看完整日志的人才会点进来，而高度已被上面的
+                                     maxh-400 + 滚动兜住，展开不会把页面撑长 -->
+                                <details class="u-mb-16" id="view-log-raw" open>
+                                    <summary class="u-fs-sm u-text-secondary">原始日志</summary>
+                                    <div class="u-flex u-justify-end u-gap-8 u-mt-8 u-mb-8">
+                                        <button type="button" class="ant-btn ant-btn-sm" id="view-log-raw-copy">
+                                            <i class="fas fa-copy"></i> 复制
+                                        </button>
+                                        <button type="button" class="ant-btn ant-btn-sm" id="view-log-raw-download">
+                                            <i class="fas fa-download"></i> 下载 .log
+                                        </button>
+                                    </div>
+                                    <div class="u-bg-code u-text-code u-p-16 u-radius-sm u-font-code u-pre-wrap u-break-all u-maxh-400 u-ov-y-auto" id="view-log-raw-text"></div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
                 <!-- ===== Org Dashboard：Salesforce Org Limits 用量看板（section-27） ===== -->

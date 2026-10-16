@@ -53,13 +53,6 @@ function getConn() {
   return conn;
 }
 
-/** 从 describe 结果里挑出可编辑字段列表（过滤掉组合字段等噪音） */
-function pickFieldNames(describeResult) {
-  return (describeResult.fields || [])
-    .map(f => f.name)
-    .filter(Boolean);
-}
-
 /* ======================================================================
  * section-23  SOQL 数据导出 (Data Export)
  * ==================================================================== */
@@ -67,7 +60,16 @@ function pickFieldNames(describeResult) {
 let soqlRecords = [];
 let soqlColumns = [];
 
-/** 懒加载：进入 section-23 时拉取 sObject 列表填充 datalist */
+/**
+ * 懒加载：进入 section-23 时拉取 sObject 列表，填充**对象名输入框**的 datalist
+ * （`<input list="soql-object-list">` 用的是浏览器原生下拉）。
+ *
+ * 注：这里原本还有个 `loadSoqlFields()`，它把字段填进 `#soql-field-list` —— 而那个 datalist
+ * **没有任何输入框引用**（`list=` 从没接上），可每次改对象名都会因此白发一次 describe 请求。
+ * 2026-10-17 随 SOQL 代码提示一起删掉了：字段提示现在由查询框的浮层提供
+ * （`biz/soql_complete.js`），它从语句里的 `FROM <对象>` 自动判断该给哪张表的字段，
+ * 不需要用户先跑到另一个框里选一次对象。
+ */
 export async function loadSoqlObjects() {
   const datalist = document.getElementById("soql-object-list");
   if (!datalist || datalist.childElementCount > 0) return;
@@ -82,23 +84,7 @@ export async function loadSoqlObjects() {
   }
 }
 
-/** 对象名失焦 / 变化时，加载该对象的字段 datalist 用于 SOQL 补全 */
-export async function loadSoqlFields() {
-  const objectInput = document.getElementById("soql-object-input");
-  const datalist = document.getElementById("soql-field-list");
-  if (!objectInput || !datalist) return;
-  const objName = objectInput.value.trim();
-  if (!objName) { datalist.innerHTML = ""; return; }
-  try {
-    const conn = getConn();
-    const describe = await conn.sobject(objName).describe();
-    datalist.innerHTML = pickFieldNames(describe)
-      .map(n => `<option value="${escapeHtml(n)}"></option>`)
-      .join("");
-  } catch (e) {
-    logSoql.warn("加载字段列表失败:", e);
-  }
-}
+/** 对象名输入框的 datalist（这个是真的在用：`list="soql-object-list"`） */
 
 /** 保存 / 读取查询历史（chrome.storage.local，最多 20 条） */
 const SOQL_HISTORY_KEY = "soql_history";

@@ -30,6 +30,16 @@ import { initCommandPalette } from "./biz/command_palette.js";
 // Order 历史（section-30）：搜索里输入 Order 的 Name/Id/OrderNumber 时，
 // 由 `applyGotoPayload()` 把值带进来并自动查一次。
 import { initOrderHistory, openOrderHistoryWith, ORDER_HISTORY_STEP } from "./biz/order_history.js";
+// View Log（section-31）：日志分析。Execute Anonymous 那边的 Log ID 是个入口 ——
+// 点击后走 `gotoSection(31, { logId })` → `applyGotoPayload()` 把 Log ID 带进来并自动分析。
+import {
+  analyzeLogFromElsewhere,
+  loadLogById,
+  analyzePastedLog,
+  copyRawLog,
+  downloadRawLog,
+  VIEW_LOG_STEP
+} from "./biz/view_log.js";
 // 与 service worker / 网页搜索浮层之间共享的消息名与 storage 键（唯一来源）
 import {
   UI_MESSAGE,
@@ -38,7 +48,6 @@ import {
 } from "./common/ui_events.js";
 import {
   initInspectorTools,
-  loadSoqlFields,
   runSoqlQuery,
   exportSoqlResults,
   handleImportFileChange,
@@ -113,8 +122,15 @@ import {
   fetchBulkJobs
 } from "./biz/bulk.js";
 import {
-  executeAnonymousCode
+  executeAnonymousCode,
+  copyApexLog,
+  copyApexLogId,
+  downloadApexLogFile
 } from "./biz/apex.js";
+// Execute Anonymous 输入框的代码提示（静态词表 + 当前 org 的 sObject / 字段）
+import { initApexComplete } from "./biz/apex_complete.js";
+// SOQL 查询框的代码提示（同一套浮层，候选换成 SOQL 语义：对象名 / 字段 / 聚合函数）
+import { initSoqlComplete } from "./biz/soql_complete.js";
 import {
   loadScheduleJobs,
   createScheduleJob,
@@ -555,12 +571,27 @@ function flushPendingSection(reason) {
 }
 
 /**
- * 跳转的**附带参数**：目前只有一项 —— `orderValue`（搜索框里输入的 Order 值）。
- * 由 `biz/order_history.js` 落地：填进输入框并自动查一次。
+ * 跳转的**附带参数**：目前两项 —— `orderValue`（搜索框里输入的 Order 值）与
+ * `logId`（Execute Anonymous 结果里点的那条日志）。
+ * 分别由 `biz/order_history.js` / `biz/view_log.js` 落地（填进输入框并自动跑一次）。
  * 单独一个函数是因为它有三个调用点（已连接直达 / 排队后落地 / 网页浮层消息）。
  */
 function applyGotoPayload(payload) {
   if (!payload) return;
+
+  // View Log（section-31）：把 Log ID 带过去并自动加载分析
+  if (payload.logId) {
+    if (sfConn.connection) {
+      analyzeLogFromElsewhere(payload.logId).catch((e) => log.warn("View Log 自动分析失败:", e));
+      return;
+    }
+    // 同 orderValue：启动期 `appState.is_connected` 可能已是 true 而 connection 还没建，
+    // 直接查只会得到一句「尚未连接」且不重试 → 排队等会话恢复
+    log.info("连接尚未就绪，日志分析排队到会话恢复后执行");
+    pendingSection = { step: VIEW_LOG_STEP, payload };
+    return;
+  }
+
   if (!payload.orderValue) return;
 
   if (sfConn.connection) {
@@ -1502,6 +1533,13 @@ function bindEvents() {  // Session ID表单提交
   // Order 历史（section-30）：输入框 / 查询 / 清空 / 导出 四个按钮
   initOrderHistory();
 
+  // Execute Anonymous 的代码提示（section-18 的输入框）：给 textarea 挂候选浮层。
+  // 纯逻辑在 common/apex_completions.js，这里只做绑定。
+  initApexComplete();
+
+  // SOQL 查询框的代码提示（section-23 与 Bulk）：同一套浮层，换成 SOQL 的候选逻辑
+  initSoqlComplete();
+
   // 导出当日数据按钮点击事件
   const exportDailyDataBtn = $("export-daily-data");
   if (exportDailyDataBtn) {
@@ -2063,6 +2101,36 @@ function bindEvents() {  // Session ID表单提交
   if (executeAnonymousBtn) {
     executeAnonymousBtn.addEventListener("click", executeAnonymousCode);
   }
+  // 执行完自动带回来的那份日志：复制正文 / 复制 Log ID / 下载 .log
+  const apexLogCopyBtn = $("apex-log-copy");
+  if (apexLogCopyBtn) apexLogCopyBtn.addEventListener("click", copyApexLog);
+  const apexLogIdCopyBtn = $("apex-log-id-copy");
+  if (apexLogIdCopyBtn) apexLogIdCopyBtn.addEventListener("click", copyApexLogId);
+  const apexLogDownloadBtn = $("apex-log-download");
+  if (apexLogDownloadBtn) apexLogDownloadBtn.addEventListener("click", downloadApexLogFile);
+  // 点 Log ID 本身 → 跳到 View Log（section-31）并自动分析这条日志。
+  // Log ID 就在按钮文本里（biz/apex.js 渲染时写进去的），不再另存一份状态。
+  const apexLogIdBtn = $("apex-log-id");
+  if (apexLogIdBtn) {
+    apexLogIdBtn.addEventListener("click", () => {
+      const logId = (apexLogIdBtn.textContent || "").trim();
+      if (!logId) {
+        showNotification("还没有 Log ID —— 先跑一次 Execute Anonymous", "warning");
+        return;
+      }
+      gotoSection(VIEW_LOG_STEP, { logId });
+    });
+  }
+
+  // View Log（section-31）：加载并分析 / 分析粘贴的正文 / 复制 / 下载原始日志
+  const viewLogLoadBtn = $("view-log-load");
+  if (viewLogLoadBtn) viewLogLoadBtn.addEventListener("click", loadLogById);
+  const viewLogAnalyzeBtn = $("view-log-analyze");
+  if (viewLogAnalyzeBtn) viewLogAnalyzeBtn.addEventListener("click", analyzePastedLog);
+  const viewLogRawCopyBtn = $("view-log-raw-copy");
+  if (viewLogRawCopyBtn) viewLogRawCopyBtn.addEventListener("click", copyRawLog);
+  const viewLogRawDownloadBtn = $("view-log-raw-download");
+  if (viewLogRawDownloadBtn) viewLogRawDownloadBtn.addEventListener("click", downloadRawLog);
 
   // Schedule Jobs 刷新按钮事件
   const refreshScheduleJobsBtn = $("refresh-schedule-jobs-btn");
@@ -2085,8 +2153,9 @@ function bindEvents() {  // Session ID表单提交
   // ===== Inspector 移植功能（section-23 ~ 26）=====
 
   // section-23 SOQL 数据导出
-  const soqlObjectInput = $("soql-object-input");
-  if (soqlObjectInput) soqlObjectInput.addEventListener("change", loadSoqlFields);
+  // 注：对象名输入框仍用 `<datalist>`（浏览器原生下拉）；**字段那份 datalist 已删** ——
+  // 它填了却没有任何输入框引用（`list=` 没接上），每次改对象名还白发一次 describe 请求。
+  // 字段提示现在由 SOQL 查询框的浮层提供（见 initSoqlComplete），按语句里的 FROM 自动给对应对象的字段。
   const runSoqlBtn = $("run-soql-btn");
   if (runSoqlBtn) runSoqlBtn.addEventListener("click", runSoqlQuery);
   const exportSoqlXlsxBtn = $("export-soql-xlsx-btn");

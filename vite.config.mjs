@@ -127,7 +127,9 @@ export default defineConfig(({ mode }) => ({
       output: {
         // 见文件头第 2 条：入口名固定，不能带 hash
         entryFileNames: "[name].js",
-        // 懒加载 chunk 可以带 hash：它们由打包器生成的 import() 引用，不写死在 HTML 里
+        // 懒加载 chunk 可以带 hash：它们由打包器生成的 import() 引用，不写死在 HTML 里。
+        // `[name]` 取自模块文件名 —— 所以 `lib/js/apex-log-parser.js` 的产物叫
+        // `chunk-apex-log-parser-xxxx.js`，出问题时一眼能认出是谁（别改名成看不懂的东西）。
         chunkFileNames: "chunk-[name]-[hash].js",
         // 当前没有需要打包的静态资源；保留这条只是为了将来加图片时不至于落到 dist 根目录
         assetFileNames: "assets/[name]-[hash][extname]",

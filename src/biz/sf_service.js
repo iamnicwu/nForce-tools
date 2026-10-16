@@ -5,6 +5,8 @@ const log = createLogger("SF");
 import { flattenRecords, remove_duplicates, loadingLog } from "../common/utils.js";
 import { applyExpiryRules, applyT2Rules } from "../common/t2rules.js";
 import { SfRestConnection } from "../common/sf_rest_client.js";
+// Execute Anonymous 取日志的纯逻辑（SOQL 拼装 + "哪条日志才算本次的"），见该文件头
+import * as apexLog from "../common/apex_log.js";
 import {
   DEFAULT_API_VERSION,
   normalizeApiVersion,
@@ -1505,10 +1507,213 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
     }
   },
 
+  // ---------- org 结构（给输入框里的代码提示用）----------
+  //
+  // Apex 编辑器与 SOQL 查询框都要"当前 org 里有哪些对象 / 某个对象有哪些字段"。
+  // 两处共用这两个方法，缓存也放在这一层（进程内）：
+  //   · describeGlobal 在几千对象的 org 上也就是一次请求 —— 但没必要每敲一个字都发；
+  //   · 字段按对象缓存。
+  // **失败一律落空值（不重试、不抛）**：提示功能不该因为取不到 org 结构就用不了，
+  // 调用方拿不到东西时继续用静态词表兜底。
+
+  /** sObject 名清单 → `{ names: string[], fromOrg: boolean }` */
+  async listSObjectNames() {
+    if (this._sobjectNames) return this._sobjectNames;
+    if (!this.connection) return { names: [], fromOrg: false };
+    try {
+      const res = await this.describeGlobal();
+      const names = ((res && res.sobjects) || []).map((s) => s && s.name).filter(Boolean);
+      this._sobjectNames = { names, fromOrg: true };
+      log.info(`代码提示：已从 org 取到 ${names.length} 个 sObject 名`);
+    } catch (e) {
+      this._sobjectNames = { names: [], fromOrg: false };
+      log.warn("代码提示：取 sObject 名清单失败（继续用静态词表）:", e && e.message);
+    }
+    return this._sobjectNames;
+  },
+
+  /** 某个对象的字段名清单（拿不到给空数组，也会被缓存下来免得反复重试） */
+  async listObjectFields(objectName) {
+    if (!objectName) return [];
+    if (!this._objectFields) this._objectFields = new Map();
+    if (this._objectFields.has(objectName)) return this._objectFields.get(objectName);
+    if (!this.connection) return [];
+    try {
+      const res = await this.connection.sobject(objectName).describe();
+      const names = ((res && res.fields) || []).map((f) => f && f.name).filter(Boolean);
+      this._objectFields.set(objectName, names);
+      log.info(`代码提示：已取到 ${objectName} 的 ${names.length} 个字段`);
+      return names;
+    } catch (e) {
+      log.warn(`代码提示：取 ${objectName} 的字段失败:`, e && e.message);
+      // 缓存空数组：同一个对象不再反复请求（提示继续用静态兜底）
+      this._objectFields.set(objectName, []);
+      return [];
+    }
+  },
+
+  /** 换 org / 断开时清掉结构缓存（否则提示会给出上一个 org 的字段） */
+  clearSchemaCache() {
+    this._sobjectNames = null;
+    this._objectFields = null;
+  },
+
+  // ---------- Execute Anonymous + 自动取本次执行的日志 ----------
+  //
+  // 完整链路四步（每一步的"为什么"见 common/apex_log.js 的文件头）：
+  //   ① 确保当前用户有一条未过期的 TraceFlag —— **没有它，org 根本不产生 ApexLog 记录**，
+  //      "自动取日志"就是一条永远查不到东西的空链路（旧实现卡在这一步：只回一句 No debug logs found）
+  //   ② 记下执行前最新一条 ApexLog 的 Id
+  //   ③ 执行，轮询最新日志直到 Id 与 ② 不同 —— 那条才是本次执行的（不用时间比：服务端与本机时钟有偏差）
+  //   ④ 取它的 Body（必须走 `/tooling/`，旧实现漏了这段前缀）
+  //
+  // ①③④ 任一步失败都**不影响代码本身执行**：日志是附加信息，不能因为取不到日志让用户
+  // 以为"代码没跑起来"。失败原因原样带回，由界面分档显示。
+
+  /** Tooling API 的 SOQL 查询（ApexLog / TraceFlag / DebugLevel 只在这里能查） */
+  async toolingQuery(soql) {
+    return this.connection.request({
+      method: "GET",
+      url: `/services/data/v${defaultApiVersion}/tooling/query?q=${encodeURIComponent(soql)}`
+    });
+  },
+
+  /** Tooling API 建记录（返回 `{id, success, errors}`） */
+  async toolingCreate(objectName, payload) {
+    return this.connection.request({
+      method: "POST",
+      url: `/services/data/v${defaultApiVersion}/tooling/sobjects/${objectName}`,
+      body: payload
+    });
+  },
+
+  /** Tooling API 改记录 */
+  async toolingUpdate(objectName, id, payload) {
+    return this.connection.request({
+      method: "PATCH",
+      url: `/services/data/v${defaultApiVersion}/tooling/sobjects/${objectName}/${id}`,
+      body: payload
+    });
+  },
+
+  /** 当前用户的 15/18 位 Id（TraceFlag 的 TracedEntityId 需要它） */
+  async currentUserId() {
+    if (userInfo && userInfo.user_id) return userInfo.user_id;
+    try {
+      const info = await this.connection.identity();
+      return (info && info.user_id) || null;
+    } catch (e) {
+      return null;
+    }
+  },
+
   /**
-   * 执行 Anonymous Apex 代码
-   * 使用 Tooling API 的 executeAnonymous 端点通过 HTTPS callout
-   * 执行完成后自动获取当前执行的日志详情
+   * 保证当前用户有一条可用的 TraceFlag（三种成功形态：复用 / 续期 / 新建）。
+   * 失败时带着原因返回 `{ok:false}`，调用方照常执行代码。
+   */
+  async ensureApexTraceFlag() {
+    if (!this.connection) return { ok: false, error: "尚未连接 Salesforce" };
+    const userId = await this.currentUserId();
+    if (!userId) return { ok: false, error: "拿不到当前用户 Id（identity 接口没返回）" };
+
+    let flags = [];
+    try {
+      const res = await this.toolingQuery(apexLog.traceFlagSoql(userId));
+      flags = (res && res.records) || [];
+    } catch (e) {
+      return { ok: false, error: `查询 TraceFlag 失败：${e.message}` };
+    }
+
+    const active = apexLog.pickActiveTraceFlag(flags);
+    if (active) return { ok: true, status: "reused", traceFlag: active };
+
+    let level;
+    try {
+      level = await this.ensureDebugLevel();
+    } catch (e) {
+      return { ok: false, error: `准备 DebugLevel 失败：${e.message}` };
+    }
+
+    const expired = apexLog.pickExpiredTraceFlag(flags);
+    try {
+      if (expired) {
+        // 续期而不是再建一条：一个用户同类型的跟踪通常只能存在一条，直接建会 FIELD_INTEGRITY_EXCEPTION
+        await this.toolingUpdate("TraceFlag", expired.Id, apexLog.traceFlagRenewPayload(level.Id));
+        return { ok: true, status: "renewed", traceFlag: { ...expired, DebugLevelId: level.Id } };
+      }
+      const created = await this.toolingCreate(
+        "TraceFlag",
+        apexLog.traceFlagPayload(userId, level.Id)
+      );
+      return { ok: true, status: "created", traceFlag: { Id: created && created.id, DebugLevelId: level.Id } };
+    } catch (e) {
+      return {
+        ok: false,
+        error:
+          `${e.message}（多半是权限不足，或本用户的跟踪数量已达上限 —— ` +
+          `可到 Setup → Debug Logs 里删掉旧的跟踪再试）`
+      };
+    }
+  },
+
+  /** 取（或建）一套调试级别：优先复用 org 自带的 `SFDC_DevConsole`，避免在客户 org 里多建记录 */
+  async ensureDebugLevel() {
+    const tryFind = async (name) => {
+      const res = await this.toolingQuery(apexLog.debugLevelSoql(name));
+      return (res && res.records && res.records[0]) || null;
+    };
+    const builtin = await tryFind("SFDC_DevConsole");
+    if (builtin && builtin.Id) return builtin;
+    const mine = await tryFind(apexLog.DEBUG_LEVEL_NAME);
+    if (mine && mine.Id) return mine;
+    const created = await this.toolingCreate("DebugLevel", apexLog.debugLevelPayload());
+    return { Id: created && created.id };
+  },
+
+  /** 当前用户最新一条 ApexLog 的 Id（执行前的基线） */
+  async newestApexLogId(userId) {
+    const res = await this.toolingQuery(apexLog.apexLogSoql(userId, 1));
+    const first = res && res.records && res.records[0];
+    return first ? first.Id : null;
+  },
+
+  /** 等「本次执行」那条日志出现（判据：Id 与执行前不同），超时返回 null */
+  async waitForNewApexLog(userId, beforeId) {
+    const deadline = Date.now() + apexLog.LOG_POLL_TIMEOUT_MS;
+    for (;;) {
+      const res = await this.toolingQuery(apexLog.apexLogSoql(userId, 5));
+      const hit = apexLog.pickNewestLog(res && res.records, beforeId);
+      if (hit) return hit;
+      if (Date.now() >= deadline) return null;
+      await new Promise((r) => setTimeout(r, apexLog.LOG_POLL_INTERVAL_MS));
+    }
+  },
+
+  /**
+   * 取日志正文（**完整**，不截断）。
+   *
+   * 为什么在这一层不截断：View Log 要拿整份日志做分析 —— 截掉尾巴会让统计数字与调用树
+   * 都不完整（而且那种缺失在界面上看不出来）。要不要截断由**展示方**决定：
+   * Execute Anonymous 那边用 `apex_log.normalizeLogBody(text, LOG_BODY_DISPLAY_LIMIT)` 再截一次。
+   *
+   * ⚠️ 路径必须带 `tooling/`：ApexLog 的 Body 子资源只在 Tooling API 上提供。
+   * 旧实现写成了 `/services/data/vXX/sobjects/ApexLog/{id}/Body`（漏了 `tooling/`），
+   * 真机会 404 —— 只是那条路一直被"查不到日志"挡在前面，从没走到过。
+   */
+  async getApexLogBody(logId) {
+    const raw = await this.connection.request({
+      method: "GET",
+      url: `/services/data/v${defaultApiVersion}/tooling/sobjects/ApexLog/${logId}/Body`
+    });
+    return apexLog.normalizeLogBody(raw, 0);
+  },
+
+  /**
+   * 执行匿名 Apex，并自动带回**本次执行**的日志。
+   *
+   * @returns {{success:boolean, result?:object, trace?:object, logRecord?:object|null,
+   *            logBody?:{text:string,truncated:boolean,bytes:number}|null,
+   *            logError?:string|null, error?:string}}
    */
   async executeAnonymous(apexCode) {
     try {
@@ -1516,29 +1721,37 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
         return { success: false, error: "Salesforce connection not established" };
       }
 
-      // 1. 执行 Execute Anonymous
-      // apex 代码需要进行 URL encoding 并作为查询参数传递
-      const encodedApexCode = encodeURIComponent(apexCode);
-      const executeResponse = await this.connection.request({
-        method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/tooling/executeAnonymous/?anonymousBody=${encodedApexCode}`
-      });
+      // ① 日志跟踪（失败不阻断执行）
+      const trace = await this.ensureApexTraceFlag();
+      const userId = trace.ok ? await this.currentUserId() : null;
 
-      log.debug("Execute Anonymous 响应:", executeResponse);
-
-      // 2. 如果执行成功且有 compiled bytecode 或 success 为 true，自动获取日志详情
-      let logDetails = null;
-      if (executeResponse && executeResponse.success) {
-        // 获取当前用户的最新日志
-        logDetails = await this.getLatestDebugLog();
-        log.debug("Debug Log 详情: ", logDetails);
+      // ② 执行前基线
+      let beforeLogId = null;
+      if (trace.ok && userId) {
+        try {
+          beforeLogId = await this.newestApexLogId(userId);
+        } catch (e) {
+          log.warn("读取执行前最新日志 Id 失败（不影响执行）:", e && e.message);
+        }
       }
 
-      return {
-        success: true,
-        result: executeResponse,
-        logDetails: logDetails
-      };
+      // ③ 执行
+      const executeResponse = await this.runAnonymousCode(apexCode);
+
+      // ④ 等本次的日志 + 取正文
+      let logRecord = null;
+      let logBody = null;
+      let logError = null;
+      if (trace.ok && userId) {
+        try {
+          logRecord = await this.waitForNewApexLog(userId, beforeLogId);
+          if (logRecord) logBody = await this.getApexLogBody(logRecord.Id);
+        } catch (e) {
+          logError = e.message;
+        }
+      }
+
+      return { success: true, result: executeResponse, trace, logRecord, logBody, logError };
     } catch (error) {
       log.error("执行 Execute Anonymous 失败:", error);
       return { success: false, error: error.message };
@@ -1546,90 +1759,35 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${escapedId
   },
 
   /**
-   * 获取当前用户最新的 Debug Log 详情
-   * 先查询最新日志 ID，再调用 getDebugLogDetail 获取详细信息
+   * 真正发执行请求。
+   *
+   * 首选 **POST + 表单体**：`anonymousBody` 放 query string 会受 URL 长度限制
+   * （稍长的脚本就 414 URI Too Long），而官方文档里 executeAnonymous 支持 POST 表单参数。
+   * 只在**HTTP 层失败**时回退 GET（历史实现的形式，已验证可用）—— 代码本身的编译错误是
+   * `200 + compiled:false`，不会走到这里。这样既拿回长代码能力，又不赌 POST 一定被支持。
    */
-  async getLatestDebugLog(limit = 1) {
+  async runAnonymousCode(apexCode) {
+    const path = `/services/data/v${defaultApiVersion}/tooling/executeAnonymous/`;
     try {
-      if (!this.connection) {
-        return { success: false, error: "Salesforce connection not established" };
-      }
-
-      // 查询当前用户最新的日志，按 LastModifiedDate 降序排列
-      const logQuery = `SELECT Id, Application, Operation, LogLength, StartTime 
-                        FROM ApexLog 
-                        ORDER BY LastModifiedDate DESC 
-                        LIMIT ${limit}`;
-
-      const result = await this.connection.query(logQuery, { autoFetch: true, maxFetch: limit });
-      const records = result.records || [];
-
-      if (records.length > 0) {
-        const latestLog = records[0];
-        const logId = latestLog.Id;
-
-        // 调用 getDebugLogDetail 获取详细日志信息
-        const logDetail = await this.getDebugLogDetail(logId);
-        log.debug("logDetail: ", logDetail);
-        if (logDetail.success) {
-          return {
-            success: true,
-            log: logDetail.log,
-            logs: records,
-            totalLogs: records.length
-          };
-        }
-
-        // 如果获取详情失败，仍返回基本信息
-        return {
-          success: true,
-          log: latestLog,
-          logs: records,
-          totalLogs: records.length
-        };
-      }
-
-      return { success: false, error: "No debug logs found" };
-    } catch (error) {
-      log.error("获取最新 Debug Log 失败:", error);
-      return { success: false, error: error.message };
-    }
-  },
-
-  /**
-   * 获取指定 Log 的详细信息
-   * @param {string} logId - Log 的 Id
-   */
-  async getDebugLogDetail(logId) {
-    try {
-      if (!this.connection) {
-        return { success: false, error: "Salesforce connection not established" };
-      }
-
-      if (!logId) {
-        return { success: false, error: "Log ID is required" };
-      }
-      log.debug("logId: ", logId);
-      // 使用 ApexLog 的 Body 端点获取日志内容
-      let logBody = await this.connection.request({
-        method: 'GET',
-        url: `/services/data/v${defaultApiVersion}/sobjects/ApexLog/${logId}/Body`
+      return await this.connection.request({
+        method: "POST",
+        url: path,
+        body: `anonymousBody=${encodeURIComponent(apexCode)}`,
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
       });
-
-      // 格式化日志内容：将 \n 转换为实际换行符
-      if (typeof logBody === 'string') {
-        logBody = logBody.replace(/\\n/g, '\n');
-      }
-      log.debug("logBody: ", logBody);
-      return {
-        success: true,
-        log: logBody
-      };
-    } catch (error) {
-      log.error("获取 Debug Log 详情失败:", error);
-      return { success: false, error: error.message };
+    } catch (e) {
+      log.warn("executeAnonymous POST 未成功，回退 GET:", e && e.message);
+      return await this.connection.request({
+        method: "GET",
+        url: `${path}?anonymousBody=${encodeURIComponent(apexCode)}`
+      });
     }
   },
+
+  // 说明：原先这里还有 `getLatestDebugLog()` / `getDebugLogDetail()` 两个方法，已删除 ——
+  // 前者查的是「当前用户最新一条日志」，**不是本次执行的那条**（可能是别的操作或系统批处理留下的），
+  // 而且它把 Body 端点写成了 `/services/data/vXX/sobjects/ApexLog/{id}/Body`（漏了 `tooling/`，
+  // 真机 404）；后者只被前者调用。整条链路现在由 executeAnonymous + 上面那几个方法接管。
 
 
 };

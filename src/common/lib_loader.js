@@ -171,6 +171,39 @@ export function ensureMarked() {
 }
 
 /**
+ * 按需加载 Apex 日志解析器（`@apexdevtools/apex-log-parser` 的 vendor 副本）。
+ *
+ * 为什么走动态 `import()` 而不是上面那套 `loadScript`：
+ *   ① 它是 **ESM only**（包内没有 CJS 构建），而 `loadScript` 注入的是经典 `<script>`；
+ *   ② 它约 115KB，只在「View Log」页真的要分析一份日志时才该被取下来 ——
+ *      动态 import 会让打包器把它切成独立 chunk（同 `ensureMarked` 的道理）。
+ *
+ * ⚠️ 路径是**包内的相对路径**（`../lib/js/...`）而不是裸模块名 —— `src/` 本身就是可直接
+ * 加载的扩展目录，裸说明符在浏览器里解析不了（详见该文件头的说明）。
+ *
+ * @returns {Promise<Function>} 库的 `parse(logText)` 函数
+ */
+let apexLogParserPending = null;
+export function ensureApexLogParser() {
+  if (!apexLogParserPending) {
+    apexLogParserPending = import("../lib/js/apex-log-parser.js")
+      .then((m) => {
+        if (typeof m.parse !== "function") {
+          throw new Error("apex-log-parser 没有导出 parse()");
+        }
+        return m.parse;
+      })
+      .catch((error) => {
+        // 同 ensureMarked：失败必须清缓存，否则一次失败会永久卡住后续重试
+        apexLogParserPending = null;
+        log.error("加载 apex-log-parser 失败:", error);
+        throw error;
+      });
+  }
+  return apexLogParserPending;
+}
+
+/**
  * 空闲时预取「紧接着就会用到」的库，避免用户点击时还要等解析
  *
  * 默认只预热 echarts（首页 Org 状态面板要用）。
