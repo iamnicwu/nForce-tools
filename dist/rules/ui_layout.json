@@ -79,6 +79,7 @@
       "tiles": [
         { "id": "bulk", "step": 15, "label": "Bulk 操作", "icon": "fa-database", "desc": "批量作业管理", "keywords": ["bulk", "job", "批量", "批处理"] },
         { "id": "anonymous", "step": 18, "label": "Execute Anonymous", "icon": "fa-code", "desc": "Apex 匿名执行", "keywords": ["apex", "anonymous", "匿名"] },
+        { "id": "view-log", "step": 31, "label": "View Log", "icon": "fa-chart-line", "desc": "日志分析 · 耗时 · SOQL/DML", "requiresConnection": false, "keywords": ["log", "rizhi", "日志", "apex log", "debug log", "分析"] },
         { "id": "schedule-jobs", "step": 19, "label": "Schedule Jobs", "icon": "fa-clock", "desc": "定时任务管理", "keywords": ["cron", "scheduled", "定时", "任务"] },
         { "id": "soql-export", "step": 23, "label": "SOQL 导出", "icon": "fa-search", "desc": "查询 · 导出 Excel/CSV", "keywords": ["sql", "query", "excel", "查询"] },
         { "id": "data-import", "step": 24, "label": "批量导入", "icon": "fa-file-import", "desc": "CSV/Excel 批量写入", "keywords": ["import", "csv", "导入", "写入"] },
