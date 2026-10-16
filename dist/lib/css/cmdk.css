@@ -1,0 +1,364 @@
+/**
+ * 全局搜索的组件样式（面板 + 注入到网页的浮层）
+ * ─────────────────────────────────────────────────────────────────────
+ * 为什么单独一个文件、而不是留在 main.css：
+ *   同一套界面要出现在两个地方 —— ① 插件自己的面板（index.html）；
+ *   ② 用 Alt+Shift+S 注入到**别人网页**里的浮层（src/search_overlay.js）。
+ *   ② 跑在 shadow DOM 里，main.css 的 :root 令牌一个都继承不到，而它连
+ *   import 都做不了（内容脚本是经典脚本）—— 所以样式由 service worker
+ *   把**这份文件的文本**下发过去。留在 main.css 里就只能再抄一份。
+ *
+ * 两条硬约束：
+ *   · 显隐**只用 .is-open 类**。不要改成 `hidden` 属性：面板要 display:flex，
+ *     作者样式里的 display 会盖掉 UA 的 `[hidden]{display:none}`，
+ *     结果是"藏起来"失灵、面板一直挂在页面上。
+ *   · 图标容器（.cmdk-search-icon / .cmdk-item-icon / .cmdk-item-lock）
+ *     必须同时写容器与 `.svg-icon` 两条选择器 —— 结果行里的图标是**内联 SVG**
+ *     （common/cmdk_view.js 直接产出，见那里的说明），不再依赖 replaceIcons()。
+ *
+ * z-index 取 9000：压得住内容与用户菜单（1000），低于提示 toast 与取数遮罩（9999）。
+ *
+ * ⚠️ 下面 `:host` 里的令牌值是**必须自带的一份**：shadow DOM 里没有 :root。
+ *    它们与 main.css 的 :root 同名同值，`test/cmdk_css.test.js` 会逐项核对 ——
+ *    改了一边忘了另一边会直接测试失败，不会静默漂移。
+ * ============================================================ */
+
+:host {
+    /* 只列这套界面真正用到的令牌 */
+    --bg-primary: #ffffff;
+    --bg-secondary: #edf1f7;
+    --bg-tertiary: #fafafa;
+    --border-color: #d9d9d9;
+    --border-light: #f0f0f0;
+    --primary-color: #1890ff;
+    --primary-bg: #e6f7ff;
+    --primary-border: #91d5ff;
+    --text-primary: rgba(0, 0, 0, 0.85);
+    --text-secondary: rgba(0, 0, 0, 0.45);
+    --text-tertiary: rgba(0, 0, 0, 0.65);
+    --text-light: rgba(0, 0, 0, 0.25);
+    --accent-blue: #1677ff;
+    --accent-blue-tint: #e6f1fb;
+    --accent-purple-tint: #f0eafc;
+    --accent-purple: #722ed1;
+    --accent-volcano-tint: #fdeee4;
+    --accent-volcano: #fa541c;
+    --accent-pink-tint: #fce8f1;
+    --accent-pink: #eb2f96;
+    --accent-amber-tint: #fdf3dd;
+    --accent-amber: #d48806;
+    --accent-green-tint: #e9f6e5;
+    --accent-green: #52c41a;
+    --accent-teal-tint: #e0f5f1;
+    --accent-teal: #13a8a8;
+    --accent-indigo-tint: #f0f5ff;
+    --accent-indigo: #2f54eb;
+    --accent-gray-tint: #f0f0f2;
+    /* 与 main.css 一样写成链式引用（而不是把 rgba 抄一遍）：
+       test/cmdk_css.test.js 是**逐字**比对的，抄字面量会立刻失败 */
+    --accent-gray: var(--text-secondary);
+    /* 每个令牌**必须写在一行内**：check-ui 的 I 组靠"这一行是不是 `--x: 值;`"
+       来判断整块是不是令牌定义（跨行的值会让整块被判成组件样式，于是这里的
+       #hex 全被当成新增硬编码颜色报出来）。 */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --fs-xs: 12px;
+    --fs-sm: 13px;
+    --fs-base: 14px;
+    --fs-lg: 16px;
+    --icon-sm: 15px;
+    --icon-md: 18px;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+    /* 半透明磨砂材质（与 main.css 的 :root 同名同值，test/cmdk_css.test.js 逐项核对）。
+       浮层跑在**别人的页面**上，磨砂是让它"融进"背景又不丢可读性的关键。 */
+    --glass-surface: rgba(255, 255, 255, 0.72);
+    --glass-surface-strong: rgba(255, 255, 255, 0.86);
+    --glass-scrim: rgba(16, 24, 40, 0.18);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --glass-hairline: rgba(16, 24, 40, 0.08);
+    --glass-highlight: rgba(255, 255, 255, 0.92);
+    --glass-shadow: 0 24px 64px rgba(16, 24, 40, 0.28), 0 2px 8px rgba(16, 24, 40, 0.12);
+    --glass-item-hover: rgba(255, 255, 255, 0.5);
+    --glass-item-active: rgba(22, 119, 255, 0.16);
+    --glass-radius: 18px;
+    --glass-blur: saturate(180%) blur(30px);
+}
+
+.cmdk {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    /* 项目没有全局 box-sizing: border-box，这里必须显式声明，
+       否则 inset:0 再加 padding 会把遮罩撑出视口 */
+    box-sizing: border-box;
+    padding: 10vh 12px 12px;
+    /* 遮罩只用**很淡**的压暗 + 一点点模糊：磨砂面板要靠背后的内容"透出来"才有质感，
+       底色压太黑就变成普通弹窗了（macOS 的 Spotlight 也是浅压暗）。 */
+    background: var(--glass-scrim);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.cmdk.is-open {
+    display: flex;
+}
+
+.cmdk-panel {
+    display: flex;
+    flex-direction: column;
+    width: min(640px, 100%);
+    max-height: min(70vh, 560px);
+    min-height: 0;
+    /* 半透明磨砂的主体：背景半透 + backdrop-filter 把背后的页面糊掉。
+       边框用**亮色**（不是常见的灰线）模拟玻璃边缘的高光，
+       再加一条 inset 顶部高光 —— 这两条是"玻璃感"的主要来源，去掉就成了半透明色块。 */
+    background: var(--glass-surface);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+    box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    overflow: hidden;
+}
+
+/* --- 搜索行 --- */
+.cmdk-search {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    /* 玻璃界面的分隔线要**极淡**：用实心灰线会把"一整块玻璃"切成两个色块 */
+    border-bottom: 1px solid var(--glass-hairline);
+}
+
+.cmdk-search-icon,
+.cmdk-search-icon .svg-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--icon-md);
+    color: var(--text-secondary);
+}
+
+.cmdk-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--fs-lg);
+}
+
+.cmdk-input::placeholder {
+    color: var(--text-light);
+}
+
+.cmdk-esc-hint {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    /* 键帽也是玻璃：半透明白底 + 亮边，而不是实心灰块 */
+    background: var(--glass-item-hover);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+}
+
+/* --- 结果列表 --- */
+.cmdk-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 6px;
+    overflow-y: auto;
+    /* overflow-y:auto 会把 overflow-x 计算成 auto（容器天生横向可滚），
+       用 clip 而不是 hidden：hidden 仍然能被程序化滚动，clip 才是真截断 */
+    overflow-x: clip;
+}
+
+.cmdk-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+}
+
+.cmdk-item + .cmdk-item {
+    margin-top: 2px;
+}
+
+/* 选中态：半透明蓝 + 亮边 + 顶部高光，读起来像"玻璃上被点亮的一格"。
+   不要用实心 --primary-bg：在不透明背景上它没问题，但压在半透明玻璃上会变成一块补丁。 */
+.cmdk-item.is-active {
+    background: var(--glass-item-active);
+    border-color: var(--glass-border);
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.cmdk-item-icon,
+.cmdk-item-icon .svg-icon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    font-size: var(--fs-lg);
+    border-radius: 8px;
+    background: var(--cmdk-tint, var(--accent-blue-tint));
+    color: var(--cmdk-accent, var(--accent-blue));
+    /* 图标底色用的是磁贴色板（不透明）：在玻璃上加一圈内高光才不像贴上去的补丁。
+       复用 --glass-item-hover（同为 rgba(255,255,255,.5)）而不是再发明一个令牌。 */
+    box-shadow: inset 0 0 0 1px var(--glass-item-hover);
+}
+
+.cmdk-item-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.cmdk-item-label {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cmdk-item-desc {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 命中高亮。作用域限定在结果行内，不要写成全局 mark —— 会波及脚本预览等位置 */
+.cmdk-item-label mark,
+.cmdk-item-desc mark {
+    background: transparent;
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.cmdk-item-meta {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cmdk-item-group {
+    padding: 1px 6px;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    /* 分组徽标 / 键帽这类小胶囊统一走"半透明白 + 亮边"，与整体玻璃一致 */
+    background: var(--glass-item-hover);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+}
+
+.cmdk-item-lock,
+.cmdk-item-lock .svg-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--icon-sm);
+    color: var(--text-light);
+}
+
+/* 需要连接但当前未连接：标题降一级灰，与首页磁贴的锁定态语义一致 */
+.cmdk-item.is-locked .cmdk-item-label {
+    color: var(--text-secondary);
+}
+
+.cmdk-empty {
+    padding: 24px 12px;
+    text-align: center;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+}
+
+/* 列表末尾的非可选提示行（"输入关键词可搜索全部功能"）：
+   刻意**不叫** .cmdk-item —— 点击与方向键都只认 .cmdk-item，用另一个类名
+   就天然不会被选中，不需要在事件处理里再加一层白名单判断。 */
+.cmdk-hint {
+    padding: 8px 10px 4px;
+    font-size: var(--fs-xs);
+    color: var(--text-light);
+    text-align: center;
+}
+
+/* --- 底部键位提示 --- */
+.cmdk-foot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    border-top: 1px solid var(--glass-hairline);
+    /* 比面板主体稍亮一档：像 macOS 工具栏那样"上面一层更实的玻璃"，
+       同时把页脚与结果区在视觉上分开（不靠实心底色）。 */
+    background: var(--glass-surface-strong);
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+}
+
+.cmdk-foot-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.cmdk-foot-item b {
+    color: var(--text-tertiary);
+    font-weight: 600;
+}
+
+.cmdk-foot-count {
+    margin-left: auto;
+}
+
+/* 窄栏（侧边栏 / 贴边浮窗）：400px 这类"半窄"栏里分组徽标还放得下，
+   只把面板外框与搜索行的内边距收紧。
+   （首页那个入口按钮 `.cmdk-trigger` 的窄栏规则留在 main.css —— 它是页面元素。） */
+@media (max-width: 560px) {
+    .cmdk {
+        padding: 4vh 8px 8px;
+    }
+
+    .cmdk-panel {
+        max-height: min(78vh, 100%);
+    }
+
+    .cmdk-search {
+        padding: 10px 12px;
+    }
+}
+
+/* 极窄档（≤380px）：分组徽标与键位提示一起让位给功能名。
+   240px 时它们会把标题挤成省略号、把页脚折成"选 / 择"两行。 */
+@media (max-width: 380px) {
+    .cmdk-item-group,
+    .cmdk-foot-nav,
+    .cmdk-foot-open {
+        display: none;
+    }
+}
+

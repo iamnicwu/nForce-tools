@@ -30,6 +30,7 @@
   - **T-4 Outstanding**：获取 LTS T-4 报表数据，筛选符合条件的记录。
   - **数据分析**：上传Excel文件，根据预定义或自定义规则自动分析数据并更新状态。
   - **Bulk 操作**：支持输入 SOQL 语句，通过 Salesforce Bulk API 2.0 创建批量查询任务，实时查看进度并下载海量数据结果。
+- **Order 历史**：给一个 Order 的 **Name / Id / Order Number**，列出它的字段变更历史（时间 · 字段 · 旧值 → 新值 · 操作人），可导出 Excel。**也能直接写在全局搜索里**：在搜索框敲入单号，结果第一条就是「查询 Order 历史：<值>」，回车即查。查不到时会区分「没这个单」「这个单没有历史（org 没开字段历史追踪）」「org 根本没有 OrderHistory 对象」三种情况。
 - **中午食乜**：午餐抽签工具，上传餐厅列表 Excel 文件，随机抽取今日午餐地点。
 
 - **数据导出**
@@ -37,6 +38,7 @@
   - 智能格式化数据列。
 
 - **用户友好的界面**
+  - **全局搜索（Spotlight 式）**：按 `Ctrl/Cmd + K`（或在任意非输入框处按 `/`）打开命令面板，敲几个字符就能跳到功能 —— 支持**模糊匹配**（`t4` 命中 `T-4 Outstanding`、`wucan` 命中「中午食乜」），匹配功能名 / 描述 / 分组 / id / 别名关键词，↑ ↓ 选择、回车进入、`Esc` 关闭。首页顶部也有「搜索功能…」入口。另有**全局快捷键 `Alt+Shift+S`**：无论在哪个页面按下，搜索框都会**直接浮在那个网页上**（注入不了时才回退成打开侧边栏）。面板是半透明磨砂材质。
   - **功能中心**首页采用手机 App 图标式布局：所有功能按 **连接与环境 / LTS / 数据分析 / OTT / PCD / CVP7 / 工具 / 杂项** 分组展示，点击图标进入对应功能，左上角「返回」或 `Esc` 回到首页。未连接时，需要登录才能用的功能会自动置灰并显示 🔒，点击会引导到「连接设置」。
   - 已连接到组织时，右上角徽标显示「已连接」，未连接显示「未连接」，一眼可见当前状态。
   - 首页顶部有 **常用功能** 栏：**顺序完全由你自己决定，不随使用频率变化**。鼠标移到任意功能卡片上，点右下角的 `☆` 即可加入 / 移出常用功能；点常用功能区右上角「编辑」，可用 `←` `→` 调整顺序、`×` 移出，还有「恢复默认」一键还原。改动保存在浏览器本地，长期有效。
@@ -161,42 +163,81 @@ nForce-tools/
 │   ├── background.js      # 后台服务脚本
 │   ├── popup.html         # 插件弹出层
 │   ├── login.html         # 登录 / 抓取 Session 的辅助页
+│   ├── search_overlay.js  # 注入到网页的搜索浮层（经典脚本，界面与样式由 SW 下发）
 │   ├── biz/               # 业务逻辑模块
-│   │   ├── logic.js             # 核心业务逻辑
+│   │   ├── data_query.js        # 取数：每日 / 报表 / 文件 / VVIP / T-4（取完自动导出）
+│   │   ├── data_pcd.js          # 取数：PCD 四个业务域
+│   │   ├── data_export.js       # 把各业务域数据导出成 Excel
+│   │   ├── excel_import.js      # 上传 Excel → 解析 → 套规则
+│   │   ├── onedrive_sync.js     # 报表数据同步到 OneDrive（私有工具链）
+│   │   ├── bulk.js              # Bulk API 2.0
+│   │   ├── apex.js              # Execute Anonymous
+│   │   ├── schedule.js          # 定时任务（chrome.alarms）
+│   │   ├── org_info.js          # 用户 / 组织信息
+│   │   ├── lunch.js             # 中午食乜
 │   │   ├── sf_service.js        # Salesforce 服务逻辑
 │   │   ├── state.js             # 状态管理
 │   │   ├── ui.js                # 视图切换（首页 ↔ 详情页）、显示/隐藏、懒加载各功能模块
 │   │   ├── ui_layout.js         # 首页图标布局：渲染 / 常用功能 / 布局配置页
 │   │   ├── ui_layout_default.js # 首页布局内置默认值（兜底，禁止用 JSON 模块导入）
 │   │   ├── ui_config.js         # 连接与布局配置项的读写
+│   │   ├── command_palette.js   # 全局搜索面板（⌘/Ctrl+K、`/`、网页浮层共用同一套结果）
+│   │   ├── order_history.js     # Order 历史查询页（字段历史 + 全部字段 + 查询日志）
+│   │   ├── prefs_panel.js       # 「插件偏好」设置卡片（API 版本 / 侧边栏位置 / 搜索快捷键）
+│   │   ├── session_recovery.js  # 会话恢复：Cookie 换新会话、401 自动续期、断连看门狗
 │   │   ├── org_limits.js        # Org 状态面板 + Org Limits 详情页（ECharts gauge）
 │   │   ├── inspector_tools.js   # SOQL / 导入 / 元数据 / 事件监听（CometD）
 │   │   └── session_info.js      # 「Session 链接」页面
 │   ├── common/            # 通用工具模块
 │   │   ├── logger.js      # 统一日志（唯一允许直接调 console 的地方）
 │   │   ├── dom.js         # DOM 访问收敛（$ / on / onAll，元素缺失只 warn 不抛）
-│   │   ├── lib_loader.js  # 第三方库按需加载（ensureJsForce / ensureECharts / ensureXLSX / ensureJSZip）
+│   │   ├── lib_loader.js  # 第三方库按需加载（ensureECharts / ensureXLSX / ensureJSZip / ensureMarked / requireXLSX）
+│   │   ├── sf_rest_client.js # 自研 Salesforce 客户端（REST / Metadata / Bulk / Tooling），替代 jsforce
+│   │   ├── api_version.js # Salesforce API 版本唯一来源（默认 67.0）
+│   │   ├── prefs.js       # 用户偏好读写（chrome.storage.local）
 │   │   ├── excel_utils.js # Excel 读写
-│   │   ├── table_utils.js # 表格渲染
-│   │   ├── utils.js       # 通用工具函数
+│   │   ├── table_utils.js # 表格渲染（纯 HTML，固定列宽 + 分页）
+│   │   ├── utils.js       # 通用工具函数（含 showNotification / formatDateTime）
 │   │   ├── icons.js       # 图标（fa-* 类名 → 内联 SVG；本插件不含 FontAwesome 字体）
+│   │   ├── command_index.js # 搜索条目构建 + 配色表 + 连接门禁 / 设置类 section 集合（SW 与页面共用）
+│   │   ├── cmdk_view.js   # 搜索结果的唯一渲染实现（面板与网页浮层共用）
+│   │   ├── fuzzy.js       # 模糊匹配（含拼音 / 缩写别名）
+│   │   ├── order_query.js # Order 值识别 + SOQL 拼装（零依赖，SW 也用）
+│   │   ├── shortcut.js    # 快捷键的平台化显示与校验
+│   │   ├── ui_events.js   # 页面 ⇄ SW 的消息与 storage 键名（唯一来源）
 │   │   ├── graph_token.js # Microsoft Graph 令牌存取（从 chrome.storage.local 读，不含硬编码凭据）
 │   │   ├── onedrive_service.js # OneDrive 工作簿读写（经 background.js 代理绕过页面 CSP）
 │   │   └── t2rules.js     # T2 / 到期订单规则引擎
 │   ├── lib/               # 第三方库
-│   │   ├── css/           # antd.full.css（vendored 源头）+ antd.min.css（裁剪产物，构建时生成）
-│   │   └── js/            # JSForce / SheetJS / Day.js / ECharts / JSZip / Marked / CometD
+│   │   ├── css/           # antd.full.css（vendored 源头）+ antd.min.css（裁剪产物，构建时生成）+ cmdk.css（搜索面板材质）
+│   │   └── js/            # SheetJS / Day.js / ECharts / JSZip / Marked / CometD
 │   ├── icons/             # 图标资源
 │   ├── rules/             # 规则配置（含首页布局 ui_layout.json）
 │   └── docs/              # 文档（本文件）
 ├── .github/workflows/build.yml   # CI：构建 + 一致性自检 + 单测 + dist 同步核对
+├── test/              # 单元测试（jest，直接跑 src/ 的原生 ESM）
 ├── vite.config.mjs    # 构建配置（Vite，内核 Rolldown）
 ├── tools/             # 构建与自检脚本
 │   ├── build-plan.mjs         # 打包入口 + 逐字复制清单（构建与自检共用同一份）
 │   ├── check-ui.mjs           # UI 一致性自检（npm run check:ui）
+│   ├── jsforce-diff/          # 自研客户端的协议回归基线（逐条对齐 jsforce 的请求与错误形状）
 │   └── purge-antd-css.mjs     # 把 antd.full.css 裁剪成 antd.min.css
 └── package.json
 ```
+
+## 本地开发
+
+```bash
+npm install            # 安装依赖
+npm run dev            # 源码改动自动重建到 dist/（vite build --watch）
+npm run build          # 产出 dist/（先裁剪 antd.min.css，再 vite build）
+npm run check:ui       # UI 一致性自检：磁贴↔功能页、样式令牌、资源可达性…（退出码 1 = 有 ERROR）
+npm test               # 单元测试（jest，直接跑 src/ 的原生 ESM）
+```
+
+> 想立刻看效果：用「加载已解压的扩展程序」直接选 **`src/`**（原生 ES Module，改完刷新页面即生效）；
+> 想验证打包产物就选 **`dist/`**（改完 `src/` 记得 `npm run build` 重新生成）。
+> `dist/` 已纳入版本管理，改动要**单独提交一个 commit**（CI 会核对它与 `src/` 是否同步）。
 
 ## 开发须知（改源码前必读）
 
@@ -227,7 +268,7 @@ nForce-tools/
 
 - **Frontend**: HTML5, CSS3, JavaScript (ES Module)，无框架
 - **构建**: Vite（内核 Rolldown）—— 只有两个入口打包，其余文件逐字复制进 `dist/`
-- **Salesforce Integration**: JSForce
+- **Salesforce Integration**: 自研 `common/sf_rest_client.js`（约 8KB，覆盖 REST / Metadata / Bulk / Tooling，错误形状对齐 jsforce；早期用的 jsforce 已移除）
 - **表格**: 自研纯 HTML 渲染（`common/table_utils.js`）
 - **Excel Processing**: SheetJS (xlsx) + JSZip
 - **Date Handling**: Day.js
@@ -248,6 +289,139 @@ nForce-tools/
 3. 批量查询时，建议单次处理的数据量不要过大，以免触发Salesforce API限制。
 
 ## 更新日志
+
+### v4.7.0 (2026-10-16)
+
+**新增：Order 历史查询**
+
+- 新功能页「Order 历史」（工具组）：输入 Order 的 **Name / Id / Order Number** 任意一个值，查它的字段历史（标准 `OrderHistory`）并以表格列出 —— 时间 · 字段 · 旧值 → 新值 · 操作人，可导出 Excel。
+- **和全局搜索打通了**：在搜索框里输入一个像 Order 标识的值，结果第一条会变成「查询 Order 历史：<值>」；回车后自动跳到该页、带上值并**立即查询**（未连接时会先自动连一次再查）。识别刻意保守（15/18 位 Id、纯数字单号、带 `-`/`_` 且含数字的业务号），搜功能关键词不会被顶掉；拿不准时可以用 `#` 强制，如 `#MYORDER`。
+- 三种查不到的情况分开提示，避免用户误以为插件坏了：① 没找到这个 Order；② 找到了但一条历史都没有（多半是 org 没给 Order 开「字段历史追踪」，Salesforce 默认不开）；③ 该 org 连 `OrderHistory` 对象都没有。
+
+**字段与排序（同日追加）**
+
+- **列出该 Order 的全部字段**：新增「Order 字段」表（用 SOQL 的 `FIELDS(ALL)`，一条查询拿回全部字段）。
+  **一条记录一行** —— 第一列是行标识（单号），之后每列一个字段（按 API 名排序），横向滚动看全；
+  关系字段取 `Name`、空值留空；表头显示「1 条记录 · N 个字段（M 个为空）」。
+  这种形状顺带把 DOM 从 2N 个单元格降到 N+1 个（N = 字段数，两三百字段时差别明显）。
+  导出是**一个 Excel 两个工作表**（`Order 字段` + `OrderHistory`），且与界面同形（字段表也是一行）。
+- **历史严格按 `CreatedDate` 倒序**：SOQL 里本来就写了 `ORDER BY CreatedDate DESC`，
+  但界面**自己再排一次** —— 这么便宜的兜底能让「最新在最上面」可断言、可测（也真的抓到过一次顺序不对）。
+
+**查询日志（诊断）—— 查不出东西时先看它**
+
+- 每次查询都会在页面底部留一份**逐步日志**：值被识别成什么（Id / 单号 / 业务号）、每一步发出去的 **SOQL 原文**、返回条数、耗时，以及失败时的 `errorCode` + 服务端原文 + **一句「下一步该做什么」**（比如 `INVALID_TYPE` → 「该 org 没对 Order 开字段历史追踪」）。
+- 平时折叠着不打扰；**一旦有错自动展开**，并支持「复制日志」把整份（含 SOQL）贴给别人或存档。
+- 同一份内容也会进 DevTools 控制台（`[nForce][ORDHIST]`），SOQL 长什么样、哪一步慢，两边都看得到。
+
+**表格显示与大数据量性能**
+
+- 表格改为**固定布局 + 列宽**（等价 Tailwind 的 `table-fixed` + `w-*`：`table-layout: fixed` + `<colgroup>`）——
+  列宽不再被长值撑开、没有横向抖动，省略号截断稳定。
+- **分页渲染**：首屏只画一页（200 行），表尾给「显示更多（还有 N 行 / 共 M 行）」，点一次追加一页。
+  实测 3000 行 × 5 列：**113.9ms → 7.8ms（-93%）**。诚实说明：单靠 `table-layout: fixed` **没有**这个效果
+  （116.9ms）—— 成本在「创建 15000 个布局对象」，属 O(行数)，所以唯一解是少画几行。
+- 因此历史查询上限也从 200 提到 **1000**（首屏成本与总量无关了，没必要压着上限让用户查不到久远的变更）。
+
+**顺带修掉一个影响面很大的既有 Bug：所有数据表其实渲染成了一长串文本**
+
+- 各功能页的表容器都写成 `<div class="data-table">`，而渲染器把 `<thead>/<tr>/<td>` 写进这个 div —— **这些标签在 div 里是非法的，会被 HTML 解析器整段丢掉**，于是表格渲染成没有分行分列的文本，`querySelectorAll("tbody tr")` 恒为 0（任何基于 DOM 的检查都发现不了）。
+- 修在共享渲染器里（`common/table_utils.js`）：容器不是 `<table>` 时自动在里面建一个真的 `<table>`，一次性修好 T-4 / PCD / VVIP / SOQL 导出 / 批量导入 / Metadata / 事件监听等全部表格；传真 `<table>` 的老调用点行为不变。
+
+**「设置类」页面不再出现在功能区**
+
+- 首页图标区与搜索结果里都不再出现「项目说明 / 布局配置 / 设置总览 / 插件偏好」这几个入口 —— 它们本来就在右上角 **⚙ 设置** 里，功能区再来一个属重复入口（搜索里仍可搜到，只有磁贴这一侧不再显示）。
+- ⚠️ **已经保存过自定义布局的升级用户同样生效**：这几个页面在早期版本里曾是首页图标，用户那份本地布局会把它一直带回来（出厂配置里删掉是没用的）。现在按 section 编号直接剔除，整组图标会一并消失，无需手动「恢复默认布局」。
+
+### v4.6.0 (2026-10-15)
+
+**拆分 `biz/logic.js`（2239 行 / 45 个导出 → 10 个功能域模块）**
+
+- 原来一个文件里塞着取数、导入、导出、Bulk、定时任务、午餐抽签 —— 改一处要在两千行里翻。
+  现在按功能域拆成 `data_query` / `data_pcd` / `data_export` / `excel_import` / `onedrive_sync` /
+  `bulk` / `apex` / `schedule` / `org_info` / `lunch`，每个 60~400 行，**函数体一行未改**。
+- 每个模块自带 logger tag（原来是统一的 `[nForce][LOGIC]`），日志里能一眼看出是哪个域。
+- 顺手修了一个**真 bug**：`inspector_tools.js` 里有一处直接调 `ensureXLSX()`，
+  而它 import 的是 `requireXLSX`（上一轮合并两份重复实现时漏改）—— 走「批量导入」那条路会
+  ReferenceError，而构建、自检、渲染全看不出来。**是新加的工具 `verify-deps.mjs` 抓到的。**
+- 为这类重构配了两层新网：**24 条功能页冒烟**（每个磁贴逐个点开，断言到对的 section + 零异常 + 不溢出）
+  与 **7 条动作级**（取数表单提交 / 抽签 / Bulk 刷新 / 定时任务刷新 / 数据分析）；
+  冒烟顺手抓出并修掉一个既有 UI bug：**事件监听页的工具栏在 400px 下把「导出 JSON」顶出卡片**
+  （那一排 4 个按钮 + 计数忘了 `flex-wrap`）。
+
+**删掉 `window.DOMPurify` 的假防护**
+
+- `renderMarkdownContent()` 里那段 `if (window.DOMPurify) sanitize(...)` 从来没生效过（全仓没加载过它）——
+  留着比没有更糟：它让人以为这条路径是安全的。现在删掉并写明真实防线：两个文档来源是扩展包内的一手文件；
+  用户自选 .md 那条路径只经 `innerHTML` 注入，而插入的 `<script>` 不执行、CSP `script-src 'self'`
+  又拦掉内联事件处理器（skill 路径 H 真机验过）。真要清理就引入 DOMPurify，**别自写白名单**。
+
+**默认 Salesforce API 版本 68.0 → 67.0**
+
+- `DEFAULT_API_VERSION` 往回退了一版。理由：Winter '27（v68.0）的生产升级窗口是分批走的
+  （09-04 / 10-02 / 10-09，GA 10-12），走完之前有大量 org 仍停在 67 —— 对它们请求
+  `/services/data/v68.0/` 一律 **404**。自动降级能兜住，但那发生在**建连接第一步**
+  （`identity()`），表现成「一直未连接」，和「路径写错」在日志上难以分辨。
+  默认取 67.0 后绝大多数 org 一次就连上，不再依赖降级兜底。
+- 「设置 → 插件偏好」里的自定义版本、自动降级逻辑都不变；改默认值只需改
+  `common/api_version.js` 那一个常量（连带清单见 `MODULES.md` D 节）。
+
+**架构优化（4 项，都不改使用方式）**
+
+- **`marked` 改为按需加载**：它原本被 `app.js` 静态 import，40KB 无条件进首屏，而真正用到它的
+  只有「版本信息（README）」与「LTS 概览」两处。现在走 `lib_loader.ensureMarked()` 的动态
+  `import()` → **主包 292KB → 254KB（-38KB）**，多出一个只在需要时才取的 chunk。
+- 删掉 `command_palette.js` 里一份**没有任何调用点**的 `fieldsOf`（与 `cmdk_view.js` 的同名导出逐字相同，
+  是重构遗留）；`excel_utils.js` / `inspector_tools.js` 里两份逐字相同的 `requireXLSX()` 合并进 `lib_loader.js`。
+- **发布包瘦身**（复制文件 38 → 33）：不再随包发布图标生成器 `logo_generator.html`、
+  `icons/README.md`、两个示例数据 `rules/*_sample.json`（全仓无代码读它们），
+  并删掉无人引用的 `icons/excel-16.png`。
+- 新增两条守卫：打开「版本信息」必须真的请求到 marked 的 chunk 且渲染出表格；
+  首页**不许**请求它（否则等于没省）。这类失败在截图上几乎看不出来。
+
+**移除：贴边浮窗、侧边栏自动隐藏**
+
+**移除：贴边浮窗、侧边栏自动隐藏**
+
+这两个功能整体删除（不是隐藏开关）：
+
+- **贴边浮窗** —— 在 Salesforce 页面上贴一条感应边、鼠标靠过去滑出面板。它靠一个注入到客户页面的内容脚本（`dock.js`）在页面里挂 iframe 实现，是「靠边弹出」这个交互的唯一可行做法（Chrome 规定 `sidePanel.open()` 只能由点击 / 快捷键 / 右键菜单触发，鼠标移动不算用户动作）。现在这个入口不再需要了：**全局搜索的浮层已经能在任意网页上唤起**，交互更直接。
+- **侧边栏自动隐藏** —— 鼠标移出侧边栏后自动收起（含延迟档位与开关）。
+- 随之移除的还有它们的一组偏好项（`sf_panel_auto_hide` / `sf_panel_hide_delay` / `sf_dock_enabled` / `sf_dock_side` / `sf_dock_hide_delay`）；storage 里残留的旧键会被**直接忽略**（不会报错，也不需要手动清理）。
+- **权限面收窄**：manifest 里的 `content_scripts`（只在 Salesforce 域名注入 `dock.js`）与 `web_accessible_resources`（只有那个浮窗 iframe 用得上）一并删除。现在扩展在任何网页上的存在，只来自你按 `Alt+Shift+S` 时的一次 `activeTab` 临时注入。
+- 「设置 → 插件偏好」因此从五组精简为三组：API 版本 / 侧边栏位置 / 搜索快捷键。
+- 代码里 `HOST_DOCK` 这个宿主类型也一并去掉：宿主判定回归「侧边栏还是标签页」两态（`?dock=1` 这条自证信号随之消失）。
+- 顺带补了一条**早就该有的守卫**：`test/sw_module_graph.test.js` 用"万能桩"把 service worker 的整条模块图在 node 里求值一遍。`background.js` 是逐字复制的、不经打包器，顶层写错（重复 `const`、引用不存在的导出、误用 DOM）时 Chrome **不报错、只是不注册 SW** —— 页面照常渲染、控制台一片安静，只有真机加载才看得出来（这次移除浮窗时就踩了：多留一份 `const` 让 SW 直接不启动）。
+
+### v4.5.0 (2026-10-15)
+
+**新增功能：全局搜索（Spotlight 式命令面板）**
+
+- 插件已有 24 个首页入口 + 4 个内置页面（设置 / 布局配置 / 插件偏好 / Org 用量详情），且大量名字是英文缩写（T-4 / VVIP / PCD / CVP7），记不住就找不到。新增的命令面板给了一条「敲两个字就跳过去」的路径。
+- **模糊匹配**（`src/common/fuzzy.js`，零依赖纯函数 + 19 条单测）：比较前先做「去分隔符 + 转小写」的紧凑化，所以 `t4` 能命中 `T-4 Outstanding`、`ltsdaily` 能命中 `LTS 概览`；分四档计分（完全相同 > 前缀 > 子串 > 子序列），子序列按连贯度与「命中词首」加减分。命中字符会在结果里高亮 —— 且高亮位置是**原串下标**，`t4` 只涂 `T` 和 `4`，不会把中间的 `-` 一起涂上。
+- 匹配字段：功能名 / 描述 / 分组 / 磁贴 id / **别名关键词**。中文标签没法用子序列匹配（`wucan` 找不到「中午食乜」），所以 `rules/ui_layout.json` 的每个 tile 新增可选 `keywords` 数组（拼音、缩写、英文名），可在「设置 → 布局配置」里自行增删。
+- **唤起方式**：首页顶部「搜索功能…」入口、页面内 `Ctrl/Cmd + K`（开关）、非输入框处的 `/`，以及**全局快捷键 `Alt+Shift+S`**（`manifest.commands.open-search`）。
+- **全局快捷键会把浮层直接注入到当前网页**（这就是"像 Spotlight 一样"的那一层）：不需要先打开插件，在任意普通网页（含客户的 Salesforce 页面）上按一下，搜索框就浮在页面上；选中结果后由扩展决定落到侧边栏还是新标签页。注入靠 `activeTab`（快捷键本身就是合法的用户手势）—— **不新增安装时的高权限提示**；`chrome://`、扩展商店等受限页面注入不了时，自动回退成「打开侧边栏并展开搜索框」。
+- **未连接时也能直接点功能**：结果里需要连接的功能仍然显示 🔒，但点下去不是"提示 + 弹回连接设置"，而是**先自动连一次 Salesforce**（复用浏览器 Cookie 里现成的登录态），连上就直接进入该功能。这一轮没连上时目标会被记住 —— 你去 Salesforce 登录完，连接一恢复就自动落到那个功能页。
+- **面板打开时只列「常用功能」**（`常用 N / 全部 29`）：这个面板是"敲两个字跳过去"用的，一打开就铺满一屏反而要重新用眼睛找一遍。敲任意字符即搜全量；一个常用都没设过时自动回落成全量并提示怎么加常用。
+- **快捷键可在「设置 → 插件偏好 → 搜索快捷键」里查看与调整**：插件页面内那条（默认 `Ctrl/Cmd + K`）点「修改」直接按组合键即可录制；"任意网页"那条只能改在 Chrome 里 —— **浏览器不允许扩展自己设定全局快捷键**（MV3 的 `chrome.commands` 只有 `getAll()`，没有 `update()`，实测确认），所以那里给的是当前绑定值 + 一个直达 Chrome 扩展快捷键页的按钮。两条都会把"没绑上"显著标红：Chrome 对冲突的快捷键不报错、只留空，这是唯一能看出"按了没反应"的地方。
+
+**界面**
+
+- 搜索面板 / 网页浮层是**半透明磨砂（毛玻璃）材质**：半透明白底 + `backdrop-filter: saturate(180%) blur(30px)` 把背后的页面糊掉，亮色玻璃边 + 顶部内高光 + 18px 圆角，遮罩只做很淡的压暗与轻微模糊（压太黑就变成普通弹窗，浮层要靠背后内容"透出来"才有质感）。材质令牌（`--glass-*`）与首页那个入口按钮共用配色，入口按钮本身**不做半透明** —— 它贴在不透明卡片上，半透明等于白写。
+- 首页顶部新增「搜索功能…」入口。**刻意不放在顶栏**：400px 侧边栏的顶栏已经刚好占满一行（logo + 连接徽标 + 环境徽标 + 设置 + 宿主切换 + 头像），再加一个按钮实测会把顶栏从 52px 折成 74px。
+- 面板样式全部走设计令牌；`z-index: 9000` 刻意低于提示 toast 与取数遮罩（9999）。
+
+**工程质量（不影响使用方式）**
+
+- 新增 `src/common/shortcut.js`（纯函数 + 23 条单测）：把同一条快捷键在三种"语言"之间翻译 —— Chrome 的字符串（`"Alt+Shift+S"`）、`KeyboardEvent` 的布尔位、界面上给人看的字（macOS 上要显示 `⌥⇧S` / `⌘K`）。三处各拼一遍字符串的话，改一处就会漏一处。
+- 新增 `src/common/ui_events.js`：扩展页面 ⇄ Service Worker 之间共享的消息名与 storage 键。两端不在同一个模块图里（SW 被逐字复制、页面被打包），各写一份字面量的话，改一边就会变成「快捷键没反应且控制台一片安静」——这类不一致任何静态检查都抓不到。同时已加进 `tools/build-plan.mjs` 的 COPY_RULES（否则 dist 里 SW 的 import 会 404）。
+- 新增 `src/common/command_index.js`（条目构建 / 配色表 / 连接门禁集合）与 `src/common/cmdk_view.js`（结果 HTML 与面板骨架渲染）：**插件面板与网页浮层共用同一份实现**，不会出现"面板里搜得到、网页浮层里搜不到"。配套新增 `test/cmdk_view.test.js`（15 条）。
+- 网页浮层 `src/search_overlay.js` 是**复制型的经典脚本**（注入时按经典脚本求值，出现 import/export 会直接 SyntaxError）：条目、模糊匹配、结果 HTML 全部由 service worker 提供，样式则由 SW 把 `lib/css/cmdk.css` 的文本下发进 shadow root —— 三处都不需要第二份实现。
+- 新增 `lib/css/cmdk.css`（从 main.css 抽出）：同一套面板样式要同时服务页面与 shadow DOM，后者继承不到 `:root` 令牌，所以自带一份 `:host` 令牌块，并由 `test/cmdk_css.test.js` 与 main.css 的 `:root` 逐项核对。
+- 新增 `npm run check:ui` 的两组守卫：**D 组**改为从 `common/command_index.js` 读取连接门禁集合（读不到直接报 ERROR，不再降级成 WARN —— 否则那三处对齐检查会整段静默失效）；**Q 组**逐字核对网页浮层的消息协议（浮层不能 import，只能写字面量）、并要求注入的文件真的落在 `dist/` 且不含 ESM 语法。
+- 首页磁贴与搜索结果的「未连接 → 锁定」判定收敛为同一个 `isEntryLocked()`，不再各写一份。
+- 新增真机验证脚本 `overlay-verify.mjs`（10 项断言）：真加载扩展、通过 CDP 把标签页 URL 伪装成 Salesforce 域名（`Fetch.fulfillRequest` 喂本地 HTML，不依赖网络）后真实注入浮层，验完"注入 → 首屏 → 输入查询 → 高亮 → 选中 → 落到插件页面"整条链路。
 
 ### v4.4.0 (2026-10-09)
 

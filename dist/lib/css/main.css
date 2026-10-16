@@ -130,6 +130,24 @@
     --radius-sm: 4px;
     --radius-md: 6px;
     --radius-lg: 12px;
+
+    /* --- 半透明磨砂（搜索面板 / 网页浮层用的"毛玻璃"材质）---
+       同一套值也写在 lib/css/cmdk.css 的 `:host` 块里 —— 注入到网页的浮层跑在
+       shadow DOM 里，拿不到这里（那块是刻意的例外，`test/cmdk_css.test.js` 逐项核对两份必须一致）。
+       ⚠️ 面板要在**别人页面的内容之上**保持可读，所以 :root 里的 `--text-*` 是深色、
+       这里就该是"浅色半透明玻璃"（macOS 的材质也是这么定的：亮材质 + 深字）。
+       `--glass-blur` 把模糊与饱和度提升打包成一条：只模糊不提升饱和度会显灰。 --- */
+    --glass-surface: rgba(255, 255, 255, 0.72);
+    --glass-surface-strong: rgba(255, 255, 255, 0.86);
+    --glass-scrim: rgba(16, 24, 40, 0.18);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --glass-hairline: rgba(16, 24, 40, 0.08);
+    --glass-highlight: rgba(255, 255, 255, 0.92);
+    --glass-shadow: 0 24px 64px rgba(16, 24, 40, 0.28), 0 2px 8px rgba(16, 24, 40, 0.12);
+    --glass-item-hover: rgba(255, 255, 255, 0.5);
+    --glass-item-active: rgba(22, 119, 255, 0.16);
+    --glass-radius: 18px;
+    --glass-blur: saturate(180%) blur(30px);
     /* 过渡「时长 + 缓动」令牌。注意它**只含时长与缓动**，属性名由使用处显式声明：
        写成 transition: <property> … var(--transition-base);
        历史写法是 `--transition: all …`，`all` 会让浏览器监听该元素所有可动画属性
@@ -249,7 +267,10 @@ optgroup {
     padding: 2px 8px;
 }
 
-/* 顶部导航「设置」入口 / 显示宿主切换（侧边栏 ⇄ 标签页） */
+/* 顶部导航「设置」入口 / 显示宿主切换（侧边栏 ⇄ 标签页）。
+   ⚠️ 这两个按钮在 400px 的侧边栏里已经刚好占满一行（logo + 连接徽标 + 环境徽标
+   + 这两个 + 头像），**再加第三个就会折行**、顶栏高度从 52px 涨到 74px。
+   全局搜索的入口因此放在首页（.cmdk-trigger），不要挪回这里。 */
 .nav-settings-btn,
 .nav-host-btn {
     display: inline-flex;
@@ -2401,42 +2422,11 @@ optgroup {
     color: var(--text-secondary);
 }
 
-.pref-group-value[data-state="on"] {
-    background: var(--success-bg);
-    color: var(--success-color);
-}
-
-.pref-group-value[data-state="off"] {
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-}
-
-/* 复选框 + 文字标签。原生 checkbox 与 main.css 的字体（表单控件默认不继承字族）
-   都要显式声明，否则在窄侧边栏里会突然变成 Arial 且大小不一致。 */
-.pref-switch {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: var(--fs-sm);
-    color: var(--text-primary);
-    cursor: pointer;
-    user-select: none;
-}
-
-.pref-switch input[type="checkbox"] {
-    flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    accent-color: var(--primary-color);
-    cursor: pointer;
-}
-
-/* 关掉时把同组的下拉置灰：延迟只有在启用后才有意义，避免"调了没反应"的困惑 */
-.pref-controls select:disabled,
-.pref-controls input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+/* 搜索快捷键那组：`set` 沿用基类的 indigo 徽标；`empty` 是"浏览器里那条没绑上"
+   （Chrome 对冲突的快捷键不报错、只是留空）—— 必须显眼，否则用户只会觉得"按了没反应"。 */
+.pref-group-value[data-state="empty"] {
+    background: var(--error-bg);
+    color: var(--error-color);
 }
 
 .pref-controls {
@@ -2454,6 +2444,63 @@ optgroup {
     flex: 1 1 140px;
     min-width: 0;
     max-width: 220px;
+}
+
+/* ⑤ 搜索快捷键：一行一条（左标签 / 中键位 / 右动作）。
+   允许换行：400px 侧边栏里"标签 + 键位 + 两个按钮"放不进一行。 */
+.pref-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: var(--fs-sm);
+    color: var(--text-primary);
+}
+
+.pref-row-label {
+    flex: 0 0 auto;
+    min-width: 76px;
+    color: var(--text-secondary);
+}
+
+/* 键位胶囊：与 `.cmdk-esc-hint` / `.cmdk-trigger-kbd` 同一套视觉语言 */
+.pref-key {
+    flex: 0 0 auto;
+    padding: 3px 10px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+/* 没绑上时必须显眼 —— 这是全项目唯一能看出"按了没反应"的地方。
+   Chrome 对冲突的快捷键既不报错也不警告，只把它留空。 */
+.pref-key[data-state="empty"] {
+    color: var(--error-color);
+    border-color: var(--error-color);
+    background: var(--error-bg);
+}
+
+.pref-key[data-state="unknown"] {
+    color: var(--text-light);
+}
+
+.pref-row-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 8px;
+    /* 推到行尾；窄栏换行后它自己占一整行，看起来仍然整齐 */
+    margin-left: auto;
+}
+
+/* 正在录制：按钮文案变成"请按组合键…"，用主色强调当前在等按键 */
+.pref-row-actions .ant-btn[data-state="recording"] {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: var(--primary-bg);
 }
 
 /* Session 链接 / 连接信息（#section-22） */
@@ -3909,6 +3956,82 @@ optgroup {
     }
 }
 
+/* --- 首页上的搜索入口（不是 <input>，点一下弹出 #cmdk-overlay） ---
+   为什么做成"看起来像输入框"的按钮：它表达的是"这里能搜"，而真输入框会让用户
+   以为要在页面里打字。用实心浅底 + 悬停主色边框，读起来就是一个可点的搜索栏。 */
+.cmdk-trigger {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    /* 与弹出的那个磨砂面板同一套圆角 / 高光，读起来是"同一个东西"。
+       这里**不做半透明**：它贴在首页不透明的卡片上，半透明等于白写，
+       反而会把边框与文字的对比度拖低。玻璃材质只给真正浮在内容之上的那一层。 */
+    border-radius: var(--glass-radius);
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-sans);
+    font-size: var(--fs-base);
+    color: var(--text-secondary);
+    transition: color 0.2s, border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.cmdk-trigger:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    background: var(--primary-bg);
+    box-shadow: var(--shadow-sm);
+}
+
+.cmdk-trigger-icon,
+.cmdk-trigger-icon .svg-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--icon-md);
+    color: var(--primary-color);
+}
+
+.cmdk-trigger-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.cmdk-trigger-kbd {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+/* 全局搜索面板 / 网页浮层的组件样式**不在这里** —— 见 `lib/css/cmdk.css`。
+   理由：那套样式要同时给「插件内的面板」和「注入到网页里的浮层」用，
+   而后者跑在 shadow DOM 里（拿不到本文件的 :root 令牌），只能由 SW 把
+   cmdk.css 的文本下发过去（见 src/search_overlay.js）。留在这里会迫使网页浮层
+   再抄一份样式，或者干脆没样式。 */
+
+@media (max-width: 560px) {
+    /* 首页搜索入口的快捷键提示在窄栏里让位（面板本身的窄栏规则在 cmdk.css） */
+    .cmdk-trigger-kbd {
+        display: none;
+    }
+
+    .cmdk-trigger {
+        padding: 8px 12px;
+        margin-bottom: 10px;
+    }
+}
+
 /* ====================================================================
    内联样式下沉后的原子工具类（由 tools/ 的一次性脚本生成，手工维护同样可以）
    ------------------------------------------------------------------
@@ -4071,3 +4194,131 @@ optgroup {
 .unified-card .ant-card-body.u-p-32 { padding: 2rem; }
 .unified-card .ant-card-body.u-p-0 { padding: 0; }
 .upload-drag-wrapper .upload-text.u-m-0 { margin-bottom: 0; }
+
+/* ── Order 历史：状态行（2026-10-16）──
+   四种状态用 data-state 区分，颜色全部走令牌（I 组的要求）。
+   为什么不用现成的通知通道：这条状态是**常驻**在该页上的（"共 N 条历史"），
+   用 toast 会自己消失，用 .notification 又会被当成"出事了"。 */
+#order-history-status {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+#order-history-status[data-state="ok"] {
+    background: var(--success-bg);
+    color: var(--success-color);
+}
+
+#order-history-status[data-state="warn"] {
+    background: var(--warning-bg);
+    color: var(--warning-color);
+}
+
+#order-history-status[data-state="error"] {
+    background: var(--error-bg);
+    color: var(--error-color);
+}
+
+/* 命中 Order 后的信息卡（单号 / 名称 / 状态 / Id） */
+.order-history-order {
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+}
+
+
+/* ── 固定布局表格（2026-10-16）──
+   等价 Tailwind 的 `table-fixed`（`table-layout: fixed`）+ `<colgroup>` 列宽。
+   为什么值得单独写一条：**auto 布局下浏览器必须为定列宽去量每个单元格的内容**，
+   3000 行 × 5 列实测"布局与绘制"约 100ms（建 DOM 只要 16ms）；换成 fixed 后那一步
+   与行数无关。顺带解决"一个长值把列撑宽、整表横向抖动"。
+   ⚠️ fixed 布局下**必须给列宽**（`<colgroup>` 里由 renderTable 写内联宽度），
+   否则所有列平分宽度。 */
+.ut-tbl-fixed {
+    table-layout: fixed;
+}
+
+/* 固定布局里单元格内容一律省略号截断（配合 title 悬停看全文） */
+.ut-tbl-fixed .ut-th,
+.ut-tbl-fixed .ut-td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 空值单元格（Order 字段表里没填的字段）：淡化，但仍占位，保证列不错位 */
+.ut-td-empty {
+    color: var(--text-light);
+}
+
+/* 滚动容器：把布局/绘制的范围圈在容器内（长表滚动时不再触发整页重排） */
+.unified-table-wrapper {
+    contain: layout paint;
+}
+
+
+/* ── Order 历史的「查询日志」（2026-10-16）──
+   位置在功能页底部、与结果同页：查不出东西时不用开 DevTools 就能看清是哪一步坏了、
+   以及当时发出去的 SOQL 长什么样。配色复用 loading-log 那套词汇（info/success/warn/error），
+   颜色与字号全走令牌（I 组要求）。 */
+.order-history-log {
+    margin-top: 16px;
+    font-size: var(--fs-xs);
+}
+
+.order-history-log > summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.order-history-log[open] > summary {
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.order-history-log-body {
+    max-height: 280px;
+    overflow: auto;
+    padding: 8px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+}
+
+.order-history-log-body .log-entry {
+    margin-bottom: 3px;
+    /* SOQL 很长：允许折行，别让整块横向滚动 */
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.order-history-log-body .log-entry.info {
+    color: var(--text-secondary);
+}
+
+.order-history-log-body .log-entry.success {
+    color: var(--success-color);
+}
+
+.order-history-log-body .log-entry.warning {
+    color: var(--warning-color);
+}
+
+.order-history-log-body .log-entry.error {
+    color: var(--error-color);
+}
+
+/* SOQL 单独一行：它是给人**复制去 Developer Console 跑**的，要能选中 */
+.order-history-log-body .log-entry.log-soql {
+    color: var(--primary-color);
+    user-select: text;
+}

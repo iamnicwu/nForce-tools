@@ -30,6 +30,10 @@
     <link rel="stylesheet" href="lib/css/antd.min.css">
     <!-- 引入自定义CSS -->
     <link rel="stylesheet" href="lib/css/main.css">
+    <!-- 全局搜索的组件样式单独一个文件：同一套界面也要出现在**注入到网页里的浮层**
+         （src/search_overlay.js 的 shadow DOM），那边连 import 都做不了，只能由 SW
+         把这份文件的文本下发过去。放 main.css 里就只能再抄一份。 -->
+    <link rel="stylesheet" href="lib/css/cmdk.css">
 </head>
 <body class="admin-body">
     <!-- 主内容区 -->
@@ -108,6 +112,17 @@
 
             <!-- ========== 首页：功能图标列表（由 rules/ui_layout.json 驱动） ========== -->
             <section class="launcher-view" id="launcher-view">
+                <!-- 全局搜索入口。**刻意不放顶栏**：顶栏在 400px 侧边栏里本来就刚好
+                     一行（logo + 状态徽标 + 环境徽标 + 设置 + 宿主切换 + 头像），
+                     再加一个按钮就会折成两行、顶栏高度从 52px 涨到 74px ——
+                     而侧边栏正是最常用的宿主。放在这里宽度充裕、目标也更大，
+                     键盘用户另有 Ctrl/Cmd+K 与 Alt+Shift+S，不依赖这个按钮。 -->
+                <button type="button" class="cmdk-trigger" id="search-nav-btn" title="搜索功能（Ctrl/Cmd + K）">
+                    <span class="cmdk-trigger-icon"><i class="fas fa-search"></i></span>
+                    <span class="cmdk-trigger-text">搜索功能…</span>
+                    <span class="cmdk-trigger-kbd">Ctrl/Cmd + K</span>
+                </button>
+
                 <!-- Org 状态面板：直接展示 Salesforce Limits 用量（biz/org_limits.js 渲染，
                      点击「查看全部」进入 section-27 的完整列表）。不占功能磁贴位 -->
                 <div id="org-dashboard-panel"></div>
@@ -603,54 +618,37 @@
                         </p>
                     </section>
 
-                    <!-- ③ 侧边栏自动隐藏 -->
+                    <!-- ③ 搜索快捷键 -->
                     <section class="pref-group">
                         <div class="pref-group-head">
-                            <span class="pref-group-title">侧边栏自动隐藏</span>
-                            <span class="pref-group-value" id="panel-auto-hide-state">—</span>
+                            <span class="pref-group-title">搜索快捷键</span>
+                            <span class="pref-group-value" id="search-shortcut-state">—</span>
                         </div>
                         <p class="pref-desc">
-                            开启后，鼠标离开侧边栏并停留一小会儿，面板会自动收起，把宽度还给网页；
-                            再按 <code>Alt+Shift+N</code> 即可重新打开（也可以在 Chrome 的扩展快捷键页改成自己顺手的手势）。
+                            两条各管一摊：<b>任意网页</b>那条在哪儿都能唤出搜索（有客户页面时是浮在页面上的搜索框），
+                            绑定由 Chrome 保管；<b>插件页面内</b>那条只在插件的侧边栏 / 标签页里生效，存本机偏好。
                         </p>
-                        <div class="pref-controls">
-                            <label class="pref-switch" for="panel-auto-hide-toggle">
-                                <input type="checkbox" id="panel-auto-hide-toggle">
-                                <span>启用自动隐藏</span>
-                            </label>
-                            <select class="ant-input pref-select" id="panel-hide-delay-select"
-                                    aria-label="侧边栏隐藏延迟"></select>
+                        <div class="pref-row">
+                            <span class="pref-row-label">任意网页</span>
+                            <span class="pref-key" id="search-shortcut-global">—</span>
+                            <span class="pref-row-actions">
+                                <button type="button" class="ant-btn" id="search-shortcut-global-open">去 Chrome 修改</button>
+                            </span>
                         </div>
-                        <p class="pref-hint" id="panel-auto-hide-hint">
-                            延迟是「鼠标离开后等多久才收起」。焦点落在输入框或下拉框上时不会收起 ——
-                            原生下拉的选项弹窗属于浏览器界面，鼠标移过去在网页看来等于离开了文档。
-                        </p>
-                    </section>
-
-                    <!-- ④ 贴边浮窗 -->
-                    <section class="pref-group">
-                        <div class="pref-group-head">
-                            <span class="pref-group-title">贴边浮窗</span>
-                            <span class="pref-group-value" id="dock-state">—</span>
+                        <div class="pref-row">
+                            <span class="pref-row-label">插件页面内</span>
+                            <span class="pref-key" id="search-shortcut-panel">—</span>
+                            <span class="pref-row-actions">
+                                <button type="button" class="ant-btn" id="search-shortcut-panel-record">修改</button>
+                                <button type="button" class="ant-btn" id="search-shortcut-panel-reset">恢复默认</button>
+                            </span>
                         </div>
-                        <p class="pref-desc">
-                            在 Salesforce 页面上贴一条感应边，<b>鼠标靠过去就滑出</b>这个工具面板。
-                            侧边栏本身做不到这一点：Chrome 规定 <code>sidePanel.open()</code> 只能由
-                            点击 / 快捷键 / 右键菜单触发，<b>鼠标移动不算用户动作</b>，所以「靠边即显示」
-                            只能由浮窗来实现。
-                        </p>
-                        <div class="pref-controls">
-                            <label class="pref-switch" for="dock-enable-toggle">
-                                <input type="checkbox" id="dock-enable-toggle">
-                                <span>在 Salesforce 页面启用</span>
-                            </label>
-                            <select class="ant-input pref-select" id="dock-side-select" aria-label="贴哪一边"></select>
-                            <select class="ant-input pref-select" id="dock-hide-delay-select"
-                                    aria-label="浮窗收回延迟"></select>
-                        </div>
-                        <p class="pref-hint" id="dock-hint">
-                            改完立即生效，无需刷新页面 —— 只对<b>已打开</b>的 Salesforce 标签页生效；
-                            新开的标签页会自动带上。浮窗与侧边栏是两套独立入口，可以同时开。
+                        <p class="pref-hint" id="search-shortcut-hint">
+                            「任意网页」那条只能改在 Chrome 里 —— 浏览器不允许扩展自己设定全局快捷键
+                            （MV3 的 <code>chrome.commands</code> 只有 <code>getAll()</code>，没有 <code>update()</code>），
+                            点左边按钮会直接把你送到 Chrome 的快捷键设置页。显示成
+                            「未设置 / 未生效」说明浏览器里那条没绑上，多半与别的扩展或系统快捷键撞了。
+                            「插件页面内」那条点「修改」后直接按组合键即可（必须含 Ctrl / ⌘ / Alt 之一），Esc 取消。
                         </p>
                     </section>
                 </div>
@@ -1887,7 +1885,10 @@ System.debug('Hello World');"></textarea>
                                     <input type="text" id="event-custom-channel-input" class="ant-input" placeholder="留空则使用上面选择的通道">
                                     <div class="u-mt-6 u-text-secondary u-fs-xs" id="event-prefix-hint">通道前缀：/event/</div>
                                 </div>
-                                <div class="form-group u-flex u-gap-10 u-items-center u-mb-16">
+                                <!-- 4 个按钮 + 计数挤在一排：必须 u-flex-wrap，否则 400px 侧边栏里
+                                     最后一个按钮会被顶出卡片右边缘（冒烟矩阵 sweep-event-monitor 抓到过：
+                                     #event-export-btn right=500 > 400，且整页横向溢出） -->
+                                <div class="form-group u-flex u-flex-wrap u-gap-10 u-items-center u-mb-16">
                                     <button type="button" id="event-subscribe-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
                                         <i class="fas fa-headphones"></i> 开始监听
                                     </button>
@@ -1909,6 +1910,85 @@ System.debug('Hello World');"></textarea>
                         </div>
                     </div>
                 </div>
+            <!-- Order 历史（OrderHistory 字段历史追踪）—— 搜索框里直接输入 Order 的
+                 Name / Id / OrderNumber 会落到这里并自动查一次（见 command_palette.js） -->
+            <div id="section-30" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
+                <div class="ant-card-head">
+                    <div class="ant-card-head-wrapper">
+                        <div class="ant-card-head-title">Order 历史</div>
+                        <div class="ant-card-extra"><span id="order-history-badge" class="ant-tag ant-tag-success u-hidden">已查询</span></div>
+                    </div>
+                </div>
+                <div class="ant-card-body">
+                    <div class="section-content">
+                        <div class="section-header">
+                            <div class="section-icon">
+                                <i class="fas fa-clock u-text-brand"></i>
+                            </div>
+                            <div class="section-desc">
+                                <p>输入 Order 的 <b>Name</b> / <b>Id</b> / <b>OrderNumber</b> 任意一个值：上方列出该 Order 的<b>全部字段</b>，下方列出它的字段变更历史（<code>OrderHistory</code>，按时间倒序）。</p>
+                                <p class="u-text-secondary u-fs-xs">也可以在任意页面按 <b>Ctrl/Cmd + K</b> 直接输入这个值：结果第一条就是「查询 Order 历史」，回车即查。</p>
+                            </div>
+                        </div>
+
+                        <div class="form-group u-flex u-flex-wrap u-gap-10 u-items-center u-mb-16">
+                            <input type="text" id="order-history-query-input" class="ant-input u-flex-1 u-minw-200"
+                                   placeholder="Order Name / Id / OrderNumber，例如 00012345" autocomplete="off">
+                            <button type="button" id="order-history-query-btn" class="ant-btn ant-btn-primary u-bg-brand u-border-brand">
+                                <i class="fas fa-search"></i> 查询历史
+                            </button>
+                            <button type="button" id="order-history-clear-btn" class="ant-btn ant-btn-default">
+                                <i class="fas fa-times"></i> 清空
+                            </button>
+                            <button type="button" id="order-history-export-btn" class="ant-btn ant-btn-default" disabled>
+                                <i class="fas fa-download"></i> 导出 Excel
+                            </button>
+                        </div>
+
+                        <div id="order-history-status" class="u-fs-sm u-mb-12 u-hidden"></div>
+                        <div id="order-history-order" class="order-history-order u-mb-12 u-hidden"></div>
+                    </div>
+
+                    <!-- 结果区空状态：表格渲染出来后自动让位（见 main.css 的 :has 规则） -->
+                    <div class="result-empty">
+                        <i class="fas fa-inbox"></i>
+                        <p>Order 的全部字段与字段变更历史都会显示在这里</p>
+                    </div>
+                    <div id="order-fields-table-wrap" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>Order 字段</h4>
+                            <span id="order-fields-count" class="u-text-secondary u-fs-xs"></span>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="order-fields-table" class="data-table"></div>
+                        </div>
+                    </div>
+                    <div id="order-history-table-wrap" class="unified-table-wrapper u-hidden">
+                        <div class="table-container-header">
+                            <h4>历史记录</h4>
+                            <span id="order-history-count" class="u-text-secondary u-fs-xs"></span>
+                        </div>
+                        <div class="table-container-body">
+                            <div id="order-history-table" class="data-table"></div>
+                        </div>
+                    </div>
+
+                    <!-- 查询日志（诊断）：每一步的 SOQL / 耗时 / 失败原因都在这里，
+                         查不出东西时先看它。用原生 details 元素 —— 折叠不引 JS，
+                         与 .fn-more 同一套做法；出错时由 JS 把 open 置 true（自动展开）。 -->
+                    <details id="order-history-log-wrap" class="order-history-log u-hidden">
+                        <summary id="order-history-log-summary">查询日志</summary>
+                        <div class="order-history-log-body">
+                            <div class="u-flex u-justify-end u-mb-8">
+                                <button type="button" id="order-history-log-copy" class="ant-btn ant-btn-default u-fs-xs">
+                                    <i class="fas fa-save"></i> 复制日志
+                                </button>
+                            </div>
+                            <div id="order-history-log"></div>
+                        </div>
+                    </details>
+                </div>
+            </div>
                 <!-- ===== Org Dashboard：Salesforce Org Limits 用量看板（section-27） ===== -->
                 <div id="section-27" class="unified-card ant-card ant-card-bordered step-section needs-connection theme-tools">
                     <div class="ant-card-head">
@@ -1965,6 +2045,14 @@ System.debug('Hello World');"></textarea>
         </div>
     </div>
     
+    <!-- ========== 全局搜索（Spotlight 式命令面板） ==========
+         **只有这一层空壳**：里面的骨架由 common/cmdk_view.js 的 shellHtml() 渲染 ——
+         同一份骨架注入到网页里的浮层也要用（那边跑在 shadow DOM 里），
+         手写两份最容易出的问题就是 id 对不上，而截图上看不出来。
+         显隐只用 .is-open 类，不要改成 `hidden` 属性：面板要 display:flex，
+         作者样式会把 UA 的 [hidden]{display:none} 盖掉，"藏起来"会失灵。 -->
+    <div class="cmdk" id="cmdk-overlay" data-state="closed"></div>
+
     <!-- 引入自定义JavaScript -->
     <!-- 保持 type="module"：src/app.js 是原生 ESM，去掉会报
          "Cannot use import statement outside a module"；
