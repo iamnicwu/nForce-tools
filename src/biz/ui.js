@@ -6,6 +6,8 @@ import { Icons } from "../common/icons.js";
 import { renderTable } from "../common/table_utils.js";
 import { showNotification, parseMarkdown, escapeHtml } from "../common/utils.js";
 import { ensureECharts, ensureMarked } from "../common/lib_loader.js";
+// 「公用功能」的整页打开判定（集合由 biz/ui_layout.js 从布局的 tools 分组推过来）
+import { isFullPageStep } from "../common/command_index.js";
 
 // 更新午餐 UI 状态
 export function updateLunchUIState() {
@@ -76,7 +78,48 @@ let analysisResizeListener = null;
 let t2AnalysisResizeListener = null;
 
 // 显示对应功能（v3.2：从首页进入详情页，一次只显示一个功能）
-export function showSection(sectionNumber) {
+/**
+ * 当前是不是「浏览器侧边栏」宿主。
+ * 判据是 `app.js` 的 `applyHostChrome()` 打在 body 上的类（宿主判定只在那一个地方做，
+ * 这里不做第二次判定 —— 两处判定迟早会不一致）。
+ */
+function isSidePanelHost() {
+  return document.body.classList.contains("host-panel");
+}
+
+/**
+ * 这个功能此刻是否应当**改成整页打开**（公用功能 + 当前在侧边栏）。
+ *
+ * 导出是给 `app.js` 的 `gotoSection` 用的：搜索跳转要先问一句"会不会被整页打开"，
+ * 会的话就把载荷塞进 URL 直接开标签页，**别在当前页执行**（否则侧边栏里白跑一次查询，
+ * 用户还看不到结果）。
+ */
+export function shouldOpenInFullPage(sectionNumber) {
+  return isFullPageStep(sectionNumber) && isSidePanelHost();
+}
+
+/**
+ * 在**新标签页**里打开某个功能（整页）。
+ *
+ * URL 里带 `?section=N`（必要时带载荷：`orderValue` / `logId`），启动时由 `app.js` 直接
+ * 落到那一页 —— 所以这里不用"先切界面再打开"，也不会闪一下侧边栏。
+ * 打开失败（极少数环境禁 tabs.create）就退回侧边栏内切换，别让用户点了没反应。
+ */
+export function openSectionInFullPage(sectionNumber, payload) {
+  const params = new URLSearchParams({ section: String(sectionNumber) });
+  if (payload && payload.orderValue) params.set("orderValue", payload.orderValue);
+  if (payload && payload.logId) params.set("logId", payload.logId);
+  const url = `${chrome.runtime.getURL("index.html")}?${params.toString()}`;
+  try {
+    chrome.tabs.create({ url });
+    showNotification("已在新标签页打开（这类工具需要宽屏）", "info");
+  } catch (e) {
+    log.error("整页打开失败，退回侧边栏内切换:", e);
+    showSection(sectionNumber, { skipHostRedirect: true, payload });
+  }
+}
+
+export function showSection(sectionNumber, options = {}) {
   log.debug(`showSection called with sectionNumber=${sectionNumber}, is_connected=${appState.is_connected}`);
 
   // 未连接时仅允许访问连接设置(1)、版本信息(6)、午餐(14)、布局配置(20)、设置(21)、
@@ -90,6 +133,15 @@ export function showSection(sectionNumber) {
     log.debug(`Section ${sectionNumber} requires connection`);
     showNotification("请先完成 Salesforce 连接", "warning");
     showSection(1);
+    return;
+  }
+
+  // 「公用功能」（首页布局里的「工具」组）在**侧边栏**里被点开时，不在这里切换界面 ——
+  // 改成新开一个整页（新标签页）直达该功能：这组都是要铺开看宽表格 / 长文本的工具，
+  // 400px 的侧边栏放不下。放在连接门禁**之后**，未连接时还是先走上面那条提示。
+  // `options.skipHostRedirect` 给"刚被整页打开的那个标签页"用（它必须就地渲染，不能再开一个）。
+  if (!options.skipHostRedirect && shouldOpenInFullPage(sectionNumber)) {
+    openSectionInFullPage(sectionNumber, options.payload);
     return;
   }
 

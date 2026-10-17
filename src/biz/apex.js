@@ -24,6 +24,8 @@ import { sfConn } from "./sf_service.js";
 import { showNotification, copyText } from "../common/utils.js";
 import { $ } from "../common/dom.js";
 import { replaceIcons } from "../common/icons.js";
+// 执行历史（2026-10-17）：每跑一段代码就记一条，面板上可批量导出 / 导入 / 同步到 ima
+import { addHistoryEntry } from "../common/history_store.js";
 // 纯逻辑（SOQL 拼装 / 日志挑选 / 文案），与 sf_service 的分工见上面说明
 import * as apexLog from "../common/apex_log.js";
 
@@ -148,6 +150,7 @@ export async function executeAnonymousCode() {
     setBusy(executeBtn, true);
     resetApexLog();
 
+    const startedAt = Date.now();
     try {
         const result = await sfConn.executeAnonymous(apexCode);
 
@@ -156,6 +159,12 @@ export async function executeAnonymousCode() {
             resultContent.textContent = `✗ 执行失败\n\n错误：${errorMsg}`;
             resultContainer.style.display = "block";
             showNotification(`执行失败：${errorMsg}`, "error");
+            // 请求没被受理也算一次尝试（错误原文只进 meta 的短字段，不整段存）
+            await addHistoryEntry("apex", apexCode, {
+                ok: false,
+                ms: Date.now() - startedAt,
+                error: String(errorMsg).slice(0, 120)
+            });
             return;
         }
 
@@ -164,6 +173,19 @@ export async function executeAnonymousCode() {
         resultContent.textContent = formatExecuteResult(res);
         resultContainer.style.display = "block";
         renderApexLog(result);
+
+        /**
+         * 记一条执行历史。
+         * 放在 `renderApexLog()` 之后：Log ID 是那一步才写进 `lastLog` 的，
+         * 先记历史会拿到空 ID。历史里只存代码 + 结果摘要 + Log ID，
+         * **不存日志正文**（单条上限 5MB，塞进 storage 会快速撑爆配额）。
+         */
+        await addHistoryEntry("apex", apexCode, {
+            ok: res.success === true,
+            compiled: res.compiled !== false,
+            logId: lastLog.id || "",
+            ms: Date.now() - startedAt
+        });
 
         if (res.success === true) {
             showNotification("代码执行成功", "success");

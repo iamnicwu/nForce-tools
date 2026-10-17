@@ -228,3 +228,121 @@ describe('sf_rest_client · 会话中途失效自动续期', () => {
     });
   });
 });
+
+/**
+ * 超时（P0 修复，2026-10-17 架构评审）
+ *
+ * 为什么值得单独断言：没有超时时，失败模式是「永远转圈」——
+ * `await` 不返回 → 上层 `finally` 不执行 → loading mask 永不消失，
+ * 而面板没有地址栏，用户只能关掉侧边栏重开。这类故障在真机上表现为
+ * 「卡住」而不是「报错」，没有任何日志线索。
+ */
+describe('sf_rest_client · 请求超时', () => {
+  const makeConn = (hook = null) => {
+    const conn = new SfRestConnection({
+      instanceUrl: INSTANCE,
+      sessionId: 'SID',
+      version: '67.0',
+    });
+    conn.onAuthFailure = hook;
+    return conn;
+  };
+
+  afterEach(() => {
+    delete global.fetch;
+  });
+
+  test('每个请求都带 AbortSignal（超时的载体）', async () => {
+    global.fetch = jest.fn(async () => res(200, { ok: true }));
+    await makeConn().request('/limits/');
+    const init = global.fetch.mock.calls[0][1];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test('超时 → REQUEST_TIMEOUT，且**不**触发续期、不重发', async () => {
+    global.fetch = jest.fn(async () => {
+      const err = new Error('The operation was aborted due to timeout');
+      err.name = 'TimeoutError';
+      throw err;
+    });
+    const hook = jest.fn(async () => ({ sessionId: 'SID_NEW' }));
+
+    await expect(makeConn(hook).request('/limits/')).rejects.toMatchObject({
+      name: 'SalesforceApiError',
+      errorCode: 'REQUEST_TIMEOUT',
+    });
+    // 超时不是鉴权失败：换一份会话再发一次纯属浪费（而且慢链路会连吃两次超时）
+    expect(hook).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('网络/CSP 拦截 → NETWORK_ERROR（保留原始原因，便于排查）', async () => {
+    global.fetch = jest.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await expect(makeConn().request('/limits/')).rejects.toMatchObject({
+      name: 'SalesforceApiError',
+      errorCode: 'NETWORK_ERROR',
+      statusCode: null,
+    });
+  });
+
+  test('timeoutMs 可按次覆盖（大结果集需要更长）', async () => {
+    global.fetch = jest.fn(async () => res(200, { ok: true }));
+    await makeConn().request({ method: 'GET', url: '/limits/', timeoutMs: 120000 });
+    expect(global.fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test('Metadata（SOAP）那条裸 fetch 也有超时', async () => {
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '<x/>',
+    }));
+    const conn = makeConn();
+    global.DOMParser = class {
+      parseFromString() {
+        return { getElementsByTagName: () => [] };
+      }
+    };
+    await conn.metadata.describe('67.0');
+    expect(global.fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    delete global.DOMParser;
+  });
+});
+
+/**
+ * 超时的默认值与可配置性（默认 120 秒，可在设置里改 10 ~ 600 秒）
+ *
+ * 断言的是"默认值"与"夹取边界"这两件容易在重构中悄悄漂移的事 ——
+ * 默认值退回 45 秒，慢 org 上的大结果集查询就会重新开始假报错。
+ */
+describe('sf_rest_client · 超时的默认值与可配置性', () => {
+  const client = require('../src/common/sf_rest_client.js');
+
+  afterEach(() => {
+    client.setRequestTimeout(client.DEFAULT_REQUEST_TIMEOUT_MS);
+  });
+
+  test('默认 120 秒', () => {
+    expect(client.DEFAULT_REQUEST_TIMEOUT_MS).toBe(120_000);
+    expect(client.getRequestTimeout()).toBe(120_000);
+  });
+
+  test('设置页的秒数 × 1000 后生效', () => {
+    expect(client.setRequestTimeout(300 * 1000)).toBe(300_000);
+    expect(client.getRequestTimeout()).toBe(300_000);
+  });
+
+  test('非法值（0 / 负数 / NaN）被忽略，保持原值', () => {
+    client.setRequestTimeout(0);
+    client.setRequestTimeout(-1);
+    client.setRequestTimeout(Number.NaN);
+    expect(client.getRequestTimeout()).toBe(120_000);
+  });
+
+  test('上下限夹取（1 秒 ~ 600 秒），防止手改 API 把超时设成 0', () => {
+    expect(client.setRequestTimeout(1)).toBe(1_000);
+    expect(client.setRequestTimeout(10_000_000)).toBe(600_000);
+  });
+});

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "nForce Tools",
-  "version": "4.11.1",
+  "version": "4.12.2",
   "description": "NForce Tools：支持订单查询、报表获取、批量数据处理、智能数据分析及 Bulk API 2.0 操作，内置 Spotlight 式全局搜索（模糊查找并直接进入功能），包含 Tools 工具模块（中午食乜抽签、批量操作）",
   "action": {
     "default_icon": {
@@ -43,7 +43,8 @@
     "https://*.crmforce.mil/*",
     "https://*.force.com.mcas.ms/*",
     "https://*.builder.salesforce-experience.com/*",
-    "https://graph.microsoft.com/v1.0/*"
+    "https://graph.microsoft.com/v1.0/*",
+    "https://ima.qq.com/*"
   ],
   "commands": {
     "toggle-side-panel": {
@@ -68,6 +69,6 @@
     "128": "icons/icon-128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.salesforce.com https://*.force.com https://*.salesforce-setup.com https://*.cloudforce.com https://*.visualforce.com https://*.sfcrmapps.cn https://*.sfcrmproducts.cn https://*.salesforce.mil https://*.force.mil https://*.cloudforce.mil https://*.visualforce.mil https://*.crmforce.mil https://*.force.com.mcas.ms https://*.builder.salesforce-experience.com https://graph.microsoft.com https://*.sharepoint.com https://*.onedrive.microsoft.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://*.salesforce.com https://*.force.com https://*.salesforce-setup.com https://*.cloudforce.com https://*.visualforce.com https://*.sfcrmapps.cn https://*.sfcrmproducts.cn https://*.salesforce.mil https://*.force.mil https://*.cloudforce.mil https://*.visualforce.mil https://*.crmforce.mil https://*.force.com.mcas.ms https://*.builder.salesforce-experience.com https://graph.microsoft.com https://*.sharepoint.com https://*.onedrive.microsoft.com https://ima.qq.com;"
   }
 }

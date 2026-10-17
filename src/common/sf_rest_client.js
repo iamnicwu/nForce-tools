@@ -63,6 +63,97 @@ const METADATA_NS = "http://soap.sforce.com/2006/04/metadata";
 const SOAP_ENV_NS = "http://schemas.xmlsoap.org/soap/envelope/";
 
 /**
+ * 单个 HTTP 请求的**默认**超时（毫秒），以及运行期可覆盖的当前值。
+ *
+ * ⚠️ 这是 **P0 修复**（2026-10-17 架构评审）：本模块此前是裸 `fetch`，没有任何超时。
+ * 后果链很具体 —— 请求 hang 住（代理半开 / 网关黑洞 / 长事务）时 `await` 永不返回，
+ * 上层 `get*Data()` 的 `finally` 也就不执行，**loading mask 永远不消失**；
+ * 面板没有地址栏、没法刷新，用户只能关掉侧边栏重开。而 401 自动续期钩子也救不了，
+ * 它挂在 `res.status` 上，而 `res` 根本没来。
+ *
+ * 为什么默认从 45s 上调到 120s（同日用户反馈）：本插件有几条**大结果集**查询
+ * （T-2 / 报表 / PCD 四个域都带 `maxFetch: 999999`），慢 org 上单次 SOQL 跑过一分钟
+ * 并不罕见 —— 45 秒会把"只是慢"误报成"链路挂了"。设置页里可以自己改成 10 ~ 600 秒
+ * （`common/prefs.js` 的 `requestTimeout`，由 `app.js` 调 `setRequestTimeout()` 灌进来）。
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+
+/** 当前生效的默认超时（毫秒）。改它只走 `setRequestTimeout()`。 */
+let currentRequestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
+
+/**
+ * 设置默认超时（毫秒）。**在设置页改成秒**，由调用方换算。
+ *
+ * 非法值（NaN / 0 / 负数）直接忽略并保持原值 —— 偏好层已经校验过一次，
+ * 这里再兜一次是为了防止"直接调 API"的调用点把超时设成 0（那等于永久挂起）。
+ * 上下夹在 1 ~ 600 秒，与 `prefs.js` 的可选范围对齐但留了更宽的余量。
+ *
+ * @param {number} ms
+ * @returns {number} 实际生效的毫秒值
+ */
+export function setRequestTimeout(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value <= 0) return currentRequestTimeoutMs;
+  currentRequestTimeoutMs = Math.min(Math.max(Math.round(value), 1_000), 600_000);
+  return currentRequestTimeoutMs;
+}
+
+/** 当前生效的默认超时（毫秒），供测试与诊断用 */
+export function getRequestTimeout() {
+  return currentRequestTimeoutMs;
+}
+
+/**
+ * 造一个超时信号。
+ *
+ * `AbortSignal.timeout` 需要 Chrome 103+（本扩展的基线远高于此），但**预览/单测
+ * 环境可能没有**，所以这里做能力检测：拿不到就返回 undefined（退化为"无超时"，
+ * 与修复前的行为一致，不会因此抛错）。
+ *
+ * @param {number} ms
+ * @returns {AbortSignal|undefined}
+ */
+function timeoutSignal(ms) {
+  if (!(ms > 0)) return undefined;
+  const factory = globalThis.AbortSignal && globalThis.AbortSignal.timeout;
+  if (typeof factory !== "function") return undefined;
+  try {
+    return factory.call(globalThis.AbortSignal, ms);
+  } catch (_) {
+    return undefined;
+  }
+}
+
+/**
+ * 把 fetch 抛出的"传输层"异常翻译成与 jsforce 同形状的 `SalesforceApiError`。
+ *
+ * 统一成 `SalesforceApiError` 有两个好处：
+ *   1. `sf_service.lastError` 一定能读到 `errorCode`（原先网络错误只有 `TypeError`，
+ *      日志里看不出是超时还是被 CSP 拦了）；
+ *   2. `app.js` 的 `isSessionAuthFailure()` 只看 `AUTH_FAILURE_CODES` 白名单，
+ *      `REQUEST_TIMEOUT` / `NETWORK_ERROR` **都不在里面** → 网络慢不会被误判成
+ *      "会话过期"，也就不会白跑一轮 Cookie 恢复。
+ *
+ * @param {*} err fetch 抛出的原生错误
+ * @param {number} timeoutMs
+ * @param {string} url
+ * @returns {SalesforceApiError}
+ */
+function toTransportError(err, timeoutMs, url) {
+  const name = err && err.name ? String(err.name) : "";
+  if (name === "TimeoutError" || name === "AbortError") {
+    return new SalesforceApiError(
+      `请求超时（${Math.round(timeoutMs / 1000)} 秒内没有响应）：${url}`,
+      { errorCode: "REQUEST_TIMEOUT" }
+    );
+  }
+  return new SalesforceApiError(
+    `请求没能到达 Salesforce（网络 / 代理 / CSP 拦截）：${(err && err.message) || err}`,
+    { errorCode: "NETWORK_ERROR" }
+  );
+}
+
+/**
  * Salesforce 返回的错误结构对齐 jsforce：
  * jsforce 会把 `[{ message, errorCode }]` 摊平到 Error 上，`sf_service` 正是靠
  * `err.errorCode` / `err.statusCode` 区分「会话真的失效」与「请求被 CSP/网络拦住」。
@@ -331,14 +422,22 @@ class MetadataClient {
       + `<soapenv:Body>${operationXml}</soapenv:Body>`
       + "</soapenv:Envelope>";
 
-    const res = await fetch(`${conn.instanceUrl}/services/Soap/m/${conn.version}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "text/xml; charset=UTF-8",
-        SOAPAction: '""',
-      },
-      body: envelope,
-    });
+    // 超时与 request() 一致：SOAP 这条是**裸 fetch**，漏了它就会有一条"永远转圈"的路
+    const endpoint = `${conn.instanceUrl}/services/Soap/m/${conn.version}`;
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/xml; charset=UTF-8",
+          SOAPAction: '""',
+        },
+        body: envelope,
+        signal: timeoutSignal(currentRequestTimeoutMs),
+      });
+    } catch (err) {
+      throw toTransportError(err, currentRequestTimeoutMs, endpoint);
+    }
     const text = await res.text();
     if (!res.ok && !/<(?:\w+:)?Fault/.test(text)) {
       throw extractApiError(text, res.status);
@@ -560,12 +659,19 @@ export class SfRestConnection {
    * 仅重试一次，不循环 —— 换来的新会话要是也 401，那就是真的没救了，
    * 继续重试只会把错误信息埋掉。
    *
-   * @param {string|{method?: string, url: string, body?: *, headers?: object}} opts
+   * 每个请求都带**超时**（默认 `DEFAULT_REQUEST_TIMEOUT_MS`，可用 `timeoutMs` 覆盖），
+   * 超时抛 `REQUEST_TIMEOUT`；重试那一趟重新计时（换会话后可能本来就是慢）。
+   *
+   * @param {string|{method?: string, url: string, body?: *, headers?: object, timeoutMs?: number}} opts
    * @returns {Promise<*>} 解析后的 JSON（204 无内容时为 null）
    */
   async request(opts) {
-    const { method, url, body, headers } =
-      typeof opts === "string" ? { method: "GET", url: opts } : opts || {};
+    const optsObject = typeof opts === "string" ? { method: "GET", url: opts } : opts || {};
+    const { method, url, body, headers } = optsObject;
+    const timeoutMs =
+      Number.isFinite(optsObject.timeoutMs) && optsObject.timeoutMs > 0
+        ? optsObject.timeoutMs
+        : currentRequestTimeoutMs;
     const sendBody =
       body === undefined || body === null
         ? undefined
@@ -575,16 +681,24 @@ export class SfRestConnection {
 
     // Authorization 每次现算：续期后 accessToken 变了，重试必须用新值。
     const send = async (absoluteUrl) => {
-      const res = await fetch(absoluteUrl, {
-        method: method || "GET",
-        headers: {
-          Authorization: `Bearer ${this.accessToken}`,
-          Accept: "application/json",
-          ...(sendBody !== undefined ? { "Content-Type": "application/json" } : {}),
-          ...(headers || {}),
-        },
-        body: sendBody,
-      });
+      let res;
+      try {
+        res = await fetch(absoluteUrl, {
+          method: method || "GET",
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+            Accept: "application/json",
+            ...(sendBody !== undefined ? { "Content-Type": "application/json" } : {}),
+            ...(headers || {}),
+          },
+          body: sendBody,
+          signal: timeoutSignal(timeoutMs),
+        });
+      } catch (err) {
+        // fetch 只会在"没拿到 HTTP 响应"的场合抛：超时、断网、CSP/权限拦截。
+        // 统一翻译，避免上层只看到一句没有上下文的 "Failed to fetch"。
+        throw toTransportError(err, timeoutMs, absoluteUrl);
+      }
       return { res, text: await res.text() };
     };
 

@@ -160,6 +160,20 @@ const LEVEL_COLORS = {
   over: "#cf1322"    // = --error-strong（突破 100% 的超额档，比 danger 更深）
 };
 
+/**
+ * 分区带的「软色」版本：只在首页的紧凑表盘上用。
+ *
+ * 为什么：首页那 4 块表盘如果都用原色（绿/黄/红三段饱和度拉满），一屏里就有
+ * 12 块高饱和色块，和旁边浅色图标摆在一起像两套设计。软色版用三个"边框色"
+ * （--success-border / --warning-border / --error-border 的字面量），
+ * 颜色仍在、但不抢；需要报警时靠 progress 弧与数值本身表达。
+ */
+const ZONE_COLORS_SOFT = {
+  ok: "#b7eb8f",
+  warn: "#ffe58f",
+  danger: "#ffccc7"
+};
+
 const ZONE_COLORS = {
   ok: "#b7eb8f",     // = --success-border（分区带用 border 档，比进度弧更柔和）
   warn: "#ffe58f",   // = --warning-border
@@ -217,8 +231,12 @@ function resizeGaugeCharts() {
   });
 }
 
-/** ECharts gauge 配置（单个指标） */
-function gaugeOption(pct) {
+/**
+ * ECharts gauge 配置（单个指标）。
+ * @param {number} pct 已用百分比
+ * @param {boolean} [compact] 首页摘要模式：不画刻度数字/分度线，弧更细、更软
+ */
+function gaugeOption(pct, compact = false) {
   const level = levelOf(pct);
   // 用量可以突破配额（pct > 100）：表盘刻度上限随之扩展，
   // 否则指针会停在 100 的位置，看不出超了多少
@@ -243,38 +261,45 @@ function gaugeOption(pct) {
         splitNumber: 2,
         // 半径从 100% 收到 78%，给刻度数字让出位置 —— 100% 时 0 与上限两个
         // 数字会被顶到画布外（实测直接裁掉）。
-        radius: "78%",
-        center: ["50%", "62%"],
+        // 首页摘要模式没有刻度数字，可以铺得更满（84%）。
+        radius: compact ? "84%" : "78%",
+        center: compact ? ["50%", "64%"] : ["50%", "62%"],
         // 转速表式分区底带：绿区 / 黄区 / 红区（含超额区）
         axisLine: {
           lineStyle: {
-            width: 12,
-            color: [
-              [z60, ZONE_COLORS.ok],
-              [z85, ZONE_COLORS.warn],
-              [1, ZONE_COLORS.danger]
-            ]
+            width: compact ? 9 : 12,
+            color: (() => {
+              const zones = compact ? ZONE_COLORS_SOFT : ZONE_COLORS;
+              return [
+                [z60, zones.ok],
+                [z85, zones.warn],
+                [1, zones.danger]
+              ];
+            })()
           }
         },
         // 当前用量进度弧（覆盖在分区带上）
         progress: {
           show: true,
-          width: 12,
+          width: compact ? 9 : 12,
           roundCap: true,
           itemStyle: { color: LEVEL_COLORS[level] }
         },
         pointer: {
-          length: "58%",
+          length: compact ? "52%" : "58%",
           width: 4,
           itemStyle: { color: GAUGE_TEXT }
         },
         anchor: {
           show: true,
-          size: 8,
+          size: compact ? 6 : 8,
           itemStyle: { color: GAUGE_TEXT }
         },
         axisTick: { show: false },
+        // 摘要模式不画分度线（与刻度数字一起省掉）：那个位置已经用不上"量"，
+        // 百分比本身就在表盘下方用 16px 写着了。
         splitLine: {
+          show: !compact,
           length: 4,
           distance: 2,
           lineStyle: { color: GAUGE_TICK, width: 1.5 }
@@ -284,7 +309,7 @@ function gaugeOption(pct) {
         // distance 4 时"0"正好落在分区带里，被进度弧的圆头盖掉一半；
         // 9px 是三个数字能同时容下的最大字号（再大就会和指针打架）。
         axisLabel: {
-          show: true,
+          show: !compact,
           distance: 10,
           fontSize: 9,
           color: GAUGE_LABEL,
@@ -308,7 +333,7 @@ function gaugeOption(pct) {
  * ECharts 现在是按需加载的（index.html 不再同步引入 1MB），因此本函数是异步的。
  * 失败时降级为纯文字显示（卡片上的百分比/用量文本仍在），不影响功能可用性。
  */
-async function initGaugeCharts(host) {
+async function initGaugeCharts(host, compact = false) {
   if (!host) return;
   try {
     await ensureECharts();
@@ -323,7 +348,7 @@ async function initGaugeCharts(host) {
     if (!Number.isFinite(pct)) return;
     try {
       const chart = echarts.init(el);
-      chart.setOption(gaugeOption(pct));
+      chart.setOption(gaugeOption(pct, compact));
       gaugeCharts.set(el, chart);
       // 窄栏（侧边栏）里容器宽度随后还会变：交给观察器在收缩/展开时重算
       if (gaugeObserver) gaugeObserver.observe(el);
@@ -554,9 +579,11 @@ function gaugeCardHtml(item) {
   const level = levelOf(e.pct);
   return `<div class="org-dash-gauge is-${level}" title="${escapeHtml(item.hint || item.key)}">
                         <div class="org-gauge-chart" data-pct="${e.pct.toFixed(1)}" role="img" aria-label="已用 ${e.pct.toFixed(1)}%"></div>
-                        <span class="org-dash-gauge-name">${escapeHtml(item.label)}</span>
-                        <span class="org-dash-gauge-value">${e.pct.toFixed(1)}%${e.over ? `<small>超额</small>` : ""}</span>
-                        <span class="org-dash-gauge-count">已用 ${fmtNum(e.used)} / ${fmtNum(e.max)}${e.over ? `（+${fmtNum(e.used - e.max)}）` : ""}</span>
+                        <span class="org-dash-gauge-text">
+                            <span class="org-dash-gauge-name">${escapeHtml(item.label)}</span>
+                            <span class="org-dash-gauge-value">${e.pct.toFixed(1)}%${e.over ? `<small>超额</small>` : ""}</span>
+                            <span class="org-dash-gauge-count">已用 ${fmtNum(e.used)} / ${fmtNum(e.max)}${e.over ? `（+${fmtNum(e.used - e.max)}）` : ""}</span>
+                        </span>
                     </div>`;
 }
 
@@ -671,7 +698,8 @@ function renderHomePanel() {
   cleanupGauges();
   host.innerHTML = panelShell(`${alertHtml}<div class="org-dash-grid">${metrics}</div>`, "");
   // 异步初始化（内部会确保 ECharts 已加载）
-  initGaugeCharts(host).catch((e) => log.warn("初始化首页仪表盘失败:", e));
+  // 首页用摘要模式（无刻度数字）：4 块小表盘并排在侧边栏里，刻度数字只会糊成一团
+  initGaugeCharts(host, true).catch((e) => log.warn("初始化首页仪表盘失败:", e));
   if (overs || dangers || warns) {
     // 标题旁的计数徽标
     const title = host.querySelector(".org-dash-title");

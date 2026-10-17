@@ -22,7 +22,7 @@
  * 后者跑在客户页面上。所以这里只依赖 `logger.js` / `api_version.js` / `shortcut.js`
  * 这三个零依赖模块，千万不要 import `sf_rest_client.js` 之类会把整个客户端打进页面的东西。
  */
-import { createLogger } from "./logger.js";
+import { createLogger, maskSecret } from "./logger.js";
 import { DEFAULT_API_VERSION, parseApiVersion } from "./api_version.js";
 // 快捷键的规范化 / 校验（纯函数）。本模块被逐字复制的 SW 静态 import，
 // 所以 shortcut.js 也必须零依赖、且只在函数里读 navigator（见该文件头部）。
@@ -30,9 +30,31 @@ import { normalizeAccelerator, SEARCH_PANEL_SHORTCUT_DEFAULT } from "./shortcut.
 
 const log = createLogger("PREFS");
 
+/**
+ * 「请求超时」的取值范围与默认值（单位：秒）。
+ *
+ * 为什么默认 120 秒（2026-10-17 用户反馈后从 45 秒上调）：本插件有若干**大结果集**查询
+ * （T-2 的 `maxFetch: 999999`、报表、PCD 四个域），慢 org 上单次 SOQL 跑过一分钟并不罕见；
+ * 45 秒会把"只是慢"误判成"链路挂了"，表现为一条假报错。
+ *
+ * 下限 10 秒是为了不让用户把它调到"随便就超时"；上限 600 秒是因为超过这个数量级
+ * 更该换 Bulk API，而不是继续等一条同步查询。
+ */
+export const REQUEST_TIMEOUT_MIN_SEC = 10;
+export const REQUEST_TIMEOUT_MAX_SEC = 600;
+export const REQUEST_TIMEOUT_DEFAULT_SEC = 120;
+
 /** storage 里的键名。键名带 `sf_` 前缀，与 `sf_session_id` / `sf_instance_url` 保持一致。 */
 export const PREF_KEYS = Object.freeze({
   apiVersion: "sf_api_version",
+  /**
+   * 单次 Salesforce 请求的超时（秒）。
+   *
+   * 真正的执行点在 `common/sf_rest_client.js` 的 `setRequestTimeout()` —— 那边是
+   * 协议层、不 import 本模块（避免把偏好层拖进"只跑协议"的上下文），由 `app.js`
+   * 在载入偏好后与应用启动时把秒数换算成毫秒喂过去。
+   */
+  requestTimeout: "sf_request_timeout_sec",
   /**
    * 全局搜索：**插件页面内**那条快捷键。
    *
@@ -41,19 +63,69 @@ export const PREF_KEYS = Object.freeze({
    * `biz/prefs_panel.js` 的说明），**不在本模块里**。
    * 这里存的是插件自己页面里的 DOM 监听用的那条。
    */
-  searchShortcut: "sf_search_shortcut"
+  searchShortcut: "sf_search_shortcut",
+
+  /**
+   * ima 知识库同步（2026-10-17）：三条一串。
+   *
+   * 凭证来自 https://ima.qq.com/agent-interface（ima 的 OpenAPI，不是 MCP），
+   * 存本机 storage —— 它们决定了"历史能不能存进知识库"，与 Salesforce 连接无关，
+   * 所以放在偏好里而不是 `biz/state.js`。
+   *
+   * ⚠️ `imaApiKey` 是**密钥**：SPECS 里标了 `secret: true`，写值时的日志会走
+   * `maskSecret()`，否则 API Key 会明文躺在 DevTools 控制台里（K 组只拦裸 console，
+   * 拦不住"logger.info 了不该 log 的东西"）。
+   */
+  imaClientId: "ima_openapi_clientid",
+  imaApiKey: "ima_openapi_apikey",
+  imaKbId: "ima_kb_id"
 });
 
 /** 缺省值。**只在这里写一次**，供 `loadPrefs()` 填充缺失项与「恢复默认」使用。 */
 export const PREF_DEFAULTS = Object.freeze({
   [PREF_KEYS.apiVersion]: DEFAULT_API_VERSION,
+  [PREF_KEYS.requestTimeout]: REQUEST_TIMEOUT_DEFAULT_SEC,
   // 搜索快捷键：跨平台别名 Mod = mac 上的 ⌘、其它平台的 Ctrl
-  [PREF_KEYS.searchShortcut]: SEARCH_PANEL_SHORTCUT_DEFAULT
+  [PREF_KEYS.searchShortcut]: SEARCH_PANEL_SHORTCUT_DEFAULT,
+  // ima：空串 = 未配置（同步入口据此提示"先去设置里填"）
+  [PREF_KEYS.imaClientId]: "",
+  [PREF_KEYS.imaApiKey]: "",
+  [PREF_KEYS.imaKbId]: ""
 });
 
 /* ------------------------------------------------------------------ *
  * 各键的解析器：合法则返回规范化后的值，非法返回 null
  * ------------------------------------------------------------------ */
+
+/**
+ * 自由文本解析器（ima 那三条用）。
+ * 允许空串 —— 空串的语义是"清空/未配置"，不是非法值；
+ * 超长则拒绝（storage 单键 8MB 不会撞，但粘贴错了东西能早点报出来）。
+ * @param {number} max
+ */
+function parseFreeText(max) {
+  return (raw) => {
+    if (typeof raw !== "string") return null;
+    const value = raw.trim();
+    if (value.length > max) return null;
+    return value;
+  };
+}
+
+/**
+ * 「请求超时」解析器：只接受 10 ~ 600 的**整数秒**。
+ *
+ * 刻意收整数、不收 "1.5" —— 输入框是 `type=number step=5`，
+ * 允许小数只会让"我明明填了 120"和实际值不一致。
+ * 空串按非法处理（超时没有"清空"语义，要恢复默认请用「恢复默认」按钮）。
+ */
+function parseTimeoutSeconds(raw) {
+  if (raw === "" || raw === null || raw === undefined) return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || !Number.isInteger(value)) return null;
+  if (value < REQUEST_TIMEOUT_MIN_SEC || value > REQUEST_TIMEOUT_MAX_SEC) return null;
+  return value;
+}
 
 /**
  * 每个键的解析器 + 出错时给用户看的话。
@@ -64,10 +136,32 @@ const SPECS = Object.freeze({
     where: "API 版本",
     howto: "请填 20.0 ~ 70.9 之间的数字（如 67.0）"
   },
+  [PREF_KEYS.requestTimeout]: {
+    parse: parseTimeoutSeconds,
+    where: "请求超时",
+    howto: `请填 ${REQUEST_TIMEOUT_MIN_SEC} ~ ${REQUEST_TIMEOUT_MAX_SEC} 之间的整数秒（默认 ${REQUEST_TIMEOUT_DEFAULT_SEC}）`
+  },
   [PREF_KEYS.searchShortcut]: {
     parse: normalizeAccelerator,
     where: "搜索快捷键",
     howto: "形如 Mod+K / Alt+Shift+S，且必须包含 Ctrl / ⌘ / Alt 之一（主键支持字母、数字、F1–F12）"
+  },
+  [PREF_KEYS.imaClientId]: {
+    parse: parseFreeText(256),
+    where: "ima Client ID",
+    howto: "在 ima 的 agent-interface 页面创建的 Client ID，通常是一串不含空格的字符"
+  },
+  [PREF_KEYS.imaApiKey]: {
+    parse: parseFreeText(512),
+    where: "ima API Key",
+    howto: "与 Client ID 一同生成的 API Key",
+    // 密钥：写值日志走 maskSecret（见 setPref）
+    secret: true
+  },
+  [PREF_KEYS.imaKbId]: {
+    parse: parseFreeText(256),
+    where: "ima 知识库 ID",
+    howto: "在设置里点「测试并加载知识库」后从下拉里选，不要手抄"
   }
 });
 
@@ -92,6 +186,11 @@ export function getAllPrefs() {
 /** 当前生效的 API 版本（规范化的 `"NN.N"`）。 */
 export function getApiVersion() {
   return getPref(PREF_KEYS.apiVersion);
+}
+
+/** 当前生效的请求超时（**秒**）。换成毫秒由调用方做（`× 1000`）。 */
+export function getRequestTimeoutSeconds() {
+  return getPref(PREF_KEYS.requestTimeout);
 }
 
 /**
@@ -172,7 +271,8 @@ export async function setPref(key, raw) {
     _emit();
     return { ok: false, value: parsed, error: "已应用到本次会话，但保存到本地失败：" + (e.message || e) };
   }
-  log.info(`${spec.where}已保存为 ${JSON.stringify(parsed)}`);
+  const shown = spec.secret ? (parsed ? maskSecret(parsed) : "(已清空)") : JSON.stringify(parsed);
+  log.info(`${spec.where}已保存为 ${shown}`);
   _emit();
   return { ok: true, value: parsed };
 }
