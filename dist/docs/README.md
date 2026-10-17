@@ -279,11 +279,30 @@ npm run build          # 产出 dist/（先裁剪 antd.min.css，再 vite build�
 npm run check:ui       # UI 一致性自检：磁贴↔功能页、样式令牌、资源可达性…（退出码 1 = 有 ERROR）
 npm run check:coverage # 「每个功能都有渲染用例」自检（加了磁贴却忘了加用例会在这里失败）
 npm test               # 单元测试（jest，直接跑 src/ 的原生 ESM）
+npm run verify         # 上面几项串起来跑（提交 / 发版前用这个）
 ```
 
 > 想立刻看效果：用「加载已解压的扩展程序」直接选 **`src/`**（原生 ES Module，改完刷新页面即生效）；
 > 想验证打包产物就选 **`dist/`**（改完 `src/` 记得 `npm run build` 重新生成）。
 > `dist/` 已纳入版本管理，改动要**单独提交一个 commit**（CI 会核对它与 `src/` 是否同步）。
+
+### 分支 / PR / 发版
+
+改动一律走 **分支 → PR → review 后合并**，`main` 只接受合并：
+
+```bash
+git switch main && git pull
+git switch -c feat/xxx     # feat / fix / ui / docs / chore
+npm run verify             # 构建 + 自检 + 单测
+git push -u origin feat/xxx
+```
+
+合并到 `main` 后，GitHub Actions 按版本号决定发不发版：**`vX.Y.Z` tag 不存在**时自动构建、
+把 `dist/` 打成 `nforce-tools-X.Y.Z.zip`、打 tag 并发布 Release（更新说明由 PR 自动生成）；
+tag 已存在则只跑 CI、跳过发版。
+
+> 版本号写在两处且必须一致：`src/manifest.json` 与 `package.json`。
+> 完整规则（分支命名、什么改动该升哪个位、如何手动补发）见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 开发须知（改源码前必读）
 
