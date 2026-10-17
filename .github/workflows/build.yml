@@ -12,8 +12,10 @@ name: Build & Verify
 on:
   push:
     branches: [ "main" ]
+  # 不带 branches 过滤：**所有** PR 都跑 CI。
+  # 为什么：PR 的 base 不一定总是 main —— 两个改动互相依赖时会用「堆叠 PR」
+  # （B 基于 A 的分支），这类 PR 同样是"合并前必须验过"的，按 base=main 过滤会把它们漏掉。
   pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
@@ -40,6 +42,11 @@ jobs:
 
     - name: UI 一致性自检
       run: npm run check:ui
+
+    # 「每个功能都有渲染用例」——加了磁贴却忘了加用例会在这里失败
+    # （与 check:ui 互补：那边看标记，这边看用例覆盖）
+    - name: 功能覆盖自检
+      run: npm run check:coverage
 
     - name: 单元测试
       run: npx jest

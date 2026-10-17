@@ -12,6 +12,7 @@
     "clean": "rimraf dist",
     "check:ui": "node tools/check-ui.mjs",
     "check:coverage": "node tools/check-test-coverage.mjs",
+    "verify": "npm run build && npm run check:ui && npm run check:coverage && npm test",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
