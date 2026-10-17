@@ -115,6 +115,14 @@
     --fs-3xl: 24px;  /* 一级标题 */
     --fs-4xl: 30px;  /* 页面主标题 */
 
+    /* --- 行高刻度。原来正文 1.5715、按钮/徽标走浏览器默认的 normal（≈1.2）、
+           各处再散落 1.35 / 1.6 等值 —— 同样 13px 的文字，行高能差 5px，
+           并排看就是"字体不齐"。现在只有三档 --- */
+    --lh-tight: 1.3;   /* 标题、标签：单行紧凑 */
+    --lh-normal: 1.6;  /* 正文、按钮、表单控件 */
+    --lh-relaxed: 1.75; /* 长段落说明 */
+
+
     /* --- 尺寸刻度：仅用于图标（<i> / <svg> 的 font-size）---
            原来图标尺寸混在 font-size 里，分不清是"字大"还是"图标大" --- */
     --icon-sm: 15px;
@@ -194,7 +202,45 @@ body {
     background-color: var(--bg-page-mid);
     font-family: var(--font-sans);
     color: var(--text-primary);
-    line-height: 1.5715;
+    line-height: var(--lh-normal);
+    /* 数字等宽（表格里的百分比、行数不会随位数左右跳） */
+    font-variant-numeric: tabular-nums;
+}
+
+/* 表单控件默认不继承**行高**：Chrome 给 button/input 的是 line-height: normal
+   （≈1.2），于是按钮里的文字比同一行的正文紧 5px —— 这是"字体不齐"最隐蔽的一处。 */
+button,
+input,
+select,
+textarea,
+optgroup {
+    font-size: inherit;
+    line-height: inherit;
+}
+
+/* 行内代码 / 预格式块统一走等宽令牌。
+   以前没有任何规则管它们，全靠浏览器 UA 的 `monospace`（在 macOS 上是 Courier 一类的
+   老字体），和日志、Log ID 区域用的 --font-mono 完全是两副面孔。 */
+code,
+kbd,
+samp,
+pre {
+    font-family: var(--font-mono);
+}
+
+/* 标题：全部收进字号刻度 + 600 字重 + 紧凑行高。
+   之前裸 <h3> 用的是 UA 默认值（1.17em → 16.38px / 700），
+   和卡片标题（16px / 600）并排就露馅了。 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: inherit;
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    line-height: var(--lh-tight);
 }
 
 /* 表单控件默认不继承字族（浏览器 UA 样式会回退到 Arial），必须显式声明 */
@@ -3356,6 +3402,9 @@ optgroup {
     width: 100%;
     padding: 6px 2px;
     font-family: inherit;
+    /* <button> 不继承字号，不写就掉进 UA 的 13.3333px（首页唯一一处不在刻度上的字号） */
+    font-size: var(--fs-xs);
+    line-height: var(--lh-tight);
     background: transparent;
     border: 0;
     border-radius: 14px;
@@ -4909,8 +4958,8 @@ body.folder-sheet-open {
 .u-fs-icon-2xl { font-size: var(--icon-2xl); }
 .u-fw-500 { font-weight: 500; }
 .u-fw-600 { font-weight: 600; }
-.u-font-mono { font-family: monospace; }
-.u-font-code { font-family: 'Consolas', 'Monaco', monospace; }
+.u-font-mono { font-family: var(--font-mono); }
+.u-font-code { font-family: var(--font-mono); }
 .u-lh-1-6 { line-height: 1.6; }
 .u-text-left { text-align: left; }
 .u-text-center { text-align: center; }
@@ -5114,7 +5163,7 @@ body.folder-sheet-open {
 .view-log-tree {
     background-color: var(--bg-tertiary);
     border: 1px solid var(--border-light);
-    font-family: 'Consolas', 'Monaco', monospace;
+    font-family: var(--font-mono);
     font-size: var(--fs-sm);
 }
 

@@ -95,6 +95,16 @@ const FONT_SIZE_TOKEN_RE = /^var\(--(?:fs-(?:xs|sm|base|lg|xl|2xl|3xl|4xl)|icon-
 // 相对/继承值随父级缩放，不属于绝对刻度表，放行
 const FONT_SIZE_RELATIVE = new Set(["inherit", "0", "85%", "100%"]);
 
+// 允许的字族写法：只有两个令牌和 inherit。
+// 为什么卡这么死：字族一旦就地写死，中文字体回退、等宽字体就各写各的 ——
+// 典型症状是"日志/代码块比正文瘦一号"（2026-10-18 全站统一前有 3 种写法：
+// monospace、'Consolas','Monaco',monospace、以及一份手抄的系统栈）。
+const FONT_FAMILY_ALLOWED = new Set([
+  "var(--font-sans)",
+  "var(--font-mono)",
+  "inherit"
+]);
+
 // 允许出现在 :root 之外（即组件样式里）的硬编码颜色。
 // 值 = 当前基线出现次数，超出即 WARN（防止靠"多写几处"绕过收敛）。
 const HEX_ALLOWLIST = {
@@ -523,6 +533,7 @@ function collectStyleFiles() {
 /** font-size 违规 + 硬编码颜色统计 */
 function parseStyleGuards() {
   const fontSizeOffenders = [];
+  const fontFamilyOffenders = [];
   const hexOffenders = []; // 不在白名单里的 hex
   const hexCount = new Map(); // hex -> 出现次数（含白名单内的）
 
@@ -534,6 +545,13 @@ function parseStyleGuards() {
         if (FONT_SIZE_TOKEN_RE.test(v) || FONT_SIZE_RELATIVE.has(v)) continue;
         fontSizeOffenders.push({ file: rel(f), line: i + 1, value: v });
       }
+      // 字族只允许两个令牌 + inherit：曾经有 .u-font-mono: monospace、
+      // .u-font-code: Consolas, Monaco 各写一套，日志与代码块的字体和正文对不上
+      for (const m of line.matchAll(/font-family\s*:\s*([^;}"'\n]+)/g)) {
+        const v = m[1].trim().replace(/\s+/g, " ");
+        if (FONT_FAMILY_ALLOWED.has(v)) continue;
+        fontFamilyOffenders.push({ file: rel(f), line: i + 1, value: v });
+      }
       for (const m of line.matchAll(/#[0-9a-fA-F]{3,8}\b/g)) {
         const hex = m[0].toLowerCase();
         hexCount.set(hex, (hexCount.get(hex) || 0) + 1);
@@ -541,7 +559,7 @@ function parseStyleGuards() {
       }
     });
   }
-  return { fontSizeOffenders, hexOffenders, hexCount };
+  return { fontSizeOffenders, fontFamilyOffenders, hexOffenders, hexCount };
 }
 
 /**
@@ -1328,6 +1346,19 @@ function run() {
     );
   }
 
+  if (style.fontFamilyOffenders.length) {
+    add(
+      "ERROR",
+      "I. 样式守卫",
+      `发现 ${style.fontFamilyOffenders.length} 处非令牌字体（字族会各写各的，全站字体就不统一了）`,
+      style.fontFamilyOffenders
+        .map((o) => `  ${o.value}  →  ${o.file}:${o.line}`)
+        .join("\n") +
+        "\n只允许 var(--font-sans) / var(--font-mono) / inherit；" +
+        "\n等宽场景用 --font-mono（它带中文回退），不要写 monospace / Consolas"
+    );
+  }
+
   if (style.hexOffenders.length) {
     const byHex = new Map();
     for (const o of style.hexOffenders) {
@@ -1816,6 +1847,7 @@ function main() {
           sections: sections.size,
           style: {
             fontSizeOffenders: style.fontSizeOffenders.length,
+            fontFamilyOffenders: style.fontFamilyOffenders.length,
             hexOffenders: style.hexOffenders.length,
             hexDistinct: style.hexCount.size,
             notifyOffenders: notif.offenders.length
@@ -1849,6 +1881,7 @@ function main() {
     console.log(`  首页磁贴 ${tiles.length} 个 · 详情页 section ${sections.size} 个 · 图标映射 ${parseMappedIcons()?.size ?? 0} 个`);
     console.log(
       `  样式守卫：font-size 越界 ${style.fontSizeOffenders.length} 处 · ` +
+      `非令牌字体 ${style.fontFamilyOffenders.length} 处 · ` +
         `硬编码色 ${style.hexOffenders.length} 处（残留 ${style.hexCount.size} 种）· ` +
         `通知缺 type ${notif.offenders.length} 处`
     );
