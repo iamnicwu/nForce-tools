@@ -13,7 +13,19 @@ import { createLogger } from "../common/logger.js";
 
 const log = createLogger("SCHEDULE");
 import { appState } from "./state.js";
-import { showNotification } from "../common/utils.js";
+import { showNotification, formatDateTime } from "../common/utils.js";
+
+/**
+ * 触发记录（与 `background.js` 的 `FIRED_LOG_KEY` **逐字一致** —— storage 键是跨上下文的协议）。
+ *
+ * 为什么页面这边也要知道它：本功能本质是**提醒**，而提醒的接收方是页面。
+ * 侧边栏一收，`ALARM_TRIGGERED` 就没有接收者了 —— 以前的表现是"任务创建了但从不触发"。
+ * 现在 SW 会先把每一次触发落盘，页面启动时用 `flushMissedAlarmReminders()` 补一条汇总。
+ */
+const FIRED_LOG_STORAGE_KEY = "schedule_fired_log";
+
+/** 本页打开的时刻：比它更早的触发记录才算"错过"（之后的会走实时通知） */
+const PAGE_STARTED_AT = Date.now();
 
 export async function loadScheduleJobs() {
     const loadingEl = document.getElementById("schedule-jobs-loading");
@@ -331,14 +343,100 @@ export async function resumeScheduleJob(alarmName) {
     }
 }
 
-// 监听来自 background 的 alarm 触发消息
+/* ============================================================
+ * 触发记录：把"页面不在时错过的那几次"补成可见的提醒
+ * ============================================================ */
+
+/** 读一次触发记录（任何异常都退化成空数组，绝不阻断启动流程） */
+async function readFiredLog() {
+    try {
+        const stored = await chrome.storage.local.get(FIRED_LOG_STORAGE_KEY);
+        const list = stored ? stored[FIRED_LOG_STORAGE_KEY] : null;
+        return Array.isArray(list) ? list : [];
+    } catch (e) {
+        log.debug("读取定时任务触发记录失败:", e);
+        return [];
+    }
+}
+
+/**
+ * 把"实时通知已经弹过"的那条记录摘掉。
+ *
+ * 不摘的后果：那一项会在下次打开页面时被当成"错过"，同一次触发提醒两遍。
+ * 调用时机安全 —— SW 是**先把记录落盘、再广播**（见 `background.js` 的
+ * `handleAlarmFired`），所以这里读到的记录一定包含刚触发的那条。
+ */
+async function consumeFiredEntry(alarmName) {
+    try {
+        const list = await readFiredLog();
+        const index = list.findIndex((entry) => entry && entry.name === alarmName);
+        if (index < 0) return;
+        list.splice(index, 1);
+        await chrome.storage.local.set({ [FIRED_LOG_STORAGE_KEY]: list });
+    } catch (e) {
+        log.debug("摘除已通知的触发记录失败（下次可能重复提醒一次）:", e);
+    }
+}
+
+/**
+ * 启动时补提醒：把"本页打开之前就已经触发过"的记录汇总成一条通知。
+ *
+ * 这是 P0 修复的**用户可见那一半** —— 以前页面没开就等于什么也没发生，
+ * 现在至少会告诉用户"你错过了什么"。返回补上的条数（0 表示没有可补的）。
+ *
+ * @returns {Promise<number>}
+ */
+export async function flushMissedAlarmReminders() {
+    if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return 0;
+
+    const list = await readFiredLog();
+    if (!list.length) return 0;
+
+    const missed = list.filter((entry) => entry && Number(entry.at) < PAGE_STARTED_AT);
+    const rest = list.filter((entry) => !(entry && Number(entry.at) < PAGE_STARTED_AT));
+
+    try {
+        // 补报过的不留（否则每次打开都会重报）；本页打开后触发的也留在原处，等实时通知自己摘
+        if (rest.length) {
+            await chrome.storage.local.set({ [FIRED_LOG_STORAGE_KEY]: rest });
+        } else {
+            await chrome.storage.local.remove(FIRED_LOG_STORAGE_KEY);
+        }
+    } catch (e) {
+        log.debug("清理触发记录失败（下次可能重复提醒）:", e);
+    }
+
+    if (!missed.length) return 0;
+
+    if (missed.length === 1) {
+        const one = missed[0];
+        showNotification(
+            `定时提醒「${one.label || one.name}」曾在 ${formatDateTime(one.at)} 触发 —— 当时插件页面没有打开`,
+            "info"
+        );
+    } else {
+        const newest = missed.slice(-3).map((entry) => `「${entry.label || entry.name}」`).join("、");
+        showNotification(
+            `错过了 ${missed.length} 个定时提醒：${newest}${missed.length > 3 ? "等" : ""}（当时插件页面没有打开）`,
+            "info"
+        );
+    }
+    log.info(`补报 ${missed.length} 条错过的定时提醒`);
+    return missed.length;
+}
+
+// 监听来自 background 的 alarm 触发消息（页面开着时的实时提醒）
 if (typeof chrome !== 'undefined' && chrome.runtime) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // 只处理 ALARM_TRIGGERED 消息，其他消息类型不干预，交给其他监听器处理
         if (message.type === 'ALARM_TRIGGERED') {
+            const label = (message.config && message.config.originalName) || message.alarm.name;
             log.info('页面收到 Alarm 触发:', message.alarm.name);
-            showNotification(`定时任务 "${message.alarm.name}" 已触发!`, "info");
-            
+            showNotification(`定时提醒「${label}」到点了`, "info");
+
+            // 摘掉刚落盘的那条记录，避免下次打开页面时被当成"错过"再报一次
+            consumeFiredEntry(message.alarm.name);
+
             // 触发一个自定义事件，让页面可以处理
             const event = new CustomEvent('scheduleJobTriggered', {
                 detail: {

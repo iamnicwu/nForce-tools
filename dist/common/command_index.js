@@ -115,6 +115,35 @@ export const CONNECTION_REQUIRED_STEPS = new Set([
 ]);
 
 /**
+ * 「公用功能」（首页布局里 id 为 `tools` 的那一组）的 step 集合 ——
+ * **在侧边栏里点开时强制改成整页（新标签页）打开**。
+ *
+ * 为什么：这一组是跨场景反复用的工具（Bulk / 匿名 Apex / 日志分析 / SOQL / 导入 / 元数据 /
+ * 事件监听 / 定时任务 / Order 历史），经常要铺开看宽表格与长文本，侧边栏那 400px 不够用；
+ * 而其它功能（LTS 日数据、PCD、报表这类）在侧边栏里点着看反而更顺手。
+ *
+ * ⚠️ 这里**不存 step 列表**：单一数据源是 `rules/ui_layout.json` 的分组，
+ * `biz/ui_layout.js` 在布局生效后把该组的 step 推过来（`setFullPageSteps`）。
+ * 所以往「工具」组里加功能不用改这里，也不会漂移。
+ * 其它宿主（已经是标签页）不受影响 —— 判定在 `biz/ui.js` 的 `showSection`。
+ */
+const fullPageSteps = new Set();
+
+/** 由 `biz/ui_layout.js` 在布局生效后调用（分组 id = tools） */
+export function setFullPageSteps(steps) {
+  fullPageSteps.clear();
+  (steps || []).forEach((step) => {
+    const n = Number(step);
+    if (Number.isFinite(n) && n > 0) fullPageSteps.add(n);
+  });
+}
+
+/** 这个功能是不是「应该整页打开」的公用功能 */
+export function isFullPageStep(step) {
+  return fullPageSteps.has(Number(step));
+}
+
+/**
  * 某个功能此刻是否处于「未连接 → 锁定」状态。
  * @param {number} step
  * @param {boolean} [requiresConnection] 磁贴自己的声明（默认视为需要连接）

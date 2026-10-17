@@ -1,6 +1,6 @@
 {
   "name": "nforce-tools",
-  "version": "4.11.1",
+  "version": "4.12.2",
   "description": "NForce Tools: Chrome扩展用于Salesforce订单查询、报表获取、数据分析等",
   "main": "src/app.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "watch": "vite build --watch",
     "clean": "rimraf dist",
     "check:ui": "node tools/check-ui.mjs",
+    "check:coverage": "node tools/check-test-coverage.mjs",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

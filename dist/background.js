@@ -30,6 +30,22 @@ const TASK_CONFIGS_KEY = 'schedule_task_configs';
 // Storage key for paused tasks
 const PAUSED_TASKS_KEY = 'schedule_paused_tasks';
 
+/**
+ * 定时任务**触发记录**（P0 修复，2026-10-17）。
+ *
+ * 为什么要有它：本文件的 `onAlarm` 只是把"该提醒了"广播给插件页面，真正的处理
+ * （`showNotification` + `scheduleJobTriggered` 事件）在 `biz/schedule.js` 里 ——
+ * 而侧边栏点一下图标就会收起。页面不在时 `sendMessage` 没有接收者，用户看到的
+ * 是"任务已创建、下次执行 X"，实际什么都没发生（连一条记录都没有）。
+ *
+ * 现在改成：**先落盘、再广播**。页面在 → 实时弹提醒；页面不在 → 下次打开时
+ * 由 `flushMissedAlarmReminders()` 补一条汇总提醒。沉默变成可见。
+ */
+const FIRED_LOG_KEY = "schedule_fired_log";
+
+/** 触发记录最多留这么多条（按时间顺序，超出丢最老的） */
+const FIRED_LOG_LIMIT = 50;
+
 // 获取存储的任务配置
 async function getTaskConfigs() {
   try {
@@ -76,31 +92,69 @@ chrome.runtime.onInstalled.addListener(() => {
   initSidePanel();
 });
 
+/**
+ * 把一次触发写进 `schedule_fired_log`。
+ * 失败**不影响**广播（宁可少一条补提醒，也不能让实时提醒也发不出去）。
+ */
+async function recordAlarmFired(alarm, config) {
+  try {
+    const stored = await chrome.storage.local.get(FIRED_LOG_KEY);
+    const list = Array.isArray(stored[FIRED_LOG_KEY]) ? stored[FIRED_LOG_KEY] : [];
+    list.push({
+      name: alarm.name,
+      // 用户创建时填的名字（alarm name 会被清洗成 [a-zA-Z0-9_-]）
+      label: (config && config.originalName) || alarm.name,
+      at: Date.now()
+    });
+    await chrome.storage.local.set({ [FIRED_LOG_KEY]: list.slice(-FIRED_LOG_LIMIT) });
+  } catch (e) {
+    log.warn("记录定时任务触发失败（下次打开页面时可能少一条补提醒）:", e);
+  }
+}
+
+/**
+ * alarm 到点后的完整处理：落盘 → 广播。
+ *
+ * ⚠️ 广播失败是**正常情况**（没有任何插件页面开着），别当错误刷日志 ——
+ * 这正是加 `schedule_fired_log` 的原因。
+ */
+async function handleAlarmFired(alarm) {
+  const configs = await getTaskConfigs();
+  const config = configs[alarm.name] || null;
+
+  // 先写记录再广播：顺序反了的话，"页面刚打开、监听器还没挂"那一瞬会两头落空
+  await recordAlarmFired(alarm, config);
+
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'ALARM_TRIGGERED',
+      alarm: alarm,
+      config: config
+    });
+    log.debug("Alarm 触发通知已送达插件页面:", alarm.name);
+  } catch (e) {
+    log.info(
+      `Alarm 已记录（${alarm.name}）：当前没有打开的插件页面，下次打开时会补提醒`
+    );
+  }
+}
+
 // 监听 alarm 触发
 chrome.alarms.onAlarm.addListener((alarm) => {
   log.info("Alarm 触发:", alarm.name);
-  
-  // 异步获取任务配置
-  getTaskConfigs().then((configs) => {
-    const config = configs[alarm.name];
-    if (config) {
-      log.debug("找到任务配置:", config);
-      
-      // 发送消息给前端页面
-      chrome.runtime.sendMessage({
-        type: 'ALARM_TRIGGERED',
-        alarm: alarm,
-        config: config
-      }).catch(err => {
-        log.debug("无活动页面可接收消息:", err.message);
-      });
-    } else {
-      log.debug("未找到该 Alarm 的任务配置:", alarm.name);
-    }
-  });
+  handleAlarmFired(alarm).catch((e) => log.error("处理 Alarm 触发失败:", e));
 });
 
 const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0';
+
+/**
+ * Graph 请求超时（P0 同批修复）。
+ *
+ * 这个代理是**裸 fetch**：没有超时的话，令牌过期/网关黑洞时页面那边的
+ * `await sendMessage(...)` 会一直挂着，而调用方（`onedrive_service`）没有兜底定时器。
+ * 30 秒足够上传一批工作表；超时后给一句能照做的提示，而不是 `Graph API error (...)`。
+ */
+const GRAPH_TIMEOUT_MS = 30000;
 
 // 处理 OneDrive API 请求（代理 content script 的 fetch，避免宿主页 CSP 限制）
 async function handleOneDriveApiRequest(request, sendResponse) {
@@ -112,7 +166,12 @@ async function handleOneDriveApiRequest(request, sendResponse) {
       headers: headers || {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
-      }
+      },
+      // 能力检测：拿不到 AbortSignal.timeout 时保持旧行为（无超时），不要因此抛错
+      signal:
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(GRAPH_TIMEOUT_MS)
+          : undefined
     };
 
     if (body && (method === 'POST' || method === 'PATCH')) {
@@ -140,8 +199,14 @@ async function handleOneDriveApiRequest(request, sendResponse) {
     const data = await response.json();
     sendResponse({ success: true, data });
   } catch (error) {
-    log.error("OneDrive API 代理请求失败:", error);
-    sendResponse({ success: false, error: error.message });
+    // 超时 / 断网都走这里：给一句能照着做的提示，别把浏览器的英文原文丢给用户
+    const isTimeout =
+      error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+    const message = isTimeout
+      ? `Graph 请求超时（${GRAPH_TIMEOUT_MS / 1000} 秒）：检查网络，或到设置里确认 Graph token 是否已过期`
+      : (error && error.message) || String(error);
+    log.error("OneDrive API 代理请求失败:", message);
+    sendResponse({ success: false, error: message });
   }
 }
 
@@ -418,6 +483,8 @@ async function handleClearAllAlarms(sendResponse) {
     // 清空存储的任务配置
     await chrome.storage.local.remove(TASK_CONFIGS_KEY);
     await chrome.storage.local.remove(PAUSED_TASKS_KEY);
+    // 触发记录也一并清掉：否则清空后再打开页面，会收到一堆"错过"的旧提醒
+    await chrome.storage.local.remove(FIRED_LOG_KEY);
     
     log.info("已清除全部 Alarm");
     

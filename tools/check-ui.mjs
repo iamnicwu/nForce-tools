@@ -111,12 +111,14 @@ const HEX_ALLOWLIST = {
   //   ECharts canvas：org_limits.js 仪表盘警告色进度弧（= --warning-color）。
   "#ff4d4f": 1,
   //   ECharts canvas：org_limits.js 仪表盘危险色进度弧（= --error-color）。
-  "#b7eb8f": 1,
-  //   ECharts canvas：org_limits.js 仪表盘绿色分区底带（= --success-border）。
-  "#ffe58f": 1,
-  //   ECharts canvas：org_limits.js 仪表盘黄色分区底带（= --warning-border）。
-  "#ffccc7": 1,
-  //   ECharts canvas：org_limits.js 仪表盘红色分区底带（= --error-border）。
+  "#b7eb8f": 2,
+  //   ECharts canvas：org_limits.js 仪表盘绿色分区底带（= --success-border）；
+  //   第 2 处是首页摘要表盘的「软色」版本 ZONE_COLORS_SOFT（2026-10-17 首页改版：
+  //   4 块小表盘并排时，原色三段会让一屏出现十几块高饱和色，改用同色系的边框色）。
+  "#ffe58f": 2,
+  //   ECharts canvas：黄色分区底带 + 首页摘要表盘软色（同上）。
+  "#ffccc7": 2,
+  //   ECharts canvas：红色分区底带 + 首页摘要表盘软色（同上）。
   "#cf1322": 1
   //   ECharts canvas：org_limits.js 超额档进度弧（= --error-strong，用量 >100%）。
 };

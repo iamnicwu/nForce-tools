@@ -3,17 +3,21 @@
  *
  * 三组：
  *   ① Salesforce API 版本 —— 下拉选常用版本 + 文本框填自定义版本，存 chrome.storage.local
- *   ② 侧边栏位置        —— **只能读、不能设**，原因见 `detectPanelSide()` 上方注释
+ *   ② 请求超时          —— 单次 Salesforce 请求最多等多久（秒），大结果集查询用得上
  *   ③ 搜索快捷键        —— 两条：任意网页（只能读 + 跳 Chrome 设置页）/ 插件页面内（可录制）
  *
  * 与 `common/prefs.js` 的分工：那边只管读写与跨宿主同步，这边只管 DOM。
- * 偏好值真正"生效"（改到 sf_service 的 defaultApiVersion 与已建连接上）由 `app.js` /
- * `background.js` 订阅 `onPrefsChanged` 统一处理，所以本模块保存后只刷新自己的展示。
+ * 偏好值真正"生效"（改到 sf_service 的 defaultApiVersion、sf_rest_client 的超时、
+ * 已建连接上）由 `app.js` 的 `applyRuntimePrefs()` 统一处理，所以本模块保存后只刷新自己的展示。
  *
  * ①③ 的写路径一律走泛化的 `setPref(key, value)`：这里**不做任何值校验**，
  * 合法性由 prefs.js 的解析器负责（取值范围也只有那一份）。
  * 界面上多写一处校验，就会在改规则时漏改一处。
  * ③ 的"任意网页那条"是例外：它由 Chrome 保管，本模块只能读 + 跳转（见该组注释）。
+ *
+ * 2026-10-17：原「侧边栏位置」组已移除 —— Chrome 只给 `sidePanel.getLayout()`、
+ * 没有 `setLayout()`，扩展无法决定自己的面板在哪一侧，那一组只展示一个只读值
+ * 加一段"请去 Chrome 设置里改"，占地方且容易被误认为插件设置。说明性文字不再放设置页。
  */
 import { createLogger } from "../common/logger.js";
 import { $, on } from "../common/dom.js";
@@ -31,9 +35,12 @@ import {
   getApiVersion,
   setApiVersion,
   resetApiVersion,
+  getRequestTimeoutSeconds,
   onPrefsChanged,
   PREF_KEYS
 } from "../common/prefs.js";
+// ima 知识库同步：凭证校验与知识库清单都走 OpenAPI（见 common/ima_service.js）
+import { getImaConfig, testImaConnection } from "../common/ima_service.js";
 
 const log = createLogger("PREFS");
 
@@ -151,49 +158,58 @@ async function handleReset() {
 }
 
 /* ------------------------------------------------------------------ *
- * ② 侧边栏位置（只读）
+ * ② 请求超时
  * ------------------------------------------------------------------ */
 
 /**
- * 读取侧边栏当前在哪一侧。
+ * 把当前生效的超时（秒）显示到徽标，并回填输入框。
  *
- * ⚠️ 这里**只能读**。Chrome 的 `chrome.sidePanel` 命名空间提供
- * `getLayout()`（Chrome 140+，返回 `{ side: "left" | "right" }`），
- * 但**没有 `setLayout()`** —— 也就是说扩展在技术上无法决定自己的面板显示在左侧还是右侧，
- * 这个位置是 Chrome 的全局设置（设置 → 外观 → 侧边栏），对所有侧边栏内容统一生效。
- *
- * 所以这里不做"开关"，只做"告诉你现在在哪一侧 + 告诉你怎么改"。
- * 若将来 Chrome 补上 setLayout，只要把本函数扩展成可写即可，
- * HTML 里的按钮位置已经预留好了（.pref-controls 那一行）。
+ * 输入框里预填的是**当前值**（不是空）—— 这是个数字，用户看到 `120` 就知道
+ * 现在是 120 秒，比"空着 + 占位符写着默认值"少一步猜测。
+ * 但正在输入时不要回填，否则会把他敲到一半的数字冲掉。
  */
-async function detectPanelSide() {
-  const valueEl = $("panel-side-value");
-  if (!valueEl) return;
+function renderRequestTimeout() {
+  const seconds = getRequestTimeoutSeconds();
 
-  const api = typeof chrome !== "undefined" ? chrome.sidePanel : null;
-  if (!api || typeof api.getLayout !== "function") {
-    valueEl.textContent = "无法检测";
-    valueEl.dataset.side = "unknown";
-    valueEl.title = "需要 Chrome 140 或更高版本";
+  const badge = $("request-timeout-current");
+  if (badge) badge.textContent = `${seconds} 秒`;
+
+  const input = $("request-timeout-input");
+  if (input && input !== document.activeElement) input.value = String(seconds);
+}
+
+async function handleTimeoutSave() {
+  const input = $("request-timeout-input");
+  const raw = input ? input.value.trim() : "";
+
+  // 合法性只看 prefs.js 的解析器（范围与文案都只有那一份）
+  const result = await setPref(PREF_KEYS.requestTimeout, raw);
+  if (!result.ok) {
+    log.warn("保存请求超时被拒绝:", result.error);
+    setHint("request-timeout-hint", result.error || "保存失败", true);
+    showNotification(result.error || "请求超时保存失败", "error");
+    // 把输入框退回当前真实值，别让用户以为自己填的数生效了
+    renderRequestTimeout();
     return;
   }
 
-  try {
-    const layout = await api.getLayout();
-    const side = layout && layout.side;
-    if (side === "left" || side === "right") {
-      valueEl.textContent = side === "left" ? "左侧" : "右侧";
-      valueEl.dataset.side = side;
-      valueEl.removeAttribute("title");
-    } else {
-      valueEl.textContent = "未知";
-      valueEl.dataset.side = "unknown";
-    }
-  } catch (e) {
-    log.warn("读取侧边栏布局失败:", e);
-    valueEl.textContent = "读取失败";
-    valueEl.dataset.side = "unknown";
+  // 运行期由 app.js 的 applyRuntimePrefs() 通过 onPrefsChanged 更新，
+  // 这里只刷新展示（同 API 版本那一组的分工）
+  renderRequestTimeout();
+  setHint("request-timeout-hint", `已保存为 ${result.value} 秒，对后续请求立即生效。`, false);
+  showNotification(`请求超时已设为 ${result.value} 秒`, "success");
+}
+
+async function handleTimeoutReset() {
+  const result = await resetPref(PREF_KEYS.requestTimeout);
+  renderRequestTimeout();
+  if (!result.ok) {
+    setHint("request-timeout-hint", result.error || "恢复默认失败", true);
+    showNotification(result.error || "恢复默认失败", "error");
+    return;
   }
+  setHint("request-timeout-hint", `已恢复默认超时 ${result.value} 秒。`, false);
+  showNotification(`已恢复默认请求超时 ${result.value} 秒`, "success");
 }
 
 /* ------------------------------------------------------------------ *
@@ -206,8 +222,7 @@ async function detectPanelSide() {
  * `["onCommand","getAll"]`，`typeof update === "undefined"`（service worker 与扩展页面
  * 两个上下文都如此）。Chrome 有意把"改扩展快捷键"留给用户自己，扩展不该能抢任意组合键。
  *
- * 所以这一条与「侧边栏位置」是同一类平台限制（那边是 `sidePanel` 只有 `getLayout()`
- * 没有 `setLayout()`）：**如实告诉用户当前值 + 给一条直达 Chrome 设置页的路**。
+ * 所以这里和"改全局快捷键"是同一类平台限制：**如实告诉用户当前值 + 给一条直达 Chrome 设置页的路**。
  * 实测 `chrome.tabs.create({ url: "chrome://extensions/shortcuts" })` 是允许的
  * （不像多数 chrome:// 页面那样被拦），所以按钮能一步把人送过去。
  *
@@ -395,6 +410,229 @@ function bindSearchShortcut() {
 }
 
 /* ------------------------------------------------------------------ *
+ * ④ ima 知识库同步
+ *
+ * 三条偏好（Client ID / API Key / 知识库 ID）住在 common/prefs.js，这里只管界面。
+ * 两个刻意的设计：
+ *   · **API Key 输入框始终是空的**（placeholder 写"已保存"）。回填真实值等于把密钥
+ *     摊在屏幕上（旁边有人、或者正在录屏就泄了）。留空 = 不修改，
+ *     要改就整串重填 —— 这比"显示成 ••••"更安全，也不会出现"把掩码当成真值存回去"。
+ *   · 「测试并加载知识库」会**先保存再测**：否则用户改完 Client ID 直接点测试，
+ *     测的是上一次保存的旧凭证，成功了反而更误导。
+ * ------------------------------------------------------------------ */
+
+/** 最近一次加载到的可写知识库（只用于渲染下拉，不落盘） */
+let imaKnowledgeBases = [];
+
+/** 状态徽标 + 两个输入框 + 知识库下拉的回填 */
+function renderIma() {
+  const { clientId, apiKey, kbId, configured } = getImaConfig();
+
+  const stateEl = $("ima-state");
+  if (stateEl) {
+    if (!configured) {
+      stateEl.textContent = "未配置";
+      stateEl.dataset.state = "empty";
+    } else if (!kbId) {
+      stateEl.textContent = "待选知识库";
+      stateEl.dataset.state = "unknown";
+    } else {
+      stateEl.textContent = "已就绪";
+      stateEl.dataset.state = "set";
+    }
+  }
+
+  const clientEl = $("ima-client-id");
+  if (clientEl && clientEl !== document.activeElement) clientEl.value = clientId;
+
+  const keyEl = $("ima-api-key");
+  if (keyEl && keyEl !== document.activeElement) {
+    keyEl.value = "";
+    keyEl.placeholder = apiKey ? "API Key 已保存（留空不修改）" : "API Key";
+  }
+
+  renderImaKnowledgeBaseOptions(kbId);
+}
+
+/** 生成知识库下拉。已保存但这次没加载到列表时，补一个选项显示 ID。 */
+function renderImaKnowledgeBaseOptions(kbId) {
+  const select = $("ima-kb-select");
+  if (!select) return;
+
+  const current = kbId !== undefined ? kbId : (getImaConfig().kbId || "");
+  const options = imaKnowledgeBases.map(
+    (kb) => `<option value="${escapeAttr(kb.id)}">${escapeAttr(kb.name)}</option>`
+  );
+  if (!imaKnowledgeBases.length) {
+    options.push(`<option value="">（尚未加载知识库）</option>`);
+  }
+  if (current && !imaKnowledgeBases.some((kb) => kb.id === current)) {
+    options.unshift(`<option value="${escapeAttr(current)}">${escapeAttr(current)}（已保存）</option>`);
+  }
+  select.innerHTML = options.join("");
+  if (current) select.value = current;
+}
+
+/** 属性值转义：知识库名里可能有引号或尖括号 */
+function escapeAttr(value) {
+  return String(value === undefined || value === null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * 保存 Client ID（以及**当输入框非空时**的 API Key）。
+ * @returns {Promise<{ok: boolean, error?: string}>}
+ */
+async function persistImaCredentials() {
+  const clientEl = $("ima-client-id");
+  const keyEl = $("ima-api-key");
+  const clientId = clientEl ? clientEl.value.trim() : "";
+  const apiKey = keyEl ? keyEl.value.trim() : "";
+
+  const r1 = await setPref(PREF_KEYS.imaClientId, clientId);
+  if (!r1.ok) return r1;
+  if (apiKey) {
+    const r2 = await setPref(PREF_KEYS.imaApiKey, apiKey);
+    if (!r2.ok) return r2;
+  }
+  return { ok: true };
+}
+
+async function handleImaSave() {
+  const result = await persistImaCredentials();
+  if (!result.ok) {
+    setHint("ima-hint", result.error || "保存失败", true);
+    showNotification(result.error || "ima 凭证保存失败", "error");
+    return;
+  }
+  renderIma();
+  const { configured, kbId } = getImaConfig();
+  setHint(
+    "ima-hint",
+    configured
+      ? kbId
+        ? "凭证已保存，同步已就绪。"
+        : "凭证已保存。接着点「测试并加载知识库」，选一个目标知识库。"
+      : "Client ID 与 API Key 需要成对填写。",
+    !configured
+  );
+  showNotification(configured ? "ima 凭证已保存" : "ima Client ID 已保存（还缺 API Key）", configured ? "success" : "warning");
+}
+
+async function handleImaTest() {
+  const saved = await persistImaCredentials();
+  if (!saved.ok) {
+    setHint("ima-hint", saved.error || "保存失败", true);
+    return;
+  }
+
+  const { clientId, apiKey } = getImaConfig();
+  if (!clientId || !apiKey) {
+    setHint("ima-hint", "先填 Client ID 与 API Key 再测试。", true);
+    return;
+  }
+
+  const btn = $("ima-test");
+  const original = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "连接中…";
+  }
+  setHint("ima-hint", "正在连接 ima 并读取可写知识库…", false);
+
+  try {
+    const res = await testImaConnection();
+    if (!res.ok) {
+      setHint("ima-hint", "连接失败：" + res.error, true);
+      showNotification("ima 连接失败：" + res.error, "error");
+      return;
+    }
+
+    imaKnowledgeBases = res.list || [];
+    if (!imaKnowledgeBases.length) {
+      setHint("ima-hint", "连接成功，但这个账号下没有可写入的知识库 —— 先去 ima 里建一个（或让自己有权写入）。", true);
+      showNotification("ima 账号下没有可写入的知识库", "warning");
+      renderImaKnowledgeBaseOptions("");
+      return;
+    }
+
+    // 只有一个库时直接选中并保存："测试"这个动作本身就该把用户送到可用状态
+    const currentKb = getImaConfig().kbId;
+    const autoPick = currentKb && imaKnowledgeBases.some((kb) => kb.id === currentKb)
+      ? currentKb
+      : imaKnowledgeBases.length === 1
+        ? imaKnowledgeBases[0].id
+        : "";
+    renderImaKnowledgeBaseOptions(autoPick);
+    if (autoPick) await setPref(PREF_KEYS.imaKbId, autoPick);
+
+    const kbName = (imaKnowledgeBases.find((kb) => kb.id === autoPick) || {}).name;
+    setHint(
+      "ima-hint",
+      autoPick
+        ? `连接成功，同步目标：${kbName}。可以回查询历史里点「同步到 ima」了。`
+        : `连接成功，可写知识库 ${imaKnowledgeBases.length} 个 —— 从上面的下拉里选一个（选完自动保存）。`,
+      false
+    );
+    showNotification(
+      autoPick ? `ima 已连接：${kbName}` : `ima 已连接，共 ${imaKnowledgeBases.length} 个可写知识库`,
+      "success"
+    );
+    renderIma();
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+}
+
+async function handleImaKbChange() {
+  const select = $("ima-kb-select");
+  if (!select) return;
+  const result = await setPref(PREF_KEYS.imaKbId, select.value);
+  if (!result.ok) {
+    setHint("ima-hint", result.error || "知识库保存失败", true);
+    return;
+  }
+  const kb = imaKnowledgeBases.find((item) => item.id === select.value);
+  setHint("ima-hint", kb ? `同步目标已设为「${kb.name}」。` : "已保存知识库选择。", false);
+  showNotification("同步目标知识库已保存", "success");
+  renderIma();
+}
+
+async function handleImaClear() {
+  if (!window.confirm("清除本机保存的 ima 凭证与知识库选择？清除后「同步到 ima」会被禁用。")) return;
+  await setPref(PREF_KEYS.imaClientId, "");
+  await setPref(PREF_KEYS.imaApiKey, "");
+  await setPref(PREF_KEYS.imaKbId, "");
+  imaKnowledgeBases = [];
+  renderImaKnowledgeBaseOptions("");
+  renderIma();
+  setHint("ima-hint", "已清除本机保存的 ima 凭证。", false);
+  showNotification("已清除 ima 凭证", "info");
+}
+
+function bindImaGroup() {
+  on("ima-save", "click", handleImaSave);
+  on("ima-test", "click", handleImaTest);
+  on("ima-clear", "click", handleImaClear);
+  on("ima-kb-select", "change", handleImaKbChange);
+  // 输入框里回车 = 点保存（与 API 版本那个输入框一致）
+  for (const id of ["ima-client-id", "ima-api-key"]) {
+    on(id, "keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleImaSave();
+      }
+    });
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * 入口
  * ------------------------------------------------------------------ */
 
@@ -409,6 +647,7 @@ export function initPrefsPanel() {
     bound = true;
     buildVersionOptions();
     bindSearchShortcut();
+    bindImaGroup();
 
     on("api-version-save", "click", handleSave);
     on("api-version-reset", "click", handleReset);
@@ -419,24 +658,29 @@ export function initPrefsPanel() {
         handleSave();
       }
     });
-    on("panel-side-refresh", "click", () => {
-      detectPanelSide();
-      showNotification("已重新检测侧边栏位置", "info");
+
+    // ② 请求超时
+    on("request-timeout-save", "click", handleTimeoutSave);
+    on("request-timeout-reset", "click", handleTimeoutReset);
+    on("request-timeout-input", "keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleTimeoutSave();
+      }
     });
 
     // 另一处（标签页 / 侧边栏）改了偏好时同步展示值。
     // 只刷界面、不写回 —— prefs.js 的 storage 监听已经写过了（见其头部注释）。
     onPrefsChanged(() => {
       renderVersion();
+      renderRequestTimeout();
       renderSearchShortcut();
+      renderIma();
     });
-
-    // 用户切回本页时重测侧边栏位置：他可能刚去 Chrome 设置里把面板挪到另一侧。
-    // 这个只读调用很便宜，且没有更精确的"位置变化"事件可用。
-    window.addEventListener("focus", detectPanelSide);
   }
 
   renderVersion();
+  renderRequestTimeout();
   renderSearchShortcut();
-  detectPanelSide();
+  renderIma();
 }

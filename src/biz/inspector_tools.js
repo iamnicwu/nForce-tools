@@ -21,8 +21,10 @@ const logImport = createLogger("IMPORT");
 const logMeta = createLogger("META");
 const logEvent = createLogger("EVENT");
 import { sfConn, defaultApiVersion } from "./sf_service.js";
-import { showNotification, escapeHtml, formatDateTime } from "../common/utils.js";
+import { showNotification, escapeHtml, formatDateTime, copyText } from "../common/utils.js";
 import { requireXLSX, ensureJSZip } from "../common/lib_loader.js";
+// SOQL / Apex 共用同一份历史实现（条目结构、旧数据迁移、批量导入导出都在那边）
+import { addHistoryEntry } from "../common/history_store.js";
 
 const SOQL_MAX_RECORDS = 50000; // Data Export 单次查询的记录数上限（安全阀）
 const IMPORT_MAX_BATCH = 10000; // Data Import 单次导入的总行数上限
@@ -59,60 +61,25 @@ function getConn() {
 
 let soqlRecords = [];
 let soqlColumns = [];
+/** 最近一次执行的语句 —— 导出文件名里带上它查的对象（`soql_Order_20261017_1345.xlsx`） */
+let currentSoql = "";
 
 /**
- * 懒加载：进入 section-23 时拉取 sObject 列表，填充**对象名输入框**的 datalist
- * （`<input list="soql-object-list">` 用的是浏览器原生下拉）。
+ * 查询历史（2026-10-17 改版）。
  *
- * 注：这里原本还有个 `loadSoqlFields()`，它把字段填进 `#soql-field-list` —— 而那个 datalist
- * **没有任何输入框引用**（`list=` 从没接上），可每次改对象名都会因此白发一次 describe 请求。
- * 2026-10-17 随 SOQL 代码提示一起删掉了：字段提示现在由查询框的浮层提供
- * （`biz/soql_complete.js`），它从语句里的 `FROM <对象>` 自动判断该给哪张表的字段，
- * 不需要用户先跑到另一个框里选一次对象。
+ * 原来这里是一份 `string[]` 塞进 storage + 一个 `<select>`：最多 20 条、没有时间、
+ * 不能批量拿走。现在读写全部交给 `common/history_store.js`（旧数组会在第一次写入时
+ * 自动升级成新结构），界面交给 `biz/history_panel.js` 的可勾选面板 ——
+ * 批量导出 / 导入 / 删除 / 同步 ima 都在那个面板里，本文件只负责"查询成功后记一条"。
+ *
+ * ── 对象名输入框已移除（2026-10-17）──
+ * 它只有一个用途：给 `<datalist>` 提供 sObject 候选（`loadSoqlObjects()`），
+ * 而**字段提示从来不依赖它** —— `biz/soql_complete.js` 会自己按语句里的
+ * `FROM <对象>` 判断该给哪张表的字段，对象名清单也是自己拉的（同一次 describeGlobal
+ * 缓存，不额外发请求）。所以它属于"用户要先多做一步、却没换来任何能力"的输入框：
+ * 留着只会让人以为"不填对象就没有补全"。直接删掉，用户只管写语句。
+ * 真要对齐历史行为：以前的 `loadSoqlFields()` 早已随代码提示上线时删掉。
  */
-export async function loadSoqlObjects() {
-  const datalist = document.getElementById("soql-object-list");
-  if (!datalist || datalist.childElementCount > 0) return;
-  try {
-    // 走 `sfConn.listSObjectNames()` 而不是自己 `describeGlobal()` —— 后者会让这个 datalist
-    // 与两个输入框的代码提示**各发一次**同样的请求（同一个 org、同一份数据）。
-    // 现在一次 describeGlobal 同时服务三处，而且按 org 缓存。
-    const { names } = await sfConn.listSObjectNames();
-    datalist.innerHTML = names.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
-  } catch (e) {
-    logSoql.warn("加载对象列表失败:", e);
-  }
-}
-
-/** 对象名输入框的 datalist（这个是真的在用：`list="soql-object-list"`） */
-
-/** 保存 / 读取查询历史（chrome.storage.local，最多 20 条） */
-const SOQL_HISTORY_KEY = "soql_history";
-export async function loadSoqlHistory() {
-  return new Promise(resolve => {
-    try {
-      chrome.storage.local.get([SOQL_HISTORY_KEY], res =>
-        resolve(Array.isArray(res && res[SOQL_HISTORY_KEY]) ? res[SOQL_HISTORY_KEY] : []));
-    } catch (e) { resolve([]); }
-  });
-}
-async function saveSoqlHistory(soql) {
-  const list = await loadSoqlHistory();
-  const next = [soql, ...list.filter(q => q !== soql)].slice(0, 20);
-  try { chrome.storage.local.set({ [SOQL_HISTORY_KEY]: next }, () => {}); } catch (e) { /* ignore */ }
-  renderSoqlHistory(next);
-}
-export function renderSoqlHistory(list) {
-  const select = document.getElementById("soql-history-select");
-  if (!select) return;
-  select.innerHTML = `<option value="">-- 查询历史 --</option>` +
-    (list || []).map(q => `<option value="${escapeHtml(q)}">${escapeHtml(q.length > 80 ? q.slice(0, 80) + "…" : q)}</option>`).join("");
-}
-
-/** 供 app.js 初始化时回填历史下拉 */
-export async function initSoqlHistory() {
-  renderSoqlHistory(await loadSoqlHistory());
-}
 
 /** 执行 SOQL：jsforce query + 自动 queryMore，带记录数上限保护 */
 export async function runSoqlQuery() {
@@ -133,7 +100,9 @@ export async function runSoqlQuery() {
   exportBox.style.display = "none";
   soqlRecords = [];
   soqlColumns = [];
+  currentSoql = soql;
 
+  const startedAt = Date.now();
   try {
     // 「含已删除记录」用 scanAll 选项，**不要**调 conn.queryAll()：
     // jsforce 2.x 起已移除 queryAll 方法（改由 query(soql,{scanAll:true}) 承担），
@@ -153,7 +122,13 @@ export async function runSoqlQuery() {
     soqlRecords.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
     soqlColumns = [...colSet];
 
-    await saveSoqlHistory(soql);
+    // 记历史：命中同一条语句时只累加次数并挪到最前（见 history_store.addHistoryEntry）
+    await addHistoryEntry("soql", soql, {
+      rows: soqlRecords.length,
+      ms: Date.now() - startedAt,
+      scanAll
+    });
+
     renderSoqlResults();
     resultInfo.textContent = `共 ${soqlRecords.length} 条记录` +
       (soqlRecords.length >= SOQL_MAX_RECORDS ? "（已达单次查询上限）" : "");
@@ -183,37 +158,115 @@ export function renderSoqlResults() {
     ${soqlRecords.length > maxRows ? `<p style="color:var(--text-secondary);font-size:var(--fs-xs);margin-top:8px;">表格仅预览前 ${maxRows} 行，导出将包含全部 ${soqlRecords.length} 行。</p>` : ""}`;
 }
 
-/** 导出查询结果：xlsx 直接下载，csv 手工拼装（避免公式注入风险） */
+/* ------------------------------------------------------------------ *
+ * 导出（2026-10-17 优化）
+ *
+ * 原先只有 xlsx / csv 两个格式、文件名是 `soql_export_<时间戳>`，列宽是一律默认、
+ * CSV 也只做了引号转义。这次补了四件事：
+ *   ① 文件名带上查询的对象名（`soql_Order_20261017_1345.xlsx`）—— 一批导出好几个文件时能认出来
+ *   ② xlsx 加自动筛选 + 按内容估算列宽（长文本列不再被压成一格宽）
+ *   ③ CSV 防公式注入：`=` `+` `-` `@` 开头的单元格前面补一个单引号（Excel 会把它们当公式算）
+ *   ④ 新增 JSON 导出与「复制为 TSV」（直接粘进 Excel / 飞书表格）
+ * ------------------------------------------------------------------ */
+
+/** 从语句里取目标对象名（`FROM Order` → `Order`），取不到就返回 "result" */
+function soqlObjectName(soql) {
+  const m = /\bfrom\s+([A-Za-z0-9_]+)/i.exec(soql || "");
+  return m ? m[1] : "result";
+}
+
+/** `soql_Order_20261017_1345`（不带扩展名） */
+function soqlExportBaseName() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  const stamp =
+    `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_` +
+    `${p(d.getHours())}${p(d.getMinutes())}`;
+  // 对象名只保留合法字符，避免出现路径分隔符之类的东西
+  const objectName = soqlObjectName(currentSoql).replace(/[^A-Za-z0-9_]/g, "") || "result";
+  return `soql_${objectName}_${stamp}`;
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.style.visibility = "hidden";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** 按内容估算列宽（Excel 的字符单位）。只扫前 200 行，长表不必为此遍历全量。 */
+function estimateColumnWidths(records, columns) {
+  return columns.map((col) => {
+    let width = String(col).length + 2;
+    for (let i = 0; i < records.length && i < 200; i += 1) {
+      const v = records[i][col];
+      const len = v === null || v === undefined ? 0 : String(v).length;
+      if (len > width) width = len;
+    }
+    // 8 是下限（够看清表头），60 是上限（备注类长文本交给自动换行/手动拉宽）
+    return { wch: Math.min(60, Math.max(8, width)) };
+  });
+}
+
+/** 导出查询结果：xlsx / csv / json 三种格式 */
 export async function exportSoqlResults(format) {
   if (!soqlRecords.length) { showNotification("没有可导出的数据，请先执行查询", "warning"); return; }
-  if (format === "xlsx" && !(await requireXLSX())) return;
+  const baseName = soqlExportBaseName();
+
   try {
     if (format === "xlsx") {
+      if (!(await requireXLSX())) return;
       const ws = XLSX.utils.json_to_sheet(soqlRecords, { header: soqlColumns });
+      // 自动筛选：导出后最常见的下一步就是筛某一列
+      const lastCol = XLSX.utils.encode_col(soqlColumns.length - 1);
+      ws["!autofilter"] = { ref: `A1:${lastCol}${soqlRecords.length + 1}` };
+      ws["!cols"] = estimateColumnWidths(soqlRecords, soqlColumns);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Result");
-      XLSX.writeFile(wb, `soql_export_${Date.now()}.xlsx`);
+      XLSX.writeFile(wb, `${baseName}.xlsx`);
+    } else if (format === "json") {
+      // 用 records 原样导出（不经过字符串化再解析），字段名就是 SOQL 里的 API 名
+      downloadBlob(
+        new Blob([JSON.stringify(soqlRecords, null, 2)], { type: "application/json;charset=utf-8" }),
+        `${baseName}.json`
+      );
     } else {
-      const escCell = v => {
-        const s = v === null || v === undefined ? "" : String(v);
-        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const csv = [soqlColumns.join(",")]
-        .concat(soqlRecords.map(r => soqlColumns.map(c => escCell(r[c])).join(",")))
+      const csv = [soqlColumns.map(csvCell).join(",")]
+        .concat(soqlRecords.map(r => soqlColumns.map(c => csvCell(r[c])).join(",")))
         .join("\r\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `soql_export_${Date.now()}.csv`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // 加 BOM：否则 Excel 打开中文是乱码
+      downloadBlob(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }), `${baseName}.csv`);
     }
-    showNotification("导出成功", "success");
+    showNotification(`导出成功：${soqlRecords.length} 行`, "success");
   } catch (e) {
     logSoql.error("导出失败:", e);
     showNotification("导出失败：" + (e.message || e), "error");
   }
+}
+
+/**
+ * CSV 单元格转义。
+ * 除了引号 / 逗号 / 换行，还要防**公式注入**：以 `=` `+` `-` `@` 开头的文本
+ * 会被 Excel 当公式执行（`=HYPERLINK(...)` 这类），前缀一个单引号即可让它保持文本。
+ */
+function csvCell(value) {
+  const s = value === null || value === undefined ? "" : String(value);
+  const safe = /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+/** 复制为 TSV：粘进 Excel / 飞书表格会直接分列 */
+export async function copySoqlAsTsv() {
+  if (!soqlRecords.length) { showNotification("没有可复制的数据，请先执行查询", "warning"); return; }
+  const cell = (v) => (v === null || v === undefined ? "" : String(v)).replace(/[\t\r\n]+/g, " ");
+  const lines = [soqlColumns.join("\t")]
+    .concat(soqlRecords.map(r => soqlColumns.map(c => cell(r[c])).join("\t")));
+  await copyText(lines.join("\n"), `已复制 ${soqlRecords.length} 行（TSV，可直接粘贴到表格）`);
 }
 
 /* ======================================================================
@@ -939,12 +992,11 @@ export function onEventTypeChange() {
 
 export function initInspectorTools() {
   // 进入对应功能页时懒加载数据（复用项目统一的 nforce:section 事件）
+  // 注：23（SOQL 导出）不再有懒加载 —— 对象名输入框随 2026-10-17 那次改版一起删了，
+  // 代码提示的候选由查询框自己的浮层按需拉取（见 biz/soql_complete.js）。
   window.addEventListener("nforce:section", (e) => {
     const section = e.detail && e.detail.section;
-    if (section === 23) {
-      loadSoqlObjects();
-      initSoqlHistory();
-    } else if (section === 26) {
+    if (section === 26) {
       if (!document.getElementById("event-channel-select").childElementCount) {
         loadEventChannels();
       }

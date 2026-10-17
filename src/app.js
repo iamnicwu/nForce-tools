@@ -5,6 +5,9 @@ import { sfConn, applyApiVersion, setAuthFailureHandler } from "./biz/sf_service
 import { showNotification, describeError } from "./common/utils.js";
 import { replaceIcons, Icons } from "./common/icons.js";
 import { $, on } from "./common/dom.js";
+// 「同一动作只跑一趟」的守卫：取数末尾会自动导出、Apex 会真的执行，
+// 双击等于两次查询 / 两个文件 / 同一段 Apex 跑两遍（见该文件头）
+import { guardAction } from "./common/async_guard.js";
 import { appState } from "./biz/state.js";
 import { OneDriveWorkbookService } from "./common/onedrive_service.js";
 // 会话自动恢复：侧边栏（side panel）里没有地址栏、也没有「重载当前页」的动线，
@@ -19,10 +22,14 @@ import { markSessionReady } from "./biz/org_limits.js";
 import {
   loadPrefs,
   getApiVersion,
+  getRequestTimeoutSeconds,
   watchPrefsStorage,
   onPrefsChanged,
   PREF_KEYS
 } from "./common/prefs.js";
+// 请求超时是协议层的属性：prefs 只管存值，真正生效要在 sf_rest_client 上设。
+// 方向是 app → 协议层（与 applyApiVersion 同模式），协议层不反向依赖偏好层。
+import { setRequestTimeout } from "./common/sf_rest_client.js";
 import { initPrefsPanel } from "./biz/prefs_panel.js";
 // 全局搜索（Spotlight 式命令面板）：条目取自刚渲染完的首页布局，所以必须在
 // initUiLayout() 之后初始化，否则第一次打开会是空的。
@@ -50,6 +57,7 @@ import {
   initInspectorTools,
   runSoqlQuery,
   exportSoqlResults,
+  copySoqlAsTsv,
   handleImportFileChange,
   handleImportObjectChange,
   runDataImport,
@@ -69,7 +77,10 @@ import {
   renderRulesList,
   renderMarkdownContent,
   initLauncher,
-  goHome
+  goHome,
+  // 「公用功能」在侧边栏里点开时要改成整页打开（判定 + 打开都在 ui.js，只此一份实现）
+  shouldOpenInFullPage,
+  openSectionInFullPage
 } from "./biz/ui.js";
 import {
   processLunchFile,
@@ -131,13 +142,17 @@ import {
 import { initApexComplete } from "./biz/apex_complete.js";
 // SOQL 查询框的代码提示（同一套浮层，候选换成 SOQL 语义：对象名 / 字段 / 聚合函数）
 import { initSoqlComplete } from "./biz/soql_complete.js";
+// 历史面板（SOQL 查询历史 / Apex 执行历史）：可勾选批量导出 / 导入 / 同步到 ima 知识库
+import { mountHistoryPanel } from "./biz/history_panel.js";
 import {
   loadScheduleJobs,
   createScheduleJob,
   deleteScheduleJob,
   pauseScheduleJob,
   resumeScheduleJob,
-  clearAllScheduleJobs
+  clearAllScheduleJobs,
+  // 定时任务是「提醒」：页面不在时由 SW 落盘，启动时由它补一条汇总
+  flushMissedAlarmReminders
 } from "./biz/schedule.js";
 
 // 验证保存的 session 是否仍然有效
@@ -565,6 +580,12 @@ function flushPendingSection(reason) {
   const { step, payload } = pendingSection;
   pendingSection = null;
   log.info(`连接已可用（${reason}），进入排队中的 section-${step}`);
+  // 排队的目标也可能是个「公用功能」：这时要整页打开（载荷已进了 URL），
+  // 否则会在侧边栏里渲染一遍、用户却看不到
+  if (shouldOpenInFullPage(step)) {
+    openSectionInFullPage(step, payload);
+    return true;
+  }
   showSection(step);
   applyGotoPayload(payload);
   return true;
@@ -621,6 +642,14 @@ function applyGotoPayload(payload) {
 async function gotoSection(step, payload = null) {
   const target = Number(step);
   if (!target) return;
+
+  // 公用功能（工具组）在**侧边栏**里被跳过去时：直接开一个整页，载荷塞进 URL。
+  // 不能"先 showSection 再 applyGotoPayload" —— showSection 会把界面重定向到新标签页，
+  // 当前页却仍旧跑一遍查询（用户看不到，纯浪费 API 与时间）。
+  if (appState.is_connected && shouldOpenInFullPage(target)) {
+    openSectionInFullPage(target, payload);
+    return;
+  }
 
   if (appState.is_connected) {
     showSection(target);
@@ -863,9 +892,26 @@ function watchSessionStorage() {
   }
 }
 
+/**
+ * 把偏好里「影响运行时行为」的项应用到下层。
+ *
+ * 目前两项：
+ *   · API 版本 → `sf_service` 的 `defaultApiVersion`（还会同步已建连接上的 `version`）
+ *   · 请求超时 → `sf_rest_client` 的默认超时（偏好存**秒**，协议层要**毫秒**）
+ *
+ * 两个下层模块都**不 import prefs**（协议层不该依赖偏好层，也避免把
+ * `chrome.storage` 拖进只跑协议的上下文），所以由入口单向推过去。
+ * 启动时与"另一处改了偏好"时都走这一个函数，避免两处各写一遍换算。
+ *
+ * @param {object} prefs `prefs.js` 的完整快照（`onPrefsChanged` 给的就是它）
+ */
+function applyRuntimePrefs(prefs) {
+  applyApiVersion(prefs[PREF_KEYS.apiVersion]);
+  setRequestTimeout(Number(prefs[PREF_KEYS.requestTimeout]) * 1000);
+}
+
 // 初始化应用
-async function initApp() {
-  // 先判定显示宿主（侧边栏 / 标签页）并配置顶栏切换按钮。
+async function initApp() {  // 先判定显示宿主（侧边栏 / 标签页）并配置顶栏切换按钮。
   // 放在最前面：body 上的宿主标记越早打上越好，避免排版闪一下再变。
   let host = HOST_TAB;
   try {
@@ -885,12 +931,13 @@ async function initApp() {
   try {
     await loadPrefs();
     applyApiVersion(getApiVersion());
+    setRequestTimeout(getRequestTimeoutSeconds() * 1000);
     watchPrefsStorage();
-    // 另一处（侧边栏/标签页）改了版本 → 本页也切过去。
+    // 另一处（侧边栏/标签页）改了偏好 → 本页也切过去。
     // 注意这里不写 storage（prefs.js 已写过了），只改运行时值，避免来回触发。
-    onPrefsChanged((prefs) => applyApiVersion(prefs[PREF_KEYS.apiVersion]));
+    onPrefsChanged(applyRuntimePrefs);
   } catch (e) {
-    log.warn("偏好初始化失败，本次使用默认 API 版本:", e);
+    log.warn("偏好初始化失败，本次使用默认 API 版本与默认请求超时:", e);
   }
 
   // 从 chrome.storage.local 读取登录状态
@@ -951,6 +998,33 @@ async function initApp() {
 
   // 默认停留在「功能中心」首页，由用户点击图标进入具体功能
   goHome();
+
+  // 「公用功能」被强制整页打开时，URL 上带着 `?section=N`（见 biz/ui.js 的
+  // openSectionInFullPage）：这里直接落到那一页。
+  //   · `skipHostRedirect`：这个标签页**就是**被打开出来的那个，不能再给自己开一个；
+  //   · 载荷（orderValue / logId）跟着 URL 一起过来，落地后照常查/分析。
+  // 放在 initUiLayout 之后 —— 那时 section 都在、布局也生效了（连接门禁仍由 showSection 判）。
+  const bootParams = new URLSearchParams(location.search);
+  const bootSection = Number(bootParams.get("section"));
+  if (bootSection) {
+    const bootPayload = {};
+    if (bootParams.get("orderValue")) bootPayload.orderValue = bootParams.get("orderValue");
+    if (bootParams.get("logId")) bootPayload.logId = bootParams.get("logId");
+    const payload = Object.keys(bootPayload).length ? bootPayload : null;
+
+    if (appState.is_connected) {
+      log.info(`整页打开：直接进入 section-${bootSection}`);
+      showSection(bootSection, { skipHostRedirect: true, payload });
+      applyGotoPayload(payload);
+    } else {
+      // 新标签页刚打开时**会话往往还没就绪**（testConnection 是异步的）。这时直接
+      // showSection 会被连接门禁弹到「连接设置」页 —— 用户明明点的是某个工具，
+      // 却落在登录页，看着像"整页打开坏了"。排进 pendingSection，
+      // 连上后由 onSessionRestored → flushPendingSection 落地（与搜索跳转同一套机制）。
+      pendingSection = { step: bootSection, payload };
+      log.info(`整页打开：section-${bootSection} 排队等会话就绪`);
+    }
+  }
 
   // 绑定事件
   // 兜底：bindEvents 内部已统一改用 dom.js 的 on()（元素缺失只会 warn 不会抛），
@@ -1071,6 +1145,15 @@ async function initApp() {
       showSection(1);
     }
     showNotification("尚未连接 Salesforce：若浏览器里登录过该 org，面板会自动连上", "warning");
+  }
+
+  // 补报「本页打开之前已经触发过」的定时提醒。
+  // 定时任务的接收方是页面：面板收起时 SW 只能把触发落盘（见 background.js），
+  // 这里把它兑现成一条通知 —— 否则用户永远不知道提醒响过。
+  try {
+    await flushMissedAlarmReminders();
+  } catch (e) {
+    log.warn("补报错过的定时提醒失败（不影响其他功能）:", e);
   }
 
   // 最后才兑现「带目标功能打开」的一次性请求（在网页搜索浮层里选的功能）。
@@ -1338,9 +1421,9 @@ function bindEvents() {  // Session ID表单提交
     });
 
   // 获取当日数据表单提交
-  on("daily-data-form", "submit", function (e) {
-      e.preventDefault();
-
+  // ⚠️ 全部取数入口都过 guardAction：取数成功后会自动导出 xlsx，
+  //    双击一次就是两次查询 + 两个文件。守卫内部负责 preventDefault / 禁用按钮 / 解锁。
+  on("daily-data-form", "submit", guardAction("daily", async function () {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1351,14 +1434,12 @@ function bindEvents() {  // Session ID表单提交
         recordCountSpan.textContent = "0";
       }
 
-      // 获取当日数据
-      getDailyData();
-    });
+      // 获取当日数据（必须 await，否则守卫会在查询真正结束前就解锁）
+      await getDailyData();
+    }));
 
   // 获取 PCD 当日数据表单提交
-  on("pcd-daily-data-form", "submit", function (e) {
-      e.preventDefault();
-
+  on("pcd-daily-data-form", "submit", guardAction("pcd-daily", async function () {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1370,13 +1451,11 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 获取 PCD 当日数据
-      getPCDDailyData();
-    });
+      await getPCDDailyData();
+    }));
 
   // 获取 PCD PID Fallout 数据表单提交
-  on("pcd-pid-fallout-data-form", "submit", function (e) {
-      e.preventDefault();
-
+  on("pcd-pid-fallout-data-form", "submit", guardAction("pcd-pid-fallout", async function () {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1388,13 +1467,11 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 获取 PCD PID Fallout 数据
-      getPCDPIDFalloutData();
-    });
+      await getPCDPIDFalloutData();
+    }));
 
   // 获取 PCD QC Issue 数据表单提交
-  on("pcd-qc-issue-data-form", "submit", function (e) {
-      e.preventDefault();
-
+  on("pcd-qc-issue-data-form", "submit", guardAction("pcd-qc-issue", async function () {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1406,13 +1483,11 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 获取 PCD QC Issue 数据
-      getPCDQCIssueData();
-    });
+      await getPCDQCIssueData();
+    }));
 
   // 获取 PCD 过期数据表单提交
-  on("pcd-expired-data-form", "submit", function (e) {
-      e.preventDefault();
-
+  on("pcd-expired-data-form", "submit", guardAction("pcd-expired", async function () {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1424,8 +1499,8 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 获取 PCD 过期数据
-      getPCDExpiredData();
-    });
+      await getPCDExpiredData();
+    }));
 
   // 自定义日期复选框变化事件
   const dailyCustomDateCheckbox = $("daily-custom-date-checkbox");
@@ -1439,9 +1514,7 @@ function bindEvents() {  // Session ID表单提交
   }
 
   // 获取报表数据表单提交
-  on("report-data-form", "submit", function (e) {
-      e.preventDefault();
-
+  on("report-data-form", "submit", guardAction("report", async function () {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1453,13 +1526,11 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 获取报表数据
-      getReportData();
-    });
+      await getReportData();
+    }));
 
   // 获取T-4数据表单提交
-  on("t2-data-form", "submit", function (e) {
-      e.preventDefault();
-
+  on("t2-data-form", "submit", guardAction("t2", async function () {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1471,8 +1542,8 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 获取T-4数据
-      getT2Data();
-    });
+      await getT2Data();
+    }));
 
     // 文件上传表单提交
   on("file-upload-form", "submit", function (e) {
@@ -1539,6 +1610,30 @@ function bindEvents() {  // Session ID表单提交
 
   // SOQL 查询框的代码提示（section-23 与 Bulk）：同一套浮层，换成 SOQL 的候选逻辑
   initSoqlComplete();
+
+  // 历史面板（2026-10-17）：SOQL 查询历史 / Apex 执行历史。
+  // 两处交互完全一样，只有"点一条之后填到哪个输入框"不同 —— 界面全在
+  // biz/history_panel.js 里生成，这里只给宿主 id 与 onPick。
+  mountHistoryPanel("soql-history-host", {
+    kind: "soql",
+    onPick: (item) => {
+      const input = $("soql-query-input");
+      if (!input) return;
+      input.value = item.text;
+      input.focus();
+      showNotification(item.name ? `已载入「${item.name}」` : "已载入查询历史", "info");
+    }
+  });
+  mountHistoryPanel("apex-history-host", {
+    kind: "apex",
+    onPick: (item) => {
+      const input = $("apex-code-input");
+      if (!input) return;
+      input.value = item.text;
+      input.focus();
+      showNotification(item.name ? `已载入「${item.name}」` : "已载入执行历史", "info");
+    }
+  });
 
   // 导出当日数据按钮点击事件
   const exportDailyDataBtn = $("export-daily-data");
@@ -1622,7 +1717,7 @@ function bindEvents() {  // Session ID表单提交
   // "显示最新数据"按钮点击事件
   const getLatestDataBtn = $("get-latest-data-btn");
   if (getLatestDataBtn) {
-    getLatestDataBtn.addEventListener("click", function() {
+    getLatestDataBtn.addEventListener("click", guardAction("latest", async function() {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1634,14 +1729,14 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 从Salesforce获取数据
-      getSalesforceData();
-    });
+      await getSalesforceData();
+    }, { buttonId: "get-latest-data-btn" }));
   }
 
   // "获取 PCD/LTS 状态"按钮点击事件
   const getVVIPDataBtn = $("get-vvip-data-btn");
   if (getVVIPDataBtn) {
-    getVVIPDataBtn.addEventListener("click", function() {
+    getVVIPDataBtn.addEventListener("click", guardAction("vvip", async function() {
       // 显示loading mask
       const loadingMask = $("loading-mask");
       const recordCountSpan = $("record-count");
@@ -1653,8 +1748,8 @@ function bindEvents() {  // Session ID表单提交
       }
 
       // 从Salesforce获取数据
-      getVVIPData();
-    });
+      await getVVIPData();
+    }, { buttonId: "get-vvip-data-btn" }));
   }
 
 
@@ -2074,7 +2169,8 @@ function bindEvents() {  // Session ID表单提交
   // Bulk 操作按钮事件
   const createBulkJobBtn = $("create-bulk-job-btn");
   if (createBulkJobBtn) {
-    createBulkJobBtn.addEventListener("click", handleCreateBulkJob);
+    // 建 Job 会在服务端真的排一个作业 → 防重复
+    createBulkJobBtn.addEventListener("click", guardAction("bulk-create", handleCreateBulkJob, { buttonId: "create-bulk-job-btn" }));
   }
 
   const checkBulkJobBtn = $("check-bulk-job-btn");
@@ -2097,9 +2193,11 @@ function bindEvents() {  // Session ID表单提交
   }
 
   // Execute Anonymous 按钮事件
+  // ⚠️ 这里最需要防重复：Apex 可能含 DML，双击等于同一段代码跑两遍。
   const executeAnonymousBtn = $("execute-anonymous-btn");
   if (executeAnonymousBtn) {
-    executeAnonymousBtn.addEventListener("click", executeAnonymousCode);
+    executeAnonymousBtn.addEventListener("click",
+      guardAction("apex-execute", executeAnonymousCode, { buttonId: "execute-anonymous-btn" }));
   }
   // 执行完自动带回来的那份日志：复制正文 / 复制 Log ID / 下载 .log
   const apexLogCopyBtn = $("apex-log-copy");
@@ -2162,13 +2260,12 @@ function bindEvents() {  // Session ID表单提交
   if (exportSoqlXlsxBtn) exportSoqlXlsxBtn.addEventListener("click", () => exportSoqlResults("xlsx"));
   const exportSoqlCsvBtn = $("export-soql-csv-btn");
   if (exportSoqlCsvBtn) exportSoqlCsvBtn.addEventListener("click", () => exportSoqlResults("csv"));
-  const soqlHistorySelect = $("soql-history-select");
-  if (soqlHistorySelect) {
-    soqlHistorySelect.addEventListener("change", function () {
-      const queryInput = $("soql-query-input");
-      if (queryInput && this.value) queryInput.value = this.value;
-    });
-  }
+  const exportSoqlJsonBtn = $("export-soql-json-btn");
+  if (exportSoqlJsonBtn) exportSoqlJsonBtn.addEventListener("click", () => exportSoqlResults("json"));
+  const copySoqlTsvBtn = $("copy-soql-tsv-btn");
+  if (copySoqlTsvBtn) copySoqlTsvBtn.addEventListener("click", copySoqlAsTsv);
+  // 查询历史的载入 / 批量导出 / 导入 全在 history_panel.js 里（挂载见 bindEvents 中段），
+  // 原先那个 `#soql-history-select` 下拉已随面板改版一起删掉。
 
   // section-24 批量数据导入
   const importFileInput = $("import-file-input");

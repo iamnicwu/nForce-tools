@@ -44,9 +44,9 @@
        "这是一个数据工具"的体量感。改成「顶部略深 → 底部渐亮」的极淡冷调渐变：
        卡片看起来是浮在页面上；底色始终浅到不会压住表格与图表的可读性。
        只用在**页面级**容器（body / .admin-body），组件内部请继续用 --bg-secondary 等。 */
-    --bg-page-top: #dfe7f3;
-    --bg-page-mid: #e7ecf5;
-    --bg-page-bottom: #edf1f8;
+    --bg-page-top: #e9edf4;
+    --bg-page-mid: #f0f3f8;
+    --bg-page-bottom: #f5f7fa;
     --bg-page-gradient: linear-gradient(
         180deg,
         var(--bg-page-top) 0%,
@@ -2173,68 +2173,49 @@ optgroup {
 }
 
 /* ---------- 首页：配色与布局 ---------- */
-/* 磁贴列数 --cols：首页唯一的列数来源。
+/* 首页方格（2026-10-17 改版：手机桌面式）
    ------------------------------------------------------------------
-   原来列数是三条互相打架的规则叠出来的：基础 minmax(176px)、≤768 硬写 1fr 1fr、
-   ≤560 又改成 minmax(138px)。实测下来列数**非单调**：
-
-     viewport  300 340 360 400 480 520 560 640 720 768 800 1000 1280
-     列数        1   1   2   2   2   3   3   2   2   2   3    4    5
-     磁贴宽     224 264 139 157 197 143 156 272 312 336 227  218  227
-
-   560→640 这一档从 3 列掉回 2 列、磁贴从 156px 直接涨到 336px（.launcher-view 的
-   max-width:1200px 撞上 ≤768 那条硬写的 1fr 1fr），800px 又跳回 3 列。
-   现在收敛成一条单调的阶梯，带宽上下界按「磁贴 132~271px」定：
-
-     ≤359px → 1   ·  360~599 → 2   ·  600~899 → 3   ·  900~1099 → 4   ·  ≥1100 → 5
-
-   下限要保证两件事：① 磁贴 ≥132px，标签「T-4 Outstanding」才不会被截断；
-   ② ≥769px 时描述文字会显示（≤768px 是 display:none），磁贴 ≥196px 才能让
-   「T-4 connectivity 清单」（需 122px）完整放下。5 列是上限 —— .launcher-view
-   的 max-width 1200px 决定了 6 列时磁贴只有 193px，描述又开始截断。
-   极窄档的 359px 是从旧行为对齐来的：340px 时 1 列（磁贴 264px）、360px 才切 2 列。 */
+   以前是「分组卡片 + 标题胶囊 + 星标 + 描述」的一堆小块：8 个分组头、26 个星标、
+   26 段描述全挤在首屏，400px 侧边栏里要滚三屏才看完 —— 这就是"凌乱"的来源。
+   现在只剩一个方格：
+     · ≥2 项的分组折成**文件夹**（.folder-tile，里面 2×2 迷你预览）
+     · 1 项的分组直接是**应用图标**（.tile）
+   列数按可用宽度走 4→5→6 档，砖块固定 56px 见方，余量交给 gap 吸收；
+   侧边栏（~380px）与整页（1200px）因此是同一套视觉节奏。 */
 .launcher-view {
-    --cols: 2;
-    max-width: 1200px;
+    --cols: 4;
+    /* 图标砖块边长：首页图标与文件夹预览共用这一个值，
+       星标要按它算"贴在图标右上角"，所以必须是变量（宽屏会变大）。 */
+    --brick: 56px;
+    /* 首页是**一根柱子**：搜索框 / Org 状态 / 常用功能 / 方格共用 900px 宽并居中。
+       以前搜索与 Org 面板跟着 1200px 走、方格却限宽 900，三个左边缘对不齐 ——
+       1280px 下最明显，看起来像"没排好版"（2026-10-17 按此收口）。 */
+    max-width: 900px;
     margin: 0 auto;
 }
 
 @media (max-width: 359px) {
-    .launcher-view { --cols: 1; }
-}
-
-@media (min-width: 600px) {
     .launcher-view { --cols: 3; }
 }
 
-@media (min-width: 900px) {
-    .launcher-view { --cols: 4; }
+/* 列数按"格子别太宽"来定：砖块 56/64px 时，格子宽超过 ~120px 图标就开始散开
+   （1280px 下 6 列 = 每格 150px，图标像撒在桌面上）。所以宽屏给到 7~8 列。 */
+@media (min-width: 760px) {
+    .launcher-view { --cols: 7; }
 }
 
-@media (min-width: 1100px) {
-    .launcher-view { --cols: 5; }
+@media (min-width: 1000px) {
+    .launcher-view { --cols: 8; }
 }
 
-/* 功能分组容器 = 一张「棋盘」。
-   ------------------------------------------------------------------
-   原来每个 .launcher-group 都是 width:100% 的块、纵向排列，于是**一个只装 1 项
-   的分组也霸占一整行**：分组头 26px + 一行磁贴，右侧 4/5 全空。实测首页 8 个分组
-   里有 5 个是 1~2 项（数据分析 / OTT / CVP7 / 杂项 / 连接与环境），
-   400px 侧边栏里白扔约 300px 高度。
-
-   改成棋盘后，每个分组按「自己的磁贴数」占 1..--cols 格（--tile-count 由
-   biz/ui_layout.js 写在行内），1 项的分组只占 1 格，两个 1 项分组就并排站一行。
-   用 1/-1 之外的整数 span 是关键 —— 它能跟着 --cols 在各档自动收敛。
-
-   grid-column 里的 min() 是实测可用的（Chrome 会把 span 的数学函数解成整数）：
-   注入 --n:2/--c:3 时计算值是 `span 2`，宽度 200/300，与写死的 span 2 完全一致。
-   没有它就得为每一档、每个条目数写一条规则。 */
-#launcher-groups {
+/* 方格本体。max-width 900px：整页（1200px）里 6 列会被拉成"横幅"，
+   每格超过 ~150px 之后图标与名字之间空得发慌，所以到 900 就不再变宽。 */
+.app-grid {
     display: grid;
-    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
-    gap: 12px 8px;
-    /* 短分组不要被同行的高分组拉高 */
+    grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+    gap: 18px 4px;
     align-items: start;
+    width: 100%;
 }
 
 /* 设置类卡片里的说明文字。
@@ -2503,6 +2484,246 @@ optgroup {
     background: var(--primary-bg);
 }
 
+/* ===== 历史面板（SOQL 查询历史 / Apex 执行历史，2026-10-17）=====
+   一套样式服务两个功能（biz/history_panel.js 生成，宿主是 #soql-history-host /
+   #apex-history-host）。折叠时只占一行，展开后是工具栏 + 列表。
+
+   布局约束：侧边栏最窄 320px 左右，所以工具栏用 flex-wrap —— 四个按钮在窄栏里
+   会自动折成两行，而不是把「删除」挤出可视区。 */
+.hist-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.hist-head:has(+ .hist-body:not(.u-hidden)) {
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.hist-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 0;
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--text-primary);
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+
+.hist-caret {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    transition: transform 0.15s ease;
+}
+
+.hist-toggle.is-open .hist-caret {
+    transform: rotate(90deg);
+}
+
+.hist-count {
+    padding: 0 6px;
+    font-size: var(--fs-xs);
+    font-weight: 400;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-radius: 10px;
+}
+
+.hist-body {
+    padding: 10px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.hist-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+/* 三个批量操作等分一行。侧边栏最窄约 360px，挤在「全选」同一行会被折成三行
+   （每个按钮自带图标 + 两个汉字，最窄也要 70px 左右） */
+.hist-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.hist-actions .ant-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-right: 4px;
+    padding-left: 4px;
+}
+
+.hist-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fs-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+}
+
+.hist-selected {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+}
+
+/* 筛选框与「全选」同一行：名字筛选是查找历史的主要手段，位置要显眼但别多占一行 */
+.hist-filter {
+    flex: 1 1 120px;
+    min-width: 100px;
+    padding: 2px 8px;
+    font-size: var(--fs-xs);
+}
+
+.hist-list {
+    overflow-y: auto;
+    max-height: 260px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+}
+
+/* 空状态：与 .hist-list 的边框保持同一高度感，避免展开后跳一下 */
+.hist-list:empty {
+    display: none;
+}
+
+.hist-empty {
+    padding: 16px 12px;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.hist-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.hist-item:last-child {
+    border-bottom: 0;
+}
+
+.hist-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.hist-item-check {
+    flex: 0 0 auto;
+    margin: 0;
+    cursor: pointer;
+}
+
+.hist-item-main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 0;
+    font-family: inherit;
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+
+.hist-item-text {
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-primary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hist-item-meta {
+    overflow: hidden;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hist-item-main:hover .hist-item-text {
+    color: var(--primary-color);
+}
+
+/* 有名字的行：标题用正文字体（名字是人话，不该看起来像代码），字号提一档 */
+.hist-item.is-named .hist-item-text {
+    font-family: var(--font-sans);
+    font-size: var(--fs-sm);
+    font-weight: 500;
+}
+
+/* 「命名 / 改名」：做成低调的小文字按钮 —— 每行常驻，但不想抢正文的注意力 */
+.hist-rename-btn {
+    flex: 0 0 auto;
+    padding: 2px 4px;
+    font-family: inherit;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.hist-rename-btn:hover {
+    color: var(--primary-color);
+    background: var(--primary-bg);
+}
+
+/* 改名中的那一行：输入框吃掉剩余宽度，两个按钮靠右 */
+.hist-item.is-editing {
+    background: var(--primary-bg);
+}
+
+.hist-rename-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 8px;
+    font-size: var(--fs-sm);
+}
+
+.hist-danger {
+    color: var(--error-color);
+    border-color: var(--error-border);
+}
+
+.hist-danger:hover {
+    color: var(--error-strong);
+    border-color: var(--error-color);
+}
+
+.hist-hint {
+    margin: 8px 0 0;
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
 /* Session 链接 / 连接信息（#section-22） */
 .session-warning {
     display: flex;
@@ -2656,44 +2877,55 @@ optgroup {
     }
 }
 
-/* 常用功能区（2026-09-28 起与下面的 .launcher-group **共用同一套外观**）
+/* 常用功能区（2026-10-17 与首页方格统一）
    ----------------------------------------------------------------
-   原来常用功能区是一块独立的 indigo→purple 渐变卡（渐变底 + 14px 圆角 + 更大内边距），
-   与下面白底 + 左侧色条 + 12px 圆角的 .launcher-group 明显不是一类东西，
-   看起来像"从别的页面搬来的"。现在两者用完全相同的盒模型、底色、圆角与左侧色条，
-   只有两点差异，都靠 CSS 变量表达（不新增选择器分支）：
-     · 强调色固定 indigo —— 常用功能不隶属任何分组，用主题色里的"品牌"色
-     · 头部右侧放的是「编辑 / 完成 / 恢复默认」操作，而不是条目数 */
+   以前它是一张白底 + 左侧色条 + 12px 圆角的卡片，和下面的分组卡片配对。
+   首页改成"一整片图标方格"之后，再套一层卡片会把首屏切成两个世界 ——
+   所以外壳去掉，只留一行「标题 + 编辑」，图标仍落在同一个 .app-grid 里：
+   视觉上它就是方格最上面那一排，只是标题带一颗金星。 */
 .favorites-section {
-    /* 复用 .launcher-group-chip 的内部变量，让标题芯片自动跟着变 */
     --group-accent: var(--accent-indigo);
     --group-tint: var(--accent-indigo-tint);
-    padding: 10px 14px;
-    margin-bottom: 12px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-left: 3px solid var(--group-accent);
-    border-radius: 12px;
-    transition: box-shadow 0.2s;
+    width: 100%;
+    margin: 0 0 4px;
+    padding: 0;
+    background: none;
+    border: 0;
+    transition: none;
 }
 
-/* 头部沿用 .launcher-group-head 的布局；.favorites-head 作为同义类保留，
-   因为 :root 的窄栏排版层（@media max-width:560px）按它做过折行声明 */
 .favorites-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 8px;
+    gap: 10px;
+    margin-bottom: 2px;
 }
 
 .favorites-head-actions {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    margin-left: auto;
 }
 
-/* 与 .launcher-group-count 对齐：同样是"右边的次要计数" */
+/* 标题：小号标签 + 金色星标。不再用胶囊底色 —— 首屏本来就该"只有图标"，
+   多一个色块就多一分噪音。 */
+.favorites-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* replaceIcons 会把 <i> 换成 <svg class="svg-icon"> 且丢掉自定义类，
+   所以这里必须用后代选择器而不是 .favorites-chip i */
+.favorites-chip .svg-icon {
+    color: var(--warning-color);
+}
+
+/* 与右边「3 / 8」计数对齐的次要文字 */
 .fav-count {
     font-size: var(--fs-xs);
     color: var(--text-light);
@@ -2729,14 +2961,18 @@ optgroup {
     border-color: var(--accent-indigo-hover);
 }
 
+/* 编辑态：给整排放一个很淡的内轮廓，让"现在在整理常用功能"有边界感 */
 .favorites-section.is-editing {
-    box-shadow: inset 0 0 0 2px var(--accent-indigo-ring);
+    padding: 8px;
+    margin-bottom: 0;
+    border-radius: 14px;
+    background: var(--accent-indigo-soft);
 }
 
 .favorites-hint {
     font-size: var(--fs-xs);
     color: var(--text-secondary);
-    margin: 0 0 12px;
+    margin: 0 0 8px;
 }
 
 .favorites-hint b {
@@ -2745,26 +2981,18 @@ optgroup {
 
 /* 常用功能为空时的引导 */
 .favorites-empty {
-    padding: 20px 18px;
+    padding: 16px 18px;
     font-size: var(--fs-sm);
     color: var(--text-secondary);
     text-align: center;
-    background: var(--accent-indigo-tint);
-    border: 1px dashed var(--accent-indigo-border);
+    background: var(--bg-tertiary);
+    border: 1px dashed var(--border-color);
     border-radius: 12px;
 }
 
 .favorites-empty-star {
     color: var(--warning-color);
     font-size: var(--fs-lg);
-}
-
-/* 常用功能标题：直接复用 .launcher-group-chip 的胶囊样式（结构见 biz/ui_layout.js），
-   只有星标保留金色 —— 它是"常用"这个语义的唯一记号。
-   注意 replaceIcons 会把 <i> 换成 <svg class="svg-icon"> 且丢掉自定义类，
-   所以这里必须用后代选择器而不是 .favorites-chip i */
-.favorites-chip .svg-icon {
-    color: var(--warning-color);
 }
 
 /* 编辑态：磁贴不响应跳转，底部腾出位置放 ← → × */
@@ -2778,81 +3006,9 @@ optgroup {
     box-shadow: none;
 }
 
-/* 功能分组（紧凑版） */
-.launcher-group {
-    /* 占多少格：自己的磁贴数与 --cols 取小。
-       --tile-count 缺失时（结构变化、旧缓存）回退成整行，不会算出非法值。 */
-    --span: min(var(--tile-count, var(--cols)), var(--cols));
-    grid-column: span var(--span);
-    /* 左右内边距随格数收缩：5 格 14px（与原来一致）→ 1 格 6px。
-       为什么必须收缩：棋盘列间距与磁贴间距都是 8px，于是 k 格分组里单张磁贴的宽度
-       可以化简成「列宽 B - (4px 边框 + 2×内边距)/k」—— 内边距固定时，1 格分组的磁贴
-       要独自摊掉整个 32px，而 5 格分组由 5 张均摊。实测 1280px（B = 233.6px）：
-         内边距固定 14px   → 1 格 202px vs 5 格 227px（差 25px）
-         内边距 4+2k       → 1 格 218px vs 5 格 227px（差 9px）
-       差值降了一个量级，并排放着不再像两种规格的卡片。
-       剩下的 9px 来自 k 格分组内部那 (k-1) 个 8px 磁贴间距 —— 它只摊给 k 张，
-       1 格分组没有这个摊销项。要彻底抹平得让内边距随格数二次增长（k=5 时要 38px），
-       反而把分组撑得虚胖，不划算。
-
-   注意乘法必须写成 `var(--span) * 2px`：--span 的值是一个 min() 表达式，
-   `2 * var(--span)` 这种「数字 × 数学函数」的写法 Chrome 会整条丢弃
-   （实测 padding-left 计算值回落成 0px，而 grid-column: span var(--span) 照常生效 —— 
-   只在一个属性上失败，很难看出是语法问题）。 */
-    padding: 10px calc(4px + var(--span) * 2px);
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
-    border-left: 3px solid var(--group-accent, var(--primary-color));
-    border-radius: 12px;
-    /* 纵向间距交给棋盘的行间距（gap: 12px），分组自己不再带 margin —— 
-       带 margin 的话它会计入 span 宽度，同一行的分组右边会多出 12px 的空档。 */
-    margin-bottom: 0;
-}
-
-/* 把上面收缩掉的内边距补给分组头，让所有分组的标题芯片仍落在同一条竖线上：
-   内容左边缘 = 3px(左边框) + (4+2k)px(内边距) + margin，取 k=5 时的 17px 为准，
-   故 margin-left = 17 - 3 - (4+2k) = 10 - 2k。k=5 时为 0，不改变现状。 */
-.launcher-group > .launcher-group-head {
-    margin-left: calc(10px - var(--span) * 2px);
-}
-
-.launcher-group-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-}
-
-.launcher-group-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 3px 11px;
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    color: var(--group-accent, var(--primary-color));
-    background: var(--group-tint, var(--accent-blue-tint));
-    border-radius: 999px;
-}
-
-.launcher-group-count {
-    font-size: var(--fs-xs);
-    color: var(--text-light);
-}
-
-/* 最小轨道宽 196px（原 176px）。176 在 1280px 下算出 6 列、每格只有 ~188px，
-   扣掉图标 34 + 间距 10 + 让给星标的 30 + 左右内边距，标签/描述只剩 ~100px ——
-   实测 12 个功能的描述被省略号吃掉（最长的「T-4 connectivity 清单」要 120px）。
-   抬到 196 后 1280px 排 5 列（每格 ~227px），描述全部完整。
-
-   列数现在由父级的 --span 决定（= 所在分组的格数），不再由 auto-fill 自己算 ——
-   这样「1 项的分组」里的那张磁贴，宽度与整行分组里的磁贴完全一致。
-   「常用功能区」不在任何 .launcher-group 里，--span 落到回退值 --cols，即整行。 */
-.tile-grid {
-    display: grid;
-    grid-template-columns: repeat(var(--span, var(--cols, 1)), minmax(0, 1fr));
-    gap: 8px;
-}
+/* 旧「分组卡片」样式已随 2026-10-17 首页改版删除（分组 → 文件夹，见 .app-grid /
+   .folder-tile）。.launcher-group-head / -chip / -count 三个类仍被「常用功能」的
+   头部复用（favorites-head），所以它们保留在下面 .favorites-section 那一段里。 */
 
 /* 功能图标磁贴（紧凑版：更小的内边距与图标） */
 .tile {
@@ -2881,6 +3037,7 @@ optgroup {
 }
 
 .tile-icon {
+    position: relative; /* 锁徽标（.tile-lock-wrap）挂在这里的右下角 */
     flex-shrink: 0;
     width: 34px;
     height: 34px;
@@ -2922,12 +3079,12 @@ optgroup {
    等于每张磁贴白丢 8px 的标签宽度。移出常规流后宽度重新还给 .tile-text。
    里面的 svg 本来就是绝对定位（相对 .tile 右上角），wrapper 变成 0 尺寸的
    绝对定位盒之后它的定位结果不变。 */
+/* 锁徽标的外层是**零尺寸定位盒**，真正的 svg 由下面 .tile-lock-wrap > svg 定位。
+   2026-10-17 起它嵌在 .tile-icon 里面（而不是 .tile 的直接子级），所以 svg 的
+   top/right 是相对图标方块算的 —— 首页 56px 与面板 34px 两种尺寸都不用单独调。 */
 .tile-lock-wrap {
     position: absolute;
-    top: 0;
-    right: 0;
-    width: 0;
-    height: 0;
+    inset: 0;
 }
 
 /* 磁贴外层：让「☆ 加入常用」按钮能放在 <a> 之外，避免可点击元素互相嵌套 */
@@ -3073,19 +3230,571 @@ optgroup {
 .tile-lock-wrap > svg {
     display: none;
     position: absolute;
-    top: 12px;
-    right: 14px;
-    width: 13px;
-    height: 13px;
-    color: var(--text-light);
+    right: -5px;
+    bottom: -5px;
+    box-sizing: content-box;
+    width: 12px;
+    height: 12px;
+    padding: 2px;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
 }
 
-.tile.locked {
-    opacity: 0.55;
+/* 未连接时只压暗图标，**文字保持原样** —— 整块 0.55 会让名字也变灰，
+   在"全部功能都锁定"的首次打开场景里，首屏看起来像坏了（2026-10-17 截图实测）。 */
+.tile.locked .tile-icon {
+    opacity: 0.5;
+}
+
+.tile.locked .tile-label {
+    color: var(--text-secondary);
 }
 
 .tile.locked .tile-lock-wrap > svg {
     display: block;
+}
+
+/* ==================================================================
+ * 首页方格（v2）：应用图标 / 文件夹 / 文件夹面板
+ *
+ * 位置说明：这一段**故意放在 .tile 的基础规则之后**。基础规则（横排 + 边框 + 13px
+ * 圆角）现在只服务「文件夹面板里的一行」，首页方格里的图标则要竖排、无边框、
+ * 56px 方块。两套选择器特异性接近（0,2,0 对 0,2,0），靠源码顺序决定胜负，
+ * 所以不能挪到 .tile 前面去。
+ * ================================================================== */
+
+/* 应用图标：竖排（图标在上、名字在下），与手机桌面一致。
+   描述文字在首页隐藏（一列 ~90px 放不下），已折进 <a title>。 */
+.app-grid .tile-cell > .tile {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 2px;
+    background: transparent;
+    border: 0;
+    border-radius: 14px;
+}
+
+.app-grid .tile-cell > .tile:hover {
+    background: var(--bg-secondary);
+    border-color: transparent;
+    transform: translateY(-2px);
+    box-shadow: none;
+}
+
+/* 应用图标的"底板"：接近白 + 一圈发丝边，颜色只留在字形上。
+   ------------------------------------------------------------------
+   原来每格是一块高饱和的浅色底 + 同色字形（8 个功能 = 7 种色相），
+   放在一起像一盒水彩笔，和深色的文件夹方块也不成体系。
+   改成"白底 + 彩色字形"后：色彩集中在字形上、面积小得多，整块方格看起来是一家人；
+   文件夹（深色玻璃）与图标（白）形成"容器 / 内容"的层级。
+   底板仍用各分组自己的色相（--tile-tint）做一点极淡的染色，保留辨识度。 */
+.app-grid .tile-icon {
+    width: var(--brick, 56px);
+    height: var(--brick, 56px);
+    border-radius: 16px;
+    font-size: var(--icon-xl);
+    background: color-mix(in srgb, var(--tile-tint, var(--bg-tertiary)) 34%, var(--bg-primary));
+    color: var(--tile-accent, var(--primary-color));
+    box-shadow: inset 0 0 0 1px rgba(15, 35, 95, 0.06), var(--shadow-sm);
+}
+
+.app-grid .tile-text {
+    align-items: center;
+    gap: 0;
+    width: 100%;
+}
+
+.app-grid .tile-label {
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: break-word;
+}
+
+.app-grid .tile-desc {
+    display: none;
+}
+
+/* 图标式磁贴不再给星标预留右侧 30px：星标改成浮在图标右上角的小圆点 */
+.app-grid .tile-cell:has(> .tile-fav-btn) > .tile {
+    padding-right: 2px;
+}
+
+/* 星标贴在**图标**的右上角，而不是格子的右上角：
+   宽屏一格 146px、图标只有 56~64px，贴格子角会飘出 40px 远，看不出是谁的星标。
+   left 用 50% 对图标中心对齐（图标在格子里水平居中）。 */
+.app-grid .tile-fav-btn {
+    top: 2px;
+    right: auto;
+    left: calc(50% + var(--brick, 56px) / 2 - 10px);
+    width: 20px;
+    height: 20px;
+    font-size: var(--fs-base);
+    line-height: 1;
+    transform: none;
+    background: var(--bg-primary);
+    box-shadow: 0 1px 4px rgba(15, 35, 95, 0.18);
+}
+
+/* ---------- 文件夹图标 ---------- */
+
+.folder-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 2px;
+    font-family: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background-color 0.18s, transform 0.18s;
+}
+
+.folder-tile:hover {
+    background: var(--bg-secondary);
+    transform: translateY(-2px);
+}
+
+.folder-tile:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* 2×2 迷你预览：底是分组色调（--tile-tint）到白的斜向渐变，
+   每一格是白底的小圆角芯片 —— 远看是一块"磨砂玻璃板"，近看能认出里面装了什么。 */
+.folder-preview {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 3px;
+    width: var(--brick, 56px);
+    height: var(--brick, 56px);
+    padding: 5px;
+    /* 半透明黑底 —— 与 iOS 文件夹一致的观感：方块本身退到背景里，
+       里面的小图标才是主角（原来那层"分组色调 → 白"的渐变太亮，看着像张卡片）。
+       用 rgba 而不是令牌：这是"蒙在背景上的一层黑"，深浅只跟透明度有关，
+       没有语义等价的颜色令牌；换主题时它依然成立。 */
+    background: rgba(12, 28, 68, 0.24);
+    border-radius: 16px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.16), var(--shadow-sm);
+    backdrop-filter: blur(3px);
+    transition: box-shadow 0.18s, background-color 0.18s;
+}
+
+.folder-tile:hover .folder-preview {
+    background: rgba(12, 28, 68, 0.3);
+    box-shadow: var(--shadow-md), inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+/* 只有 2 项：竖排两格填满整块（2×2 会空出一整行，像没做完） */
+.folder-preview[data-count="2"] {
+    grid-template-columns: 1fr;
+}
+
+.folder-mini {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    border-radius: 6px;
+    font-size: var(--fs-xs);
+    color: var(--tile-accent);
+    /* 近白（不是纯白）：压在黑色蒙层上时留一点透，才像悬浮的小图标 */
+    background: rgba(255, 255, 255, 0.9);
+}
+
+/* 超过 4 项：右下角 +N（比写"N 项"省地方，一眼就知道还有更多） */
+.folder-extra {
+    position: absolute;
+    right: -5px;
+    bottom: -5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-inverse);
+    background: var(--tile-accent);
+    border-radius: 9px;
+    box-shadow: var(--shadow-sm);
+}
+
+/* 整组都需要连接且当前未连接：与单个磁贴的 .locked 同一观感 */
+.folder-lock {
+    position: absolute;
+    left: -5px;
+    bottom: -5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+}
+
+.folder-tile.is-locked .folder-preview {
+    opacity: 0.6;
+}
+
+.folder-label {
+    max-width: 100%;
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--text-primary);
+    text-align: center;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: break-word;
+}
+
+/* ---------- 文件夹面板（点开文件夹） ---------- */
+
+.folder-sheet-root {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+}
+
+.folder-sheet-root[hidden] {
+    display: none;
+}
+
+.folder-sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 35, 95, 0.3);
+    backdrop-filter: blur(6px) saturate(1.1);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.folder-sheet-root.is-open .folder-sheet-backdrop {
+    opacity: 1;
+}
+
+.folder-sheet {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(560px, calc(100vw - 24px));
+    max-height: min(74vh, 640px);
+    overflow-y: auto;
+    padding: 16px;
+    background: var(--bg-primary);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    transform: translate(-50%, -47%) scale(0.96);
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.3, 1), opacity 0.18s ease;
+}
+
+.folder-sheet-root.is-open .folder-sheet {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.folder-sheet-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.folder-sheet-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    font-size: var(--fs-base);
+    color: var(--group-accent, var(--primary-color));
+    background: var(--group-tint, var(--accent-blue-tint));
+}
+
+/* 标题是按钮：点一下就地改名（用 <input> 而不是 window.prompt —— prompt 会遮住
+   整个面板，输入法候选框还会跑到角落里去） */
+.folder-sheet-title {
+    padding: 2px 4px;
+    margin: 0;
+    font-family: inherit;
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    cursor: text;
+}
+
+.folder-sheet-title:hover {
+    background: var(--bg-secondary);
+}
+
+.folder-sheet-title:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.folder-sheet-title-input {
+    width: 160px;
+    padding: 2px 6px;
+    font-size: var(--fs-base);
+}
+
+.folder-sheet-count {
+    font-size: var(--fs-xs);
+    color: var(--text-secondary);
+}
+
+.folder-sheet-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin-left: auto;
+    color: var(--text-tertiary);
+    background: var(--bg-secondary);
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: color 0.18s, background-color 0.18s;
+}
+
+.folder-sheet-close:hover {
+    color: var(--text-primary);
+    background: var(--border-light);
+}
+
+.folder-sheet-close:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* 面板里的功能：横排（图标 + 名字 + 描述 + 星标），窄栏一列、宽栏两列 */
+.folder-app-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+}
+
+.folder-app-grid .tile-cell > .tile {
+    gap: 10px;
+    padding: 9px 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+}
+
+.folder-app-grid .tile-cell > .tile:hover {
+    background: var(--tile-soft, var(--accent-blue-soft));
+    border-color: var(--tile-accent, var(--primary-color));
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(15, 35, 95, 0.08);
+}
+
+.folder-app-grid .tile-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    font-size: var(--fs-lg);
+    box-shadow: none;
+}
+
+.folder-app-grid .tile-text {
+    align-items: flex-start;
+    gap: 1px;
+    text-align: left;
+}
+
+.folder-app-grid .tile-label {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    text-align: left;
+    white-space: nowrap;
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.folder-app-grid .tile-desc {
+    display: block;
+    font-size: var(--fs-xs);
+}
+
+/* 面板里空间够：星标常显（不用 hover 才出现） */
+.folder-app-grid .tile-fav-btn {
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    background: transparent;
+    box-shadow: none;
+}
+
+.folder-app-grid .tile-cell:has(> .tile-fav-btn) > .tile {
+    padding-right: 30px;
+}
+
+.folder-sheet-hint {
+    margin: 12px 0 0;
+    font-size: var(--fs-xs);
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
+.folder-sheet-hint code {
+    padding: 1px 5px;
+    font-size: var(--fs-xs);
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+/* ---------- 整理：拖动图标 ---------- */
+
+/* 首页图标可以拖（常用功能区不行：那是有序列表，用「编辑」里的 ← → 管） */
+.app-grid .tile,
+.folder-app-grid .tile {
+    cursor: grab;
+}
+
+.app-grid .tile:active,
+.folder-app-grid .tile:active {
+    cursor: grabbing;
+}
+
+/* 正在被拖的那一枚：留个"原件还在"的淡影（浏览器自带拖影，这里只做弱化） */
+.tile.is-dragging {
+    opacity: 0.4;
+}
+
+/* 可放置的目标：虚线描边 + 轻微放大。
+   用 outline 而不是 border —— 不参与布局，不会把旁边图标挤动一像素。 */
+.tile-cell.is-drop-target > .tile,
+.folder-tile.is-drop-target {
+    outline: 2px dashed var(--primary-color);
+    outline-offset: 2px;
+    background: var(--primary-bg);
+}
+
+.folder-tile.is-drop-target .folder-preview {
+    background: rgba(12, 28, 68, 0.34);
+    box-shadow: 0 0 0 2px var(--primary-color);
+    transform: scale(1.04);
+}
+
+/* 拖到首页空白处 = 移出文件夹：整片方格给一条内描边做提示 */
+body.is-drop-on-grid .app-grid {
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 2px var(--primary-border);
+}
+
+/* 拖动期间底部的提示条（只在拖动时存在，见 ensureDragHint） */
+.drag-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    z-index: 70;
+    max-width: calc(100vw - 24px);
+    padding: 7px 14px;
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    color: var(--text-inverse);
+    text-align: center;
+    background: rgba(0, 0, 0, 0.72);
+    border-radius: 999px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 8px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+body.is-dragging-tile .drag-hint {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+/* 文件夹面板里的「移出」投放区：只在拖动时出现（模态面板盖住了大部分遮罩，
+   "拖到面板外"在很多窗口尺寸下几乎点不到） */
+.folder-sheet-dropout {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    margin-top: 10px;
+    padding: 12px;
+    font-size: var(--fs-sm);
+    color: var(--text-secondary);
+    border: 2px dashed var(--border-color);
+    border-radius: 10px;
+    transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+body.is-dragging-tile .folder-sheet-dropout {
+    display: flex;
+}
+
+.folder-sheet-dropout.is-drop-target {
+    color: var(--primary-color);
+    background: var(--primary-bg);
+    border-color: var(--primary-color);
+}
+
+/* 面板打开时锁住背景滚动（侧边栏里尤其明显，否则能滚到背后的首页） */
+body.folder-sheet-open {
+    overflow: hidden;
+}
+
+/* 宽屏（整页 / 大显示器）：格子从 146px 起就比图标宽出一倍，
+   把砖块从 56 抬到 64，视觉密度才不至于"一盘散沙"（iOS 图标约占格宽的 60%）。 */
+@media (min-width: 720px) {
+    .launcher-view {
+        --brick: 64px;
+    }
+}
+
+/* 动效敏感用户：面板不做缩放/位移，只淡入 */
+@media (prefers-reduced-motion: reduce) {
+    .folder-sheet,
+    .folder-tile,
+    .app-grid .tile-cell > .tile {
+        transition: none;
+    }
+
+    .folder-sheet {
+        transform: translate(-50%, -50%);
+    }
+
+    .folder-sheet-root.is-open .folder-sheet {
+        transform: translate(-50%, -50%);
+    }
 }
 
 /* ---------- 详情页 ---------- */
@@ -3150,7 +3859,12 @@ optgroup {
         display: none;
     }
 
-    /* 窄屏 / 触屏没有 hover，星标常显，否则用户找不到入口 */
+}
+
+/* 触屏（没有 hover）：星标常显，否则用户找不到"加入常用"的入口。
+   ⚠️ 判据必须是 hover:none 而不是屏宽 —— 400px 的侧边栏是桌面环境，hover 正常，
+   按宽度常显只会让首屏 26 个图标各挂一个星号（视觉噪音，2026-10-17 改版时改掉）。 */
+@media (hover: none) {
     .tile-fav-btn {
         opacity: 1;
     }
@@ -3419,13 +4133,12 @@ optgroup {
 /* ---------- 首页「Org 状态」面板（#org-dashboard-panel，功能中心顶部） ---------- */
 
 .org-dash-panel {
-    padding: 14px 16px;
-    /* 与 .favorites-section / .launcher-group 统一为 12px：首页三块内容
-       （Org 状态 / 常用功能 / 功能分组）用同一条纵向节奏，堆叠起来才是整体的 */
-    margin-bottom: 12px;
+    padding: 12px 14px 14px;
+    /* 首页四块（搜索 / Org / 常用 / 方格）统一 16px 圆角 + 16px 纵向间距 */
+    margin-bottom: 16px;
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
-    border-radius: 12px;
+    border-radius: 16px;
 }
 
 .org-dash-head {
@@ -3433,21 +4146,23 @@ optgroup {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .org-dash-title {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: var(--fs-base);
+    gap: 6px;
+    font-size: var(--fs-sm);
     font-weight: 600;
     color: var(--text-primary);
 }
 
+/* 标题图标用中性灰：首页只留一个强调色（品牌蓝），
+   仪表盘图标再点一次蓝会让"查看全部"和标题抢焦点 */
 .org-dash-title .svg-icon {
-    color: var(--accent-indigo);
-    font-size: var(--icon-md);
+    color: var(--text-secondary);
+    font-size: var(--fs-base);
 }
 
 .org-dash-badge {
@@ -3469,7 +4184,7 @@ optgroup {
 .org-dash-more {
     padding: 3px 10px;
     font-size: var(--fs-xs);
-    color: var(--accent-indigo);
+    color: var(--primary-color);
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
@@ -3529,30 +4244,37 @@ optgroup {
     opacity: 1;
 }
 
-/* 仪表盘卡网格（汽车仪表盘风格：半圆弧 gauge + 指针，SVG 由 org_limits.js 生成） */
+/* 仪表盘卡网格（汽车仪表盘风格：半圆弧 gauge + 指针，由 org_limits.js 绘制）
+   ------------------------------------------------------------------
+   之前是 `auto-fill minmax(190px, 1fr)`：400px 侧边栏里只有一列，四个表盘竖着排，
+   面板高 421px —— 比首屏里所有应用图标加起来还高，跟方格完全不成比例。
+   现在固定 2 列（≥720px 时 4 列），侧边栏里是 2×2；同时把卡片从"白底描边"
+   换成"浅灰底、无描边"，面板读起来是一块数据区，而不是四张抢眼的卡片。 */
 .org-dash-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-    gap: 10px;
+    /* 固定 4 列：四个指标本来就是"并排看一眼"的东西。
+       之前 auto-fill(minmax(190px)) 在 400px 侧边栏里退化成 1 列 → 面板 421px 高，
+       比首屏所有图标加起来还高，和方格完全不成比例。 */
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
 }
 
 .org-dash-gauge {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    padding: 12px 10px 10px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
+    gap: 0;
+    padding: 4px 4px 6px;
+    background: var(--bg-tertiary);
+    border: 0;
     border-radius: 12px;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: background-color 0.2s;
     /* 见 .org-gauge-chart 上方注释 */
     min-width: 0;
 }
 
 .org-dash-gauge:hover {
-    border-color: var(--border-color);
-    box-shadow: 0 2px 8px rgba(15, 35, 95, 0.08);
+    background: var(--bg-secondary);
 }
 
 .org-dash-gauge.is-warn {
@@ -3583,19 +4305,70 @@ optgroup {
     overflow: hidden;
 }
 
-.org-dash-gauge-name {
-    font-size: var(--fs-sm);
-    font-weight: 500;
-    color: var(--text-primary);
-    text-align: center;
+/* 首页摘要表盘：窄栏里 4 块并排，74px 足够读出指针与分区带的大致位置。
+   ⚠️ 选择器必须带 .org-dash-gauge 前缀：详情页（section-27）用的是 .org-limit-card，
+   它的表盘高度是 128px。写裸 `.org-gauge-chart` 会把那边一起改小。 */
+.org-dash-gauge .org-gauge-chart {
+    height: 74px;
 }
 
+/* 宽屏：卡片变宽了，表盘 + 名字/数值改为**横排**，把横向空间用起来 ——
+   否则 215px 宽的卡片里只放一个居中的小表盘，四块并排看着空。 */
+@media (min-width: 720px) {
+    .org-dash-gauge .org-gauge-chart {
+        width: 96px;
+        height: 96px;
+        flex: 0 0 96px;
+    }
+
+    .org-dash-gauge {
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        padding: 8px 12px 8px 6px;
+    }
+
+    .org-dash-gauge-name,
+    .org-dash-gauge-value {
+        text-align: left;
+    }
+
+    .org-dash-gauge-text {
+        align-items: flex-start;
+        gap: 2px;
+    }
+}
+
+/* 表盘下方的文字块（窄栏竖排 / 宽屏横排，见下方媒体查询） */
+.org-dash-gauge-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    width: 100%;
+    min-width: 0;
+}
+
+.org-dash-gauge-name {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-align: center;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* 数值默认用正文色：**只有越线时才上色**。
+   以前 4 个数字常年是绿的，加上 4 条绿/黄/红分区带，一屏就有十几处高饱和色，
+   和旁边的浅色图标完全不是一套语言；现在"正常"是安静的，"要出事"才跳出来。 */
 .org-dash-gauge-value {
-    font-size: var(--fs-xl);
+    font-size: var(--fs-lg);
     font-weight: 700;
     font-family: var(--font-mono);
-    line-height: 1.15;
-    color: var(--success-color);
+    line-height: 1.2;
+    color: var(--text-primary);
 }
 
 .org-dash-gauge.is-warn .org-dash-gauge-value {
@@ -3646,10 +4419,8 @@ optgroup {
 }
 
 @media (max-width: 768px) {
-    .org-dash-grid {
-        grid-template-columns: 1fr 1fr;
-    }
-
+    /* 首页 Org 状态保持 4 列（见 .org-dash-grid 说明）：侧边栏里 2×2 会让面板高到 300px+，
+       和下面的图标方格不成比例。这里只处理占位态的换行。 */
     .org-dash-placeholder {
         flex-wrap: wrap;
     }
@@ -3857,24 +4628,16 @@ optgroup {
         gap: 8px;
     }
 
-    /* 磁贴列数不再在这里算（原 minmax(138px)）：列数由 .launcher-view 的
-       --cols 统一决定，窄栏只是把行/列间距收紧。 */
-    .tile-grid {
-        gap: 6px;
+    /* 首页方格的行/列间距（列数由 .launcher-view 的 --cols 决定，这里只收紧留白）。
+       磁贴自身的尺寸不再在这里覆盖：首页是 56px 图标（.app-grid 里定死），
+       文件夹面板是 34px 图标（.folder-app-grid 里定死），两处都不该被窄栏改小。 */
+    .app-grid {
+        gap: 14px 2px;
     }
 
-    .tile {
-        gap: 8px;
-        padding: 8px 10px;
-    }
-
-    /* 这里原本还有一条 .tile-cell > .tile { padding-right: 28px }：
-       星标预留值已经统一到基础规则的 30px，不再需要按宽度覆盖。 */
-
-    .tile-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 8px;
+    /* 窄栏里的文件夹面板：一行一个功能（两列会挤成图标 + 省略号） */
+    .folder-app-grid {
+        grid-template-columns: 1fr;
     }
 
     /* 数据表格：.table-container-body 是 overflow:hidden，宽表在侧边栏里
@@ -3924,7 +4687,10 @@ optgroup {
 /* 最窄一档（≤380px）：
    两列磁贴每格只剩 ~110px、两个仪表盘并排会挤成一团，都收敛成单列。 */
 @media (max-width: 380px) {
-    .org-dash-grid,
+    .org-dash-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .org-limits-summary {
         grid-template-columns: 1fr;
     }
@@ -3965,14 +4731,16 @@ optgroup {
     gap: 10px;
     width: 100%;
     padding: 10px 14px;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-light);
     /* 与弹出的那个磨砂面板同一套圆角 / 高光，读起来是"同一个东西"。
        这里**不做半透明**：它贴在首页不透明的卡片上，半透明等于白写，
        反而会把边框与文字的对比度拖低。玻璃材质只给真正浮在内容之上的那一层。 */
-    border-radius: var(--glass-radius);
-    box-shadow: inset 0 1px 0 var(--glass-highlight);
+    /* 与下方卡片统一 16px 圆角：首页四块（搜索 / Org / 常用 / 方格）用同一套圆角，
+       以前搜索是 18px 胶囊、卡片是 12px、图标是 16px，三种圆角并排显得"各写各的"。 */
+    border-radius: 16px;
+    box-shadow: none;
     cursor: pointer;
     text-align: left;
     font-family: var(--font-sans);
@@ -4420,4 +5188,47 @@ optgroup {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* ────────────── 公用功能（工具组）整页宿主下的「一屏锁」（2026-10-17）──────────────
+   需求：这组功能天天用，打开后**不要上下滚动**（操作区一屏可见），只有查询结果 /
+   记录列表可以内部滚动。其它功能（LTS 日报、PCD、报表）保持原来的"从上往下读"。
+
+   类 `full-page` 由 `biz/ui_layout.js` 的 `syncFullPageSteps()` 在布局生效后按
+   `ui_layout.json` 的 tools 分组打到对应 section 上 —— 不在这里或 HTML 里
+   再维护一份"哪些功能属于工具组"的清单。
+
+   ⚠️ 高度链是 `#detail-view` → (`.detail-body`) → `.step-section`，但**中间那层不是固定的**：
+   早期 section（1–22）在 `.detail-body` 里，后来加的（23/24/25/26/27/30/31）**直接挂在
+   `#detail-view` 下**（index.html 的历史遗留，两处嵌套不一致）。
+   所以两条路径都得住：`.detail-body` 只在"active 卡片确实在它里面"时才撑满。
+   2026-10-17 第一版按"一定有 .detail-body 包着"写，结果 View Log 这类页面
+   **撑满的空 detail-body 与卡片叠加**，页面反而多出 500 多像素的滚动。 */
+.host-tab #detail-view:has(.step-section.full-page.active) {
+    height: 100%;
+}
+
+/* active 卡片在 .detail-body 里（section 1–22 那条路径）：让这一层撑满并纵向分配 */
+.host-tab .detail-body:has(> .step-section.full-page.active) {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* 卡片本身：撑满可用高度（在 flex 父级里靠 flex，在 block 父级里靠 max-height），
+   卡头（标题 + 返回按钮）固定，滚动交给卡片主体 */
+.host-tab .step-section.full-page.active {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 100%;
+}
+
+.host-tab .step-section.full-page.active > .ant-card-body {
+    flex: 1 1 auto;
+    /* 必须能收缩，否则 flex 项的默认 min-height:auto 会让它把卡片顶出去 */
+    min-height: 0;
+    overflow-y: auto;
 }
