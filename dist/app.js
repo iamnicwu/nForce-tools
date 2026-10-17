@@ -234,7 +234,9 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${n.slice(e
       align-items: center;
       padding: 20px;
       gap: 15px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      /* 走全站字族令牌，别在这里另抄一份系统栈：
+         抄的那份没有中文字体、也拿不到主题调整，流程图里的字会和旁边不一致 */
+      font-family: var(--font-sans);
       position: relative;
     }
     
@@ -354,7 +356,7 @@ AND vlocity_cmt__OrchestrationPlanId__r.vlocity_cmt__OrderId__c IN ('${n.slice(e
           <div style="font-weight: bold; margin-bottom: 8px;">
             <i class="fas fa-exclamation-circle"></i> 流程图渲染失败
           </div>
-          <div style="font-family: monospace; font-size: var(--fs-xs); margin-bottom: 8px;">${e.message||`未知错误`}</div>
+          <div style="font-family: var(--font-mono); font-size: var(--fs-xs); margin-bottom: 8px;">${e.message||`未知错误`}</div>
           <details>
             <summary style="cursor: pointer; color: var(--primary-color); font-size: var(--fs-xs);">查看原始代码</summary>
             <pre style="margin-top: 8px; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 4px; font-size: var(--fs-xs); white-space: pre-wrap;">${t.replace(/</g,`&lt;`).replace(/>/g,`&gt;`)}</pre>

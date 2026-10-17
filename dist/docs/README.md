@@ -304,6 +304,27 @@ tag 已存在则只跑 CI、跳过发版。
 > 版本号写在两处且必须一致：`src/manifest.json` 与 `package.json`。
 > 完整规则（分支命名、什么改动该升哪个位、如何手动补发）见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+## 字体与排版
+
+全站只有**两个字族**、**八档字号**、**三档行高**，全部来自 `src/lib/css/main.css` 的 `:root`：
+
+| 令牌 | 值 | 用在哪 |
+| --- | --- | --- |
+| `--font-sans` | 系统栈（含 PingFang SC / 微软雅黑回退） | 所有界面文字（`body` 显式引用） |
+| `--font-mono` | ui-monospace / SF Mono / Menlo / Consolas | 代码、日志、Log ID、SQL 预览、表格里的长数字 |
+| `--fs-xs … --fs-4xl` | 12 / 13 / 14 / 16 / 18 / 20 / 24 / 30 | 字号只准用这八档 |
+| `--lh-tight / normal / relaxed` | 1.3 / 1.6 / 1.75 | 标题·标签 / 正文·控件 / 长段落 |
+
+两条容易漏的默认行为（都已在 `main.css` 里堵住）：
+
+- **表单控件不继承字族与字号**：`<button>` 的 UA 默认是 13.3333px + 系统字体，
+  不显式 `inherit` 就会在首页/工具栏里冒出"小一号"的字。
+- **`<code>` / `<textarea>` 的 UA 默认是 `monospace`**：在 macOS 上落到 Courier 一类的老字体，
+  和日志区用的 `--font-mono` 完全是两副面孔。
+
+`npm run check:ui` 的 **I 组**会拦下任何非令牌写法（`font-family` 只允许
+`var(--font-sans)` / `var(--font-mono)` / `inherit`，`font-size` 只允许八档令牌）。
+
 ## 开发须知（改源码前必读）
 
 以下几件事是这个项目踩过坑之后定下来的硬性约定：
