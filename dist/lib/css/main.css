@@ -96,6 +96,15 @@
     --brand-excel: #107c41; /* Excel 品牌绿：文件图标 */
     --code-bg: #1e1e1e;     /* 深色代码块：Anonymous 执行结果 */
     --code-fg: #d4d4d4;
+    /* 语法着色（SOQL 编辑器 / 代码块）：对齐 VS Code Light+ 的取值。
+       放在 :root 而不是编辑器主题的 JS 里 —— 一是颜色归口到一处，
+       二是 check-ui 的样式守卫只查 :root 之外的字面量色。 */
+    --code-keyword: #0b4f9c;
+    --code-string: #a31515;
+    --code-number: #098658;
+    --code-comment: #6b7280;
+    --code-type: #267f99;
+    --code-func: #795e26;
 
     /* --- 字族。body 必须显式引用 --font-sans，
            不要再"由 Ant Design 接管"（antd 升级/替换不应改变全站字体）--- */
@@ -2549,6 +2558,17 @@ optgroup {
 
 .hist-head:has(+ .hist-body:not(.u-hidden)) {
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+/* 代码编辑器（CodeMirror）的宿主：SOQL 查询框 / Execute Anonymous / View Log 原始日志。
+   具体外观（边框、行号栏、补全弹层、高度）在 `biz/code_editor.js` 的 CM 主题里；
+   这里只管占位：没挂载上时不留白块（:empty），挂载后铺满卡片宽度。 */
+.code-editor-host {
+    width: 100%;
+}
+
+.code-editor-host:empty {
+    display: none;
 }
 
 .hist-toggle {

@@ -113,6 +113,32 @@ function loadScript(key) {
   return promise;
 }
 
+/**
+ * 原生 ESM 的第三方库：用动态 `import()` 加载（`<script>` 那个口子拿不到导出）。
+ *
+ * 目前只有 CodeMirror 走这条路 —— 它上游就是纯 ESM，用 esbuild 打成**单文件**放进
+ * `lib/js/codemirror.bundle.js`（见 `tools/build-codemirror.mjs`）。
+ * 缓存与失败重试的语义和 `loadScript` 一致：同一个库只加载一次，失败后允许重试。
+ */
+const esmPending = new Map();
+
+export function loadModule(relPath) {
+  const key = relPath;
+  if (esmPending.has(key)) return esmPending.get(key);
+
+  const promise = import(resolveUrl(relPath)).catch((error) => {
+    esmPending.delete(key);
+    log.error(`加载 ${key} 失败:`, error);
+    throw error;
+  });
+
+  esmPending.set(key, promise);
+  return promise;
+}
+
+/** CodeMirror 6（SOQL 编辑器的语法高亮 / 行号 / 补全） */
+export const ensureCodeMirror = () => loadModule("lib/js/codemirror.bundle.js");
+
 /** ECharts（数据分析图表 + Org 状态仪表盘） */
 export const ensureECharts = () => loadScript("echarts");
 

@@ -141,7 +141,8 @@ import {
 // Execute Anonymous 输入框的代码提示（静态词表 + 当前 org 的 sObject / 字段）
 import { initApexComplete } from "./biz/apex_complete.js";
 // SOQL 查询框的代码提示（同一套浮层，候选换成 SOQL 语义：对象名 / 字段 / 聚合函数）
-import { initSoqlComplete } from "./biz/soql_complete.js";
+import { initSoqlComplete, enableSoqlHintFallback } from "./biz/soql_complete.js";
+import { initCodeEditors, setSoqlText, setApexText } from "./biz/code_editor.js";
 // 历史面板（SOQL 查询历史 / Apex 执行历史）：可勾选批量导出 / 导入 / 同步到 ima 知识库
 import { mountHistoryPanel } from "./biz/history_panel.js";
 import {
@@ -1604,12 +1605,17 @@ function bindEvents() {  // Session ID表单提交
   // Order 历史（section-30）：输入框 / 查询 / 清空 / 导出 四个按钮
   initOrderHistory();
 
-  // Execute Anonymous 的代码提示（section-18 的输入框）：给 textarea 挂候选浮层。
-  // 纯逻辑在 common/apex_completions.js，这里只做绑定。
-  initApexComplete();
-
-  // SOQL 查询框的代码提示（section-23 与 Bulk）：同一套浮层，换成 SOQL 的候选逻辑
+  // 两个"写代码"的框（Execute Anonymous / SOQL）统一换成 CodeMirror：
+  // 行号、语法着色、括号配对、内建补全。补全逻辑仍是 common/apex_completions.js
+  // 与 common/soql_completions.js 里那两套纯函数，这里只换渲染容器。
+  // Bulk 那个框仍是"textarea + 自绘浮层"（要贴行数限制提示，保持原样）。
   initSoqlComplete();
+  initCodeEditors().then((mountedEditors) => {
+    // 库没加载出来（离线包 / 被裁剪）→ 两个框都退回原来的自绘浮层，功能一样只是不漂亮
+    if (mountedEditors) return;
+    enableSoqlHintFallback();
+    initApexComplete();
+  });
 
   // 历史面板（2026-10-17）：SOQL 查询历史 / Apex 执行历史。
   // 两处交互完全一样，只有"点一条之后填到哪个输入框"不同 —— 界面全在
@@ -1617,20 +1623,16 @@ function bindEvents() {  // Session ID表单提交
   mountHistoryPanel("soql-history-host", {
     kind: "soql",
     onPick: (item) => {
-      const input = $("soql-query-input");
-      if (!input) return;
-      input.value = item.text;
-      input.focus();
+      // 走编辑器适配器：编辑器挂上之后直接写 textarea.value 是看不见的
+      setSoqlText(item.text);
       showNotification(item.name ? `已载入「${item.name}」` : "已载入查询历史", "info");
     }
   });
   mountHistoryPanel("apex-history-host", {
     kind: "apex",
     onPick: (item) => {
-      const input = $("apex-code-input");
-      if (!input) return;
-      input.value = item.text;
-      input.focus();
+      // 走编辑器适配器：编辑器挂上之后直接写 textarea.value 是看不见的
+      setApexText(item.text);
       showNotification(item.name ? `已载入「${item.name}」` : "已载入执行历史", "info");
     }
   });

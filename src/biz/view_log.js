@@ -23,6 +23,7 @@ const log = createLogger("VIEWLOG");
 import { sfConn } from "./sf_service.js";
 import { showNotification, copyText } from "../common/utils.js";
 import { $ } from "../common/dom.js";
+import { setLogViewerText } from "./code_editor.js";
 import { renderTable } from "../common/table_utils.js";
 import { ensureApexLogParser } from "../common/lib_loader.js";
 import * as view from "../common/apex_log_view.js";
@@ -280,6 +281,11 @@ function renderResult({ logId, source, bytes, parsed }) {
     const raw = rawDetails();
     const rawText = $("view-log-raw-text");
     if (rawText) rawText.textContent = currentLog.text;
+    // 有 CodeMirror 就用只读查看器（行号 + 查找）；加载失败时它自己返回 false，
+    // 上面那个等宽 div 照常显示 —— 复制 / 下载按钮读的也是 currentLog.text，不受影响。
+    setLogViewerText(currentLog.text).then((ok) => {
+      if (ok && rawText) rawText.classList.add("u-hidden");
+    }).catch(() => {});
     if (raw) {
         const title = raw.querySelector("summary");
         if (title) {
