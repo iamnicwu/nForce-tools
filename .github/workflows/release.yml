@@ -1,0 +1,106 @@
+name: Release
+
+# 合并到 main 之后：读版本号 → 没发过就构建、打包、打 tag、发 Release。
+#
+# 为什么以「版本号有没有对应的 tag」做闸门，而不是每次合并都发：
+#   日常的文档 / 修 CI / 小重构合并进来时版本号并没有变，如果无条件发版，
+#   要么同一个版本号反复覆盖 Release，要么因为 tag 已存在直接失败（每次合并都报红）。
+#   现在只有**你显式改了 src/manifest.json 与 package.json 的版本号**才会产出一个新版本，
+#   没改则这条路走完「跳过」分支，绿灯结束（日志里有一条 notice 说明原因）。
+#
+# 版本号的唯一来源是 src/manifest.json（扩展真正读的那个），package.json 必须与它一致，
+# 不一致直接失败 —— 见过太多"tag 是 4.12.0、装上去显示 4.11.1"的事故。
+on:
+  push:
+    branches: [ "main" ]
+  # 手动补发（比如 Actions 当时挂了，修好后重跑）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# 同一时刻只跑一个发版：并发时两个 job 会抢着创建同一个 tag
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要全部 tag 才能判断"这个版本发过没有"
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: 读版本号并判断是否需要发版
+        id: ver
+        run: |
+          set -euo pipefail
+          MANIFEST=$(node -p "require('./src/manifest.json').version")
+          PKG=$(node -p "require('./package.json').version")
+          echo "manifest=$MANIFEST package=$PKG"
+          if [ "$MANIFEST" != "$PKG" ]; then
+            echo "::error::版本号不一致：src/manifest.json=$MANIFEST，package.json=$PKG（两边必须同步改）"
+            exit 1
+          fi
+          echo "version=$MANIFEST" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$MANIFEST" >/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$MANIFEST 已经发过版了（tag 存在），本次只跑 CI、不重复发版"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::准备发布 v$MANIFEST"
+          fi
+
+      - name: 安装依赖
+        if: steps.ver.outputs.exists == 'false'
+        run: npm ci
+
+      # 与 CI 用同一条命令：构建 + UI 自检 + 单测。
+      # 发版前的产物必须是"刚刚通过验证的那一份"，所以这里不跳过任何一项。
+      - name: 构建与校验
+        if: steps.ver.outputs.exists == 'false'
+        run: npm run verify
+
+      - name: dist/ 必须与源码同步
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          if [ -n "$(git status --porcelain -- dist)" ]; then
+            echo "::error::dist/ 与源码不同步 —— 本地跑 npm run build 后把 dist/ 单独提交"
+            git status --porcelain -- dist
+            git --no-pager diff --stat -- dist
+            exit 1
+          fi
+          echo "dist/ 与源码一致 ✓"
+
+      - name: 打包扩展目录
+        if: steps.ver.outputs.exists == 'false'
+        id: pack
+        run: |
+          set -euo pipefail
+          NAME="nforce-tools-${{ steps.ver.outputs.version }}"
+          # 直接把 dist/ 的内容打成 zip 的根（Chrome 的"加载已解压的扩展程序"解开即可用）
+          (cd dist && zip -qr "../${NAME}.zip" . -x "*.DS_Store" -x "__MACOSX/*")
+          ls -lh "${NAME}.zip"
+          echo "zip=${NAME}.zip" >> "$GITHUB_OUTPUT"
+
+      - name: 打 tag 并发布 Release
+        if: steps.ver.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # --target 让 tag 指向这次合并的提交（不是 default branch 的 tip），
+          # --generate-notes 用 PR 标题/正文自动生成更新说明
+          gh release create "v${{ steps.ver.outputs.version }}" \
+            "${{ steps.pack.outputs.zip }}" \
+            --target "$GITHUB_SHA" \
+            --title "v${{ steps.ver.outputs.version }}" \
+            --generate-notes
