@@ -597,24 +597,26 @@
                         </p>
                     </section>
 
-                    <!-- ② 侧边栏位置（只能读、不能设，原因见下方说明） -->
+                    <!-- ② 请求超时 -->
                     <section class="pref-group">
                         <div class="pref-group-head">
-                            <span class="pref-group-title">侧边栏位置</span>
-                            <span class="pref-group-value" id="panel-side-value">检测中…</span>
+                            <span class="pref-group-title">请求超时</span>
+                            <span class="pref-group-value" id="request-timeout-current">—</span>
                         </div>
                         <p class="pref-desc">
-                            侧边栏在左侧还是右侧，是 <b>Chrome 的全局设置</b>，扩展无法用 API 修改
-                            —— Chrome 的 <code>sidePanel</code> 只提供 <code>getLayout()</code> 读取布局，
-                            没有对应的 <code>setLayout()</code>。所以这里只能帮你确认当前在哪一侧。
+                            单次 Salesforce 请求最多等多久。取大量数据（几万行、多个域）时慢组织可能跑过一分钟，
+                            超时后会中止并提示「请求超时」，而不是让界面一直转圈。
                         </p>
                         <div class="pref-controls">
-                            <button type="button" class="ant-btn" id="panel-side-refresh">重新检测</button>
+                            <input type="number" class="ant-input pref-input" id="request-timeout-input"
+                                   min="10" max="600" step="5" inputmode="numeric"
+                                   autocomplete="off" aria-label="请求超时（秒）">
+                            <button type="button" class="ant-btn ant-btn-primary" id="request-timeout-save">保存</button>
+                            <button type="button" class="ant-btn" id="request-timeout-reset">恢复默认</button>
                         </div>
-                        <p class="pref-hint" id="panel-side-hint">
-                            改法：Chrome 菜单 → 设置 → 外观 →「侧边栏」→ 选「在左侧显示 / 在右侧显示」；
-                            也可以右键点击侧边栏边缘，直接选「移到左侧 / 移到右侧」。
-                            这个设置对所有侧边栏内容生效，不只是本扩展。
+                        <p class="pref-hint" id="request-timeout-hint">
+                            单位秒，范围 10 ~ 600，默认 120。保存后立即对<b>后续</b>请求生效（正在跑的请求沿用旧值）。
+                            超过几分钟的取数建议改用 Bulk 查询，而不是继续调大超时。
                         </p>
                     </section>
 
@@ -649,6 +651,41 @@
                             点左边按钮会直接把你送到 Chrome 的快捷键设置页。显示成
                             「未设置 / 未生效」说明浏览器里那条没绑上，多半与别的扩展或系统快捷键撞了。
                             「插件页面内」那条点「修改」后直接按组合键即可（必须含 Ctrl / ⌘ / Alt 之一），Esc 取消。
+                        </p>
+                    </section>
+
+                    <!-- ④ ima 知识库同步（2026-10-17） -->
+                    <section class="pref-group">
+                        <div class="pref-group-head">
+                            <span class="pref-group-title">ima 知识库同步</span>
+                            <span class="pref-group-value" id="ima-state">未配置</span>
+                        </div>
+                        <p class="pref-desc">
+                            填好凭证并选一个知识库之后，<b>SOQL 查询历史</b>与 <b>Execute Anonymous 执行历史</b>
+                            面板上的「同步到 ima」就会把选中的条目存进这个知识库：先在 ima 里生成一篇 Markdown 笔记，
+                            再把它加进知识库，之后就能在 ima 里直接问「上次查 Order 用的什么 SOQL」。
+                        </p>
+                        <div class="pref-controls">
+                            <input type="text" class="ant-input pref-input" id="ima-client-id"
+                                   placeholder="Client ID" autocomplete="off" spellcheck="false"
+                                   aria-label="ima Client ID">
+                            <input type="password" class="ant-input pref-input" id="ima-api-key"
+                                   placeholder="API Key" autocomplete="off"
+                                   aria-label="ima API Key">
+                            <button type="button" class="ant-btn ant-btn-primary" id="ima-save">保存</button>
+                            <button type="button" class="ant-btn" id="ima-clear">清除</button>
+                        </div>
+                        <div class="pref-controls">
+                            <select class="ant-input pref-select" id="ima-kb-select" aria-label="同步到的 ima 知识库">
+                                <option value="">（尚未加载知识库）</option>
+                            </select>
+                            <button type="button" class="ant-btn" id="ima-test">测试并加载知识库</button>
+                        </div>
+                        <p class="pref-hint" id="ima-hint">
+                            凭证在 <a href="https://ima.qq.com/agent-interface" target="_blank" rel="noopener">ima 的 agent-interface 页面</a>
+                            创建：Client ID 与 API Key 成对生成，只保存在本机（<code>chrome.storage.local</code>），不会外发到 ima 以外的地址。
+                            先「保存凭证」再点「测试并加载知识库」，成功后从下拉里选目标知识库即可（再保存一次）。
+                            只有笔记会被写入，扩展不会读取你知识库里的既有内容。
                         </p>
                     </section>
                 </div>
@@ -688,7 +725,7 @@
                             </span>
                             <span class="settings-row-text">
                                 <span class="settings-row-label">插件偏好</span>
-                                <span class="settings-row-desc">API 版本 · 侧边栏 · 自动隐藏 · 贴边浮窗</span>
+                                <span class="settings-row-desc">API 版本 · 请求超时 · 搜索快捷键 · ima 同步</span>
                             </span>
                             <i class="fas fa-chevron-right settings-row-arrow"></i>
                         </button>
@@ -1525,11 +1562,16 @@
                                 <i class="fas fa-code u-text-brand"></i>
                             </div>
                             <div class="section-desc">
-                                <p>临时跑一段 Apex。</p>
+                                <p>临时跑一段 Apex。<b>跑过的每段代码都会记进「执行历史」</b>，可以给常跑的那几段起名字，下次从历史里点一下就载入。</p>
                             </div>
                         </div>
 
                         <div class="u-maxw-900 u-mx-auto">
+                            <!-- 执行历史（2026-10-17）：跑过的每段代码都会自动记下来；每条可命名、
+                                 可筛选、可勾选批量导出 / 导入（JSON）；配置了 ima 还能一键存进知识库。 -->
+                            <div class="form-group u-mb-16">
+                                <div id="apex-history-host"></div>
+                            </div>
                             <div class="form-group u-mb-24">
                                 <label class="u-block u-mb-8 u-fw-500" for="apex-code-input">Apex 代码
                                     <span class="u-fs-xs u-text-secondary">（打字时自动提示 · Ctrl+Space 手动唤出 · ↑↓ 选择 · Enter 采用）</span>
@@ -1598,7 +1640,7 @@ System.debug('Hello World');"></textarea>
                                 <i class="fas fa-clock u-text-brand"></i>
                             </div>
                             <div class="section-desc">
-                                <p>建本地定时任务，到点自动触发。浏览器关掉就不会跑。</p>
+                                <p>到点弹出提醒。若当时插件页面没开着，这次触发仍会被记录，下次打开时补一条汇总提醒（浏览器完全退出期间不会触发）。</p>
                             </div>
                         </div>
                     </div>
@@ -1704,11 +1746,13 @@ System.debug('Hello World');"></textarea>
                                     <i class="fas fa-search u-text-brand"></i>
                                 </div>
                                 <div class="section-desc">
-                                    <p>写 SOQL 查数据，结果导出 Excel 或 CSV。</p>
+                                    <p>写 SOQL 查数据，结果可导出 Excel / CSV / JSON，或复制成表格。</p>
                                     <details class="fn-more">
                                         <summary>编辑器能力</summary>
                                         <ul>
-                                            <li>对象和字段有自动补全，查询历史会留着。</li>
+                                            <li>只管写语句：对象名 / 字段按语句里的 <code>FROM 对象</code> 自动判断并提示，不用先选对象。</li>
+                                            <li>每条历史都能<b>起名字</b>，之后按名字筛选、挑着用；也可以勾选后批量导出 / 导入（JSON）。</li>
+                                            <li>配置了 ima 后，选中的历史能一键存进知识库。</li>
                                             <li>结果超过一页自动翻页，上限 50000 行。</li>
                                         </ul>
                                     </details>
@@ -1717,20 +1761,13 @@ System.debug('Hello World');"></textarea>
 
                             <div class="u-maxw-1000 u-mx-auto">
                                 <div class="form-group u-mb-16">
-                                    <label class="u-block u-mb-8 u-fw-500" for="soql-object-input">对象（用于字段自动补全，可留空）</label>
-                                    <input type="text" id="soql-object-input" class="ant-input u-maxw-480" list="soql-object-list" placeholder="例如: Order / Account / Custom_Object__c">
-                                    <datalist id="soql-object-list"></datalist>
-                                </div>
-                                <div class="form-group u-mb-16">
-                                    <div class="u-flex u-justify-between u-items-center u-mb-8">
-                                        <label class="u-fw-500" for="soql-query-input">SOQL 查询语句</label>
-                                        <select id="soql-history-select" class="ant-input u-maxw-360"></select>
-                                    </div>
-                                    <textarea id="soql-query-input" class="ant-input" rows="4" placeholder="SELECT Id, Name FROM Account LIMIT 100"></textarea>
+                                    <label class="u-block u-mb-8 u-fw-500" for="soql-query-input">SOQL 查询语句</label>
+                                    <textarea id="soql-query-input" class="ant-input" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 100"></textarea>
                                     <div class="u-fs-xs u-text-secondary u-mt-8">
-                                        打字时自动提示对象名 / 字段 / 聚合函数（写完 <code>FROM 对象</code> 后，字段提示会自动换成那张表的字段）· Ctrl+Space 手动唤出 · ↑↓ 选择 · Enter 采用
+                                        直接写语句就能跑 —— 对象名 / 字段 / 聚合函数都会自动提示（写完 <code>FROM 对象</code> 后，字段提示自动换成那张表的字段）· Ctrl+Space 手动唤出 · ↑↓ 选择 · Enter 采用
                                     </div>
                                 </div>
+                                <!-- 主操作紧跟输入框：写完语句就能直接跑 -->
                                 <div class="form-group u-flex u-gap-12 u-items-center u-text-right u-mb-16">
                                     <label class="u-flex u-items-center u-gap-6 u-fs-sm">
                                         <input type="checkbox" id="soql-query-all"> 含已删除记录（queryAll）
@@ -1740,13 +1777,25 @@ System.debug('Hello World');"></textarea>
                                         <i class="fas fa-play"></i> 执行查询
                                     </button>
                                 </div>
+                                <!-- 查询历史（2026-10-17）：从下拉框换成了可勾选的面板 ——
+                                     支持批量导出 / 导入（JSON）、删除，配置 ima 后可以一键存进知识库。
+                                     面板由 biz/history_panel.js 生成，这里只留宿主。 -->
+                                <div class="form-group u-mb-16">
+                                    <div id="soql-history-host"></div>
+                                </div>
                                 <div class="u-mb-12 u-text-secondary u-fs-sm" id="soql-result-info"></div>
-                                <div class="u-hidden u-gap-10 u-mb-16" id="soql-export-actions">
+                                <div class="u-hidden u-gap-10 u-mb-16 u-flex-wrap" id="soql-export-actions">
                                     <button type="button" id="export-soql-xlsx-btn" class="ant-btn ant-btn-default">
                                         <i class="fas fa-file-excel"></i> 导出 Excel
                                     </button>
                                     <button type="button" id="export-soql-csv-btn" class="ant-btn ant-btn-default">
                                         <i class="fas fa-file-csv"></i> 导出 CSV
+                                    </button>
+                                    <button type="button" id="export-soql-json-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-file-code"></i> 导出 JSON
+                                    </button>
+                                    <button type="button" id="copy-soql-tsv-btn" class="ant-btn ant-btn-default">
+                                        <i class="fas fa-copy"></i> 复制为表格（TSV）
                                     </button>
                                 </div>
                                 <div id="soql-result-table"></div>
