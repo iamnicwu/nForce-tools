@@ -2560,14 +2560,14 @@ optgroup {
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
-/* SOQL 编辑器（CodeMirror）的宿主。
-   具体外观（边框、行号栏、补全弹层）在 `biz/soql_editor.js` 的 CM 主题里；
+/* 代码编辑器（CodeMirror）的宿主：SOQL 查询框 / Execute Anonymous / View Log 原始日志。
+   具体外观（边框、行号栏、补全弹层、高度）在 `biz/code_editor.js` 的 CM 主题里；
    这里只管占位：没挂载上时不留白块（:empty），挂载后铺满卡片宽度。 */
-.soql-editor-host {
+.code-editor-host {
     width: 100%;
 }
 
-.soql-editor-host:empty {
+.code-editor-host:empty {
     display: none;
 }
 

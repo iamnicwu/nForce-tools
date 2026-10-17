@@ -32,7 +32,8 @@ export { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLi
          placeholder } from "@codemirror/view";
 export { EditorState, Compartment } from "@codemirror/state";
 export { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-export { bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle, foldGutter, foldKeymap } from "@codemirror/language";
+export { bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle, foldGutter, foldKeymap,
+         StreamLanguage } from "@codemirror/language";
 export { tags } from "@lezer/highlight";
 export { sql, SQLDialect } from "@codemirror/lang-sql";
 export { autocompletion, completionKeymap, startCompletion, closeCompletion } from "@codemirror/autocomplete";
