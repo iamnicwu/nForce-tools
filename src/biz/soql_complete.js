@@ -77,10 +77,20 @@ function attachTo(textareaId, popupId) {
   });
 }
 
-/** 初始化（`app.js` 启动时调一次；幂等） */
+/**
+ * 初始化（`app.js` 启动时调一次；幂等）。
+ *
+ * 注意：**主查询框（section-23）不在这里挂**。它现在由 `biz/soql_editor.js` 接管
+ * （CodeMirror 自带补全弹层）；只有当编辑器加载失败时，`app.js` 才回来调
+ * `enableSoqlHintFallback()` 用回这套自绘浮层。Bulk 那个框保持原样。
+ */
 export function initSoqlComplete() {
-  // 主 SOQL 查询框（section-23）与 Bulk 操作里的 SOQL 框
-  attachTo("soql-query-input", "soql-hint");
   attachTo("bulk-soql-input", "bulk-soql-hint");
-  log.debug("SOQL 查询框的代码提示已就绪");
+  log.debug("Bulk 的 SOQL 代码提示已就绪");
+}
+
+/** 降级路径：CodeMirror 不可用时，主查询框退回 textarea + 自绘浮层 */
+export function enableSoqlHintFallback() {
+  attachTo("soql-query-input", "soql-hint");
+  log.debug("SOQL 查询框（textarea）的代码提示已就绪（降级模式）");
 }

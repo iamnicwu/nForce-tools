@@ -141,7 +141,8 @@ import {
 // Execute Anonymous 输入框的代码提示（静态词表 + 当前 org 的 sObject / 字段）
 import { initApexComplete } from "./biz/apex_complete.js";
 // SOQL 查询框的代码提示（同一套浮层，候选换成 SOQL 语义：对象名 / 字段 / 聚合函数）
-import { initSoqlComplete } from "./biz/soql_complete.js";
+import { initSoqlComplete, enableSoqlHintFallback } from "./biz/soql_complete.js";
+import { initSoqlEditor, setSoqlText } from "./biz/soql_editor.js";
 // 历史面板（SOQL 查询历史 / Apex 执行历史）：可勾选批量导出 / 导入 / 同步到 ima 知识库
 import { mountHistoryPanel } from "./biz/history_panel.js";
 import {
@@ -1608,8 +1609,13 @@ function bindEvents() {  // Session ID表单提交
   // 纯逻辑在 common/apex_completions.js，这里只做绑定。
   initApexComplete();
 
-  // SOQL 查询框的代码提示（section-23 与 Bulk）：同一套浮层，换成 SOQL 的候选逻辑
+  // SOQL 查询框：优先换成 CodeMirror 编辑器（行号 / 语法着色 / 内建补全）；
+  // Bulk 那个框仍是"textarea + 浮层"（那边要贴 Bulk 的行数限制提示，保持原样）。
   initSoqlComplete();
+  initSoqlEditor().then((mounted) => {
+    // 库没加载出来（离线包 / 被裁剪）→ 退回原来的自绘浮层，功能一样只是不漂亮
+    if (!mounted) enableSoqlHintFallback();
+  });
 
   // 历史面板（2026-10-17）：SOQL 查询历史 / Apex 执行历史。
   // 两处交互完全一样，只有"点一条之后填到哪个输入框"不同 —— 界面全在
@@ -1617,10 +1623,8 @@ function bindEvents() {  // Session ID表单提交
   mountHistoryPanel("soql-history-host", {
     kind: "soql",
     onPick: (item) => {
-      const input = $("soql-query-input");
-      if (!input) return;
-      input.value = item.text;
-      input.focus();
+      // 走编辑器适配器：编辑器挂上之后直接写 textarea.value 是看不见的
+      setSoqlText(item.text);
       showNotification(item.name ? `已载入「${item.name}」` : "已载入查询历史", "info");
     }
   });

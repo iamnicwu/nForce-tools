@@ -1762,9 +1762,12 @@ System.debug('Hello World');"></textarea>
                             <div class="u-maxw-1000 u-mx-auto">
                                 <div class="form-group u-mb-16">
                                     <label class="u-block u-mb-8 u-fw-500" for="soql-query-input">SOQL 查询语句</label>
+                                    <!-- CodeMirror 挂在这里；textarea 保留作「值的中枢」与降级方案
+                                         （库加载失败时它就是普通输入框，功能不受影响） -->
+                                    <div id="soql-editor-host" class="soql-editor-host"></div>
                                     <textarea id="soql-query-input" class="ant-input" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 100"></textarea>
                                     <div class="u-fs-xs u-text-secondary u-mt-8">
-                                        直接写语句就能跑 —— 对象名 / 字段 / 聚合函数都会自动提示（写完 <code>FROM 对象</code> 后，字段提示自动换成那张表的字段）· Ctrl+Space 手动唤出 · ↑↓ 选择 · Enter 采用
+                                        行号 / 语法着色 / 括号配对 · 对象名、字段、聚合函数自动提示（写完 <code>FROM 对象</code> 后换成那张表的字段）· <code>Ctrl+Space</code> 唤出补全 · <code>Ctrl+F</code> 查找
                                     </div>
                                 </div>
                                 <!-- 主操作紧跟输入框：写完语句就能直接跑 -->
