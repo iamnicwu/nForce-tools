@@ -1576,6 +1576,8 @@
                                 <label class="u-block u-mb-8 u-fw-500" for="apex-code-input">Apex 代码
                                     <span class="u-fs-xs u-text-secondary">（打字时自动提示 · Ctrl+Space 手动唤出 · ↑↓ 选择 · Enter 采用）</span>
                                 </label>
+                                <!-- 同 SOQL：CodeMirror 宿主 + 保留 textarea 作值中枢/降级 -->
+                                <div id="apex-editor-host" class="code-editor-host"></div>
                                 <textarea id="apex-code-input" class="ant-input" rows="12" placeholder="// 输入您的 Apex 代码
 System.debug('Hello World');"></textarea>
                             </div>
@@ -1764,7 +1766,7 @@ System.debug('Hello World');"></textarea>
                                     <label class="u-block u-mb-8 u-fw-500" for="soql-query-input">SOQL 查询语句</label>
                                     <!-- CodeMirror 挂在这里；textarea 保留作「值的中枢」与降级方案
                                          （库加载失败时它就是普通输入框，功能不受影响） -->
-                                    <div id="soql-editor-host" class="soql-editor-host"></div>
+                                    <div id="soql-editor-host" class="code-editor-host"></div>
                                     <textarea id="soql-query-input" class="ant-input" rows="6" placeholder="SELECT Id, Name FROM Account LIMIT 100"></textarea>
                                     <div class="u-fs-xs u-text-secondary u-mt-8">
                                         行号 / 语法着色 / 括号配对 · 对象名、字段、聚合函数自动提示（写完 <code>FROM 对象</code> 后换成那张表的字段）· <code>Ctrl+Space</code> 唤出补全 · <code>Ctrl+F</code> 查找
@@ -2175,6 +2177,8 @@ System.debug('Hello World');"></textarea>
                                             <i class="fas fa-download"></i> 下载 .log
                                         </button>
                                     </div>
+                                    <!-- 只读查看器（CodeMirror）挂这上面；div 保留给 view_log.js 写入 / 降级 -->
+                                    <div id="view-log-raw-editor" class="code-editor-host"></div>
                                     <div class="u-bg-code u-text-code u-p-16 u-radius-sm u-font-code u-pre-wrap u-break-all u-maxh-400 u-ov-y-auto" id="view-log-raw-text"></div>
                                 </details>
                             </div>
